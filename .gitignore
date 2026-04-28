@@ -1,0 +1,10 @@
+# pi agent state (auto-added)
+.pi/
+pi-agent/plugins/*
+!pi-agent/plugins/registry.json
+
+# Added by cargo
+/target
+
+# Test output
+test-output/

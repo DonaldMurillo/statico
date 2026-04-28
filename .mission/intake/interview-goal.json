@@ -1,0 +1,71 @@
+{
+  "story": "As a contributor, I can run the integration test suite against six representative TypeScript fixture projects (one per supported framework) and see 100% line coverage enforced as a CI gate, so that every analyzer rule is confirmed to work end-to-end across real project structures.",
+  "scenarios": [
+    {
+      "name": "Integration suite passes with 100% coverage across all six fixture projects",
+      "given": [
+        "Six TypeScript fixture projects exist in tests/fixtures/ one per supported framework derived from framework-detection-rules output",
+        "Each fixture is minimal: just enough source files to trigger every analyzer rule at least once",
+        "The statico binary is built and available on PATH",
+        "The test runner is configured to collect line coverage"
+      ],
+      "when": [
+        "Contributor runs the integration test suite (e.g. cargo test --test test-fixtures-coverage)",
+        "Each test case invokes statico analyze against a fixture path and asserts on the structured JSON output"
+      ],
+      "then": [
+        "All six fixture analyses complete with exit code 0",
+        "Every analyzer rule produced by framework-detection-rules is exercised by at least one fixture",
+        "Line coverage for the analyzer rules module is 100%",
+        "The CI gate reports green (coverage threshold met)"
+      ]
+    },
+    {
+      "name": "CI gate fails when a new analyzer rule lacks fixture coverage",
+      "given": [
+        "A new analyzer rule has been added to the rules module but no fixture project triggers it",
+        "The integration test suite and coverage gate are configured"
+      ],
+      "when": [
+        "Contributor runs the integration test suite with coverage collection"
+      ],
+      "then": [
+        "The coverage percentage for the analyzer rules module drops below 100%",
+        "The CI gate reports a failure with a clear message indicating which rules lack coverage",
+        "Existing passing tests still pass and the failure is solely due to the coverage gap"
+      ]
+    },
+    {
+      "name": "Existing integration tests remain green after adding the coverage gate",
+      "given": [
+        "Prior goal integration tests exist in tests/integration/ (core_cli_ast_engine.rs and ai-skill-manifests.rs)",
+        "The new test-fixtures-coverage.rs integration test has been added"
+      ],
+      "when": [
+        "Contributor runs the full test suite (all integration tests)"
+      ],
+      "then": [
+        "All pre-existing integration tests pass without modification",
+        "The new coverage-gate test also passes",
+        "No test interferes with another (fixture isolation and independent test execution)"
+      ]
+    }
+  ],
+  "nonGoals": [
+    "Writing or modifying analyzer rules - those come from the framework-detection-rules goal",
+    "Building the CLI engine or AST parsing - that is the core-cli-ast-engine goal",
+    "Authoring the SKILL.md manifest - that is the ai-skill-manifests goal",
+    "Adding frameworks beyond the six initially targeted by framework-detection-rules",
+    "Performance benchmarks or load testing of the analyzer",
+    "Snapshot testing or golden-file approval workflows",
+    "Fixing analyzer rule bugs discovered by the coverage gate - those become follow-up goals",
+    "HTML Markdown or visual coverage reports - CI gate status pass/fail is sufficient",
+    "Cross-platform CI pipeline configuration (GitHub Actions etc.) - this goal owns the test and coverage threshold not the CI pipeline definition"
+  ],
+  "designNote": "Fixture projects live under tests/fixtures and are generated inline for this goal rather than extending any shared fixture tree (per playbook rule on inline fixtures). Each fixture is the smallest possible TypeScript project that exercises a specific frameworks analyzer rules. The 100% coverage target applies to the analyzer rules module only (not the entire binary), keeping the gate achievable and meaningful. The six frameworks are derived from whatever framework-detection-rules produces. Assumed role contributor means anyone with a local checkout who can build the binary and run tests; no authz model applies.",
+  "acceptance": {
+    "kind": "contract",
+    "specPath": "tests/integration/test-fixtures-coverage.rs",
+    "rationale": "The deliverable is a test harness with fixture projects and a coverage gate with no UI surface or interactive user flow. Contract tests asserting coverage percentage fixture completeness and CI gate behavior are the strictest applicable oracle for a testing infrastructure goal."
+  }
+}
