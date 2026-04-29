@@ -124,6 +124,13 @@ fn detect_barrel_files(file_sources: &[(String, String)]) -> HashSet<String> {
                 }
                 continue;
             }
+            // Multi-line export block: line is just "export {"
+            if trimmed == "export {" {
+                in_export_block = true;
+                export_block_has_from = false;
+                total_stmts -= 1; // Will be counted when block closes
+                continue;
+            }
             // export * from '...'
             if trimmed.starts_with("export *") {
                 reexport_stmts += 1;
