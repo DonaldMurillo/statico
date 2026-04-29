@@ -250,30 +250,54 @@ impl Resolver {
                 continue;
             }
 
-            let main = pkg
-                .get("main")
-                .and_then(|v| v.as_str())
-                .unwrap_or("src/index.ts");
-
             // Package dir is the parent of package.json.
             let pkg_dir = match path.parent() {
                 Some(d) => d,
                 None => continue,
             };
 
-            let target = pkg_dir.join(main);
-            let target_rel = path_relative_to(&self.root, &target);
+            let main = pkg
+                .get("main")
+                .and_then(|v| v.as_str())
+                .or_else(|| {
+                    // No main field — try index.ts/index.tsx in package dir.
+                    if pkg_dir.join("index.ts").exists() {
+                        Some("index.ts")
+                    } else if pkg_dir.join("index.tsx").exists() {
+                        Some("index.tsx")
+                    } else {
+                        None
+                    }
+                });
 
-            self.aliases.push(PathAlias {
-                prefix: format!("{}/", name),
-                targets: vec![format!("./{}/", pkg_dir.join(main).parent().map(|p| path_relative_to(&self.root, p)).unwrap_or_default())],
-            });
+            if let Some(main_val) = main {
+                let target = pkg_dir.join(main_val);
+                let target_rel = path_relative_to(&self.root, &target);
 
-            // Also register the bare package name pointing to main.
-            self.aliases.push(PathAlias {
-                prefix: name.to_string(),
-                targets: vec![format!("./{}", target_rel)],
-            });
+                // Map @scope/pkg/ → package dir (for sub-path imports).
+                let pkg_dir_rel = format!("./{}/", path_relative_to(&self.root, pkg_dir));
+                self.aliases.push(PathAlias {
+                    prefix: format!("{}/", name),
+                    targets: vec![pkg_dir_rel],
+                });
+
+                // Map bare @scope/pkg → main entry file.
+                self.aliases.push(PathAlias {
+                    prefix: name.to_string(),
+                    targets: vec![format!("./{}", target_rel)],
+                });
+            } else {
+                // No main or index — map both bare name and name/ to package dir.
+                let pkg_dir_rel = format!("./{}/", path_relative_to(&self.root, pkg_dir));
+                self.aliases.push(PathAlias {
+                    prefix: format!("{}/", name),
+                    targets: vec![pkg_dir_rel.clone()],
+                });
+                self.aliases.push(PathAlias {
+                    prefix: name.to_string(),
+                    targets: vec![pkg_dir_rel],
+                });
+            }
         }
     }
 
