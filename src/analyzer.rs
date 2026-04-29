@@ -51,6 +51,10 @@ pub fn analyze(root: &Path) -> Result<AnalysisOutput, String> {
     }
     // Load workspace package name → directory mappings for monorepo support.
     resolver.load_workspace_packages();
+    // Load tsconfig path aliases from all sub-project tsconfig.json files.
+    // This ensures @/ aliases in workspace packages (apps/api/tsconfig.json etc.)
+    // are resolved correctly, not just the root tsconfig.
+    resolver.load_all_tsconfig_paths();
 
     let structure = Structure {
         root: root.to_path_buf(),

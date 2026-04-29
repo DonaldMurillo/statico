@@ -95,6 +95,124 @@ impl Resolver {
         &self.aliases
     }
 
+    /// Load tsconfig path aliases from ALL tsconfig.json files in the repo.
+    /// Sub-project tsconfig files (e.g. apps/api/tsconfig.json) define their own
+    /// `@/*` aliases relative to their own directory. We convert these to
+    /// root-relative paths so the resolver can match them.
+    pub fn load_all_tsconfig_paths(&mut self) {
+        for entry in walkdir::WalkDir::new(&*self.root)
+            .max_depth(6)
+            .into_iter()
+            .filter_map(|e| e.ok())
+        {
+            let path = entry.path();
+            if !path.is_file() || path.file_name().map_or(true, |n| n != "tsconfig.json") {
+                continue;
+            }
+            let rel = path_relative_to(&self.root, path);
+            // Skip node_modules.
+            if rel.contains("node_modules") {
+                continue;
+            }
+            // Skip generated/build directories and test fixtures.
+            if rel.contains(".svelte-kit") || rel.contains("dist/")
+                || rel.contains(".next/") || rel.contains(".nuxt/")
+                || rel.contains("fixtures/") || rel.contains("test-fixtures")
+                || rel.contains("__test__")
+            {
+                continue;
+            }
+            // Skip the root tsconfig — already loaded separately.
+            if rel == "tsconfig.json" {
+                continue;
+            }
+            self.load_tsconfig_paths_relative(path);
+        }
+    }
+
+    /// Load tsconfig paths from a sub-project tsconfig, converting relative paths
+    /// to root-relative. E.g. in `apps/api/tsconfig.json`, `./src/*` becomes
+    /// `./apps/api/src/*`.
+    fn load_tsconfig_paths_relative(&mut self, tsconfig_path: &Path) {
+        let content = match std::fs::read_to_string(tsconfig_path) {
+            Ok(c) => c,
+            Err(_) => return,
+        };
+        let tsconfig: serde_json::Value = match serde_json::from_str(&content) {
+            Ok(v) => v,
+            Err(_) => return,
+        };
+        let paths = match tsconfig
+            .get("compilerOptions")
+            .and_then(|co| co.get("paths"))
+            .and_then(|p| p.as_object())
+        {
+            Some(p) => p,
+            None => return,
+        };
+
+        // Directory containing this tsconfig, relative to root.
+        let tsconfig_dir = match tsconfig_path.parent() {
+            Some(d) => d,
+            None => return,
+        };
+        let tsconfig_dir_rel = path_relative_to(&self.root, tsconfig_dir);
+
+        // Also get baseUrl if present.
+        let base_url = tsconfig
+            .get("compilerOptions")
+            .and_then(|co| co.get("baseUrl"))
+            .and_then(|v| v.as_str())
+            .unwrap_or(".");
+
+        for (pattern, targets) in paths {
+            let is_wildcard = pattern.ends_with('*');
+            let prefix = if is_wildcard {
+                pattern.trim_end_matches('*').to_string()
+            } else {
+                pattern.clone()
+            };
+
+            let target_list: Vec<String> = targets
+                .as_array()
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|v| v.as_str().map(String::from))
+                        .map(|t| {
+                            let bare = if t.ends_with('*') {
+                                t.trim_end_matches('*').to_string()
+                            } else {
+                                t.clone()
+                            };
+                            // Convert to root-relative: join tsconfig dir + (baseUrl + target)
+                            let resolved = if bare.starts_with('.') {
+                                format!("./{}/{}", tsconfig_dir_rel, bare.trim_start_matches("./"))
+                            } else {
+                                format!("./{}/{}/{}", tsconfig_dir_rel, base_url.trim_start_matches("./"), bare.trim_start_matches("./"))
+                            };
+                            // Normalize: remove double slashes, ././ etc.
+                            resolved
+                                .replace("././", "./")
+                                .replace("//", "/")
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+
+            if !prefix.is_empty() && !target_list.is_empty() {
+                // Check if we already have this prefix (from root tsconfig).
+                // Don't overwrite root-level aliases.
+                let already_loaded = self.aliases.iter().any(|a| a.prefix == prefix);
+                if !already_loaded {
+                    self.aliases.push(PathAlias {
+                        prefix,
+                        targets: target_list,
+                    });
+                }
+            }
+        }
+    }
+
     /// Load workspace package mappings from all package.json files under the root.
     /// Maps `@scope/name` → `<root>/<pkg_dir>/src/index.ts` (or whatever `main` points to).
     pub fn load_workspace_packages(&mut self) {

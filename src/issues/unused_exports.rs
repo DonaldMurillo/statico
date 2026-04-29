@@ -66,9 +66,12 @@ pub fn detect(
 /// from sub-modules. These form a package's public API surface.
 ///
 /// A file is considered a barrel if:
-///   - It's named index.ts/tsx/js/jsx AND >60% of lines are re-exports, OR
-///   - ANY filename where >80% of non-blank lines are re-export lines
-///     (catches files like charts.tsx that re-export many components)
+///   - It's named index.ts/tsx/js/jsx AND >60% of statements are re-exports, OR
+///   - ANY filename where >80% of statements are re-exports
+///     (catches files like charts.tsx, core_private_export.ts)
+///
+/// Re-exports are counted by STATEMENTS (including multi-line `export { ... } from '...'`),
+/// not by individual lines. A multi-line re-export block counts as one statement.
 fn detect_barrel_files(file_sources: &[(String, String)]) -> HashSet<String> {
     let mut barrels = HashSet::new();
     for (path, source) in file_sources {
@@ -76,30 +79,92 @@ fn detect_barrel_files(file_sources: &[(String, String)]) -> HashSet<String> {
         let is_index = filename == "index.ts" || filename == "index.tsx"
             || filename == "index.js" || filename == "index.jsx";
 
-        let mut total_lines = 0usize;
-        let mut reexport_lines = 0usize;
+        let mut total_stmts = 0usize;
+        let mut reexport_stmts = 0usize;
+        // Track whether we're inside a multi-line export { ... } from block.
+        let mut in_export_block = false;
+        let mut export_block_has_from = false;
+
         for line in source.lines() {
             let trimmed = line.trim();
-            if trimmed.is_empty() || trimmed.starts_with("//") || trimmed.starts_with("/*") {
+            if trimmed.is_empty() || trimmed.starts_with("//") || trimmed.starts_with("/*") || trimmed.starts_with("*") {
                 continue;
             }
-            total_lines += 1;
-            // Detect re-export patterns.
-            if trimmed.starts_with("export {") || trimmed.starts_with("export *")
-                || trimmed.starts_with("export type {")
-                || (trimmed.starts_with("export") && trimmed.contains(" from "))
-            {
-                reexport_lines += 1;
+
+            if in_export_block {
+                // Check if this line closes the block.
+                if trimmed.starts_with('}') || trimmed.contains("} from ") || trimmed.contains("}from ") {
+                    if trimmed.contains(" from ") || trimmed.contains("from '") || trimmed.contains("from \"") {
+                        export_block_has_from = true;
+                    }
+                    if trimmed.contains(';') || trimmed.ends_with('}') {
+                        // Block closed.
+                        total_stmts += 1;
+                        if export_block_has_from {
+                            reexport_stmts += 1;
+                        }
+                        in_export_block = false;
+                        export_block_has_from = false;
+                    }
+                }
+                continue;
+            }
+
+            total_stmts += 1;
+
+            // Single-line re-export: export { ... } from '...'
+            if trimmed.starts_with("export {") && (trimmed.contains("} from ") || trimmed.ends_with('}')) {
+                if trimmed.contains(" from ") {
+                    reexport_stmts += 1;
+                } else if trimmed.ends_with('}') {
+                    // Multi-line export block starting on this line
+                    in_export_block = true;
+                    export_block_has_from = false;
+                    total_stmts -= 1; // Will be counted when block closes
+                }
+                continue;
+            }
+            // export * from '...'
+            if trimmed.starts_with("export *") {
+                reexport_stmts += 1;
+                continue;
+            }
+            // export type { ... } from '...'
+            if trimmed.starts_with("export type {") {
+                if trimmed.contains(" from ") && trimmed.contains(';') {
+                    reexport_stmts += 1;
+                } else {
+                    in_export_block = true;
+                    export_block_has_from = false;
+                    total_stmts -= 1;
+                }
+                continue;
+            }
+            // export { ... } spanning multiple lines without opening on first line
+            if (trimmed.starts_with("export") && trimmed.contains(" from ")) {
+                reexport_stmts += 1;
+                continue;
             }
         }
 
-        if total_lines == 0 {
+        if total_stmts == 0 {
             continue;
         }
-        let ratio = reexport_lines as f64 / total_lines as f64;
-        // index files: >60% re-exports → barrel. Other files: >80% → barrel.
-        let threshold = if is_index { 0.6 } else { 0.8 };
-        if ratio > threshold {
+        let ratio = reexport_stmts as f64 / total_stmts as f64;
+        // A file is a barrel if:
+        //   - It's 100% re-exports with at least 1 re-export (catches icon wrappers), OR
+        //   - It's an index file with >60% re-exports, OR
+        //   - It's a non-index file with >30% re-exports AND ≥3 re-export stmts
+        let is_barrel = if ratio >= 1.0 && reexport_stmts >= 1 {
+            true
+        } else if is_index && ratio > 0.6 {
+            true
+        } else if !is_index && ratio > 0.3 && reexport_stmts >= 3 {
+            true
+        } else {
+            false
+        };
+        if is_barrel {
             barrels.insert(path.clone());
         }
     }
