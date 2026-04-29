@@ -1,0 +1,80 @@
+# statico - GitLab CI Pipeline
+# ============================================================
+# Copy this file into your repo at .gitlab-ci.yml (or merge
+# the jobs into your existing pipeline).
+#
+# Required: GitLab Runner with Docker executor (or shared
+# runners with Docker support).
+#
+# The pipeline produces:
+#   - An HTML report artifact (available for 30 days)
+#   - A JSON report artifact
+#   - A console summary in the job log
+
+stages:
+  - build
+  - analyze
+
+variables:
+  CARGO_HOME: "${CI_PROJECT_DIR}/.cargo"
+  # Adjust if your statico source lives in a subdirectory:
+  STATICO_SRC: "."
+
+# -------------------------------------------------------
+# Build stage – compile statico from source
+# -------------------------------------------------------
+statico:build:
+  stage: build
+  image: rust:latest
+  before_script:
+    - rustc --version && cargo --version
+  script:
+    - cd "${STATICO_SRC}"
+    - cargo build --release
+  artifacts:
+    paths:
+      - target/release/statico
+      - Cargo.lock
+    expire_in: 1 day
+  cache:
+    key:
+      files:
+        - Cargo.lock
+    paths:
+      - .cargo/registry
+      - .cargo/git
+      - target
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# -------------------------------------------------------
+# Analyze stage – run statico against the project
+# -------------------------------------------------------
+statico:analyze:
+  stage: analyze
+  image: node:20-bookworm   # Node image for TypeScript projects; adjust as needed
+  needs:
+    - job: statico:build
+      artifacts: true
+  before_script:
+    - chmod +x target/release/statico
+    - apt-get update -qq && apt-get install -y -qq curl > /dev/null  # if needed
+  script:
+    - echo "=== Statico Static Analysis ==="
+    - target/release/statico analyze . --format html --output statico-report.html --min-confidence 0.7 || exit_code=$?
+    - target/release/statico analyze . --format json --output statico-report.json --min-confidence 0.7 || true
+    - target/release/statico analyze . --format sarif --output statico-report.sarif --min-confidence 0.7 || true
+    - echo "=== Analysis complete ==="
+    # Re-run with --exit-code to propagate the failure
+    - target/release/statico analyze . --format console --exit-code --min-confidence 0.7
+  artifacts:
+    paths:
+      - statico-report.html
+      - statico-report.json
+      - statico-report.sarif
+    expire_in: 30 days
+    when: always          # Upload artifacts even on failure
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH

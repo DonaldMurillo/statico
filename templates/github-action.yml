@@ -1,0 +1,147 @@
+# statico - GitHub Action (Reusable Workflow)
+# ============================================================
+# Copy this file into your repo at .github/workflows/statico.yml
+# or reference it as a reusable workflow from another repo.
+#
+# Usage as a reusable workflow:
+#   jobs:
+#     statico:
+#       uses: your-org/statico/.github/workflows/statico.yml@main
+#       with:
+#         path: "."
+#         min-confidence: "0.7"
+#         fail-on-issues: true
+#       secrets: inherit
+#
+# Usage as a standalone workflow (just drop this file in):
+#   No changes needed – the default values work out of the box.
+
+name: Statico Analysis
+
+on:
+  # --- Standalone triggers (remove these if using as a reusable workflow) ---
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+  # --- Reusable workflow trigger ---
+  workflow_call:
+    inputs:
+      path:
+        description: "Root directory to analyze (relative to repo root)"
+        required: false
+        default: "."
+        type: string
+      min-confidence:
+        description: "Minimum confidence threshold (0.0 – 1.0)"
+        required: false
+        default: "0.7"
+        type: string
+      fail-on-issues:
+        description: "Fail the workflow when issues are found"
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+  security-events: write        # Required for SARIF upload
+  pull-requests: write          # Required for PR comment
+  actions: read                 # Required for SARIF upload
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  statico:
+    name: Analyze with Statico
+    runs-on: ubuntu-latest
+
+    steps:
+      # -------------------------------------------------------
+      # 1. Checkout
+      # -------------------------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # -------------------------------------------------------
+      # 2. Install Rust toolchain
+      # -------------------------------------------------------
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      # -------------------------------------------------------
+      # 3. Cache Cargo artifacts
+      # -------------------------------------------------------
+      - name: Cache Cargo target directory
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: statico-cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            statico-cargo-${{ runner.os }}-
+
+      # -------------------------------------------------------
+      # 4. Build statico from source
+      # -------------------------------------------------------
+      - name: Build statico
+        run: cargo build --release
+
+      # -------------------------------------------------------
+      # 5. Run analysis → SARIF (for Code Scanning)
+      # -------------------------------------------------------
+      - name: Run statico (SARIF)
+        id: sarif
+        run: |
+          ./target/release/statico analyze "${{ inputs.path || '.' }}" \
+            --format sarif \
+            --min-confidence "${{ inputs.min-confidence || '0.7' }}" \
+            --exit-code \
+            --output statico-results.sarif || echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+        continue-on-error: ${{ inputs.fail-on-issues == false || inputs.fail-on-issues == '' }}
+
+      # -------------------------------------------------------
+      # 6. Upload SARIF to GitHub Code Scanning
+      # -------------------------------------------------------
+      - name: Upload SARIF to Code Scanning
+        if: always() && hashFiles('statico-results.sarif') != ''
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: statico-results.sarif
+          category: statico
+
+      # -------------------------------------------------------
+      # 7. Generate Markdown summary → PR comment
+      # -------------------------------------------------------
+      - name: Generate Markdown summary
+        if: always() && github.event_name == 'pull_request'
+        id: markdown
+        run: |
+          ./target/release/statico analyze "${{ inputs.path || '.' }}" \
+            --format markdown \
+            --min-confidence "${{ inputs.min-confidence || '0.7' }}" \
+            --output statico-summary.md
+
+      - name: Post PR comment with summary
+        if: always() && github.event_name == 'pull_request' && steps.markdown.outcome == 'success'
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: statico
+          path: statico-summary.md
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # -------------------------------------------------------
+      # 8. Final gate (fail the job if issues found & gating on)
+      # -------------------------------------------------------
+      - name: Check for issues
+        if: always() && (inputs.fail-on-issues == true || inputs.fail-on-issues == '')
+        run: |
+          if [ "${{ steps.sarif.outputs.exit_code }}" = "1" ]; then
+            echo "::error::Statico found issues above the confidence threshold."
+            exit 1
+          fi
