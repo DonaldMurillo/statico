@@ -76,7 +76,6 @@ pub fn analyze(root: &Path) -> Result<AnalysisOutput, String> {
     let imported_names = build_imported_names(root, &source_files, &parser, &resolver);
 
     let fw_profiles = crate::frameworks::detect_profiles(root);
-    let detected_frameworks: Vec<String> = fw_profiles.iter().map(|p| p.name.to_string()).collect();
 
     let issues = detect_issues(
         &all_entries,
@@ -336,47 +335,50 @@ fn resolve_file_imports_static(
 }
 
 /// Build a map: resolved target file path → set of names imported FROM that file.
+/// Uses rayon for parallel parsing of source files.
 fn build_imported_names(
     root: &Path,
     source_files: &[(String, String)],
     _parser: &AstParser,
     resolver: &Resolver,
 ) -> BTreeMap<String, HashSet<String>> {
+    let resolver = Arc::new(resolver.clone());
+    let root = root.to_path_buf();
+
+    let results: Vec<(String, Vec<(String, Vec<String>)>)> = source_files
+        .par_iter()
+        .filter_map(|(rel_path, _lang)| {
+            let parser = AstParser::new().ok()?;
+            let resolver = resolver.clone();
+            let abs_path = root.join(rel_path);
+            let source = std::fs::read_to_string(&abs_path).ok()?;
+
+            let is_tsx = rel_path.ends_with(".tsx") || rel_path.ends_with(".jsx");
+            let parsed = parser.parse(&source, is_tsx)?;
+
+            let raw_named = crate::parse::imports::extract_named_imports(parsed.tree.root_node(), &source);
+            let file_dir = abs_path.parent().unwrap_or(&root);
+
+            let mut local_results: Vec<(String, Vec<String>)> = Vec::new();
+            for (raw_spec, names) in raw_named {
+                let resolved = resolver.resolve(file_dir, &raw_spec);
+                let target_key = match resolved {
+                    Some(p) => crate::resolution::path_relative_to(&root, &p),
+                    None => raw_spec,
+                };
+                local_results.push((target_key, names));
+            }
+            Some((rel_path.clone(), local_results))
+        })
+        .collect();
+
+    // Merge results from all threads.
     let mut result: BTreeMap<String, HashSet<String>> = BTreeMap::new();
-    let parser = match AstParser::new() {
-        Ok(p) => p,
-        Err(_) => return result,
-    };
-
-    for (rel_path, _lang) in source_files {
-        let abs_path = root.join(rel_path);
-        let source = match std::fs::read_to_string(&abs_path) {
-            Ok(s) => s,
-            Err(_) => continue,
-        };
-
-        let is_tsx = rel_path.ends_with(".tsx") || rel_path.ends_with(".jsx");
-        let Some(parsed) = parser.parse(&source, is_tsx) else {
-            continue;
-        };
-
-        let raw_named = crate::parse::imports::extract_named_imports(parsed.tree.root_node(), &source);
-        let file_dir = abs_path.parent().unwrap_or(root);
-
-        for (raw_spec, names) in raw_named {
-            // Resolve the raw specifier to a canonical relative path.
-            let resolved = resolver.resolve(file_dir, &raw_spec);
-            let target_key = match resolved {
-                Some(p) => path_relative_to(root, &p),
-                None => raw_spec,
-            };
-            result
-                .entry(target_key)
-                .or_default()
-                .extend(names);
+    for (_, local_results) in results {
+        for (target_key, names) in local_results {
+            result.entry(target_key).or_default().extend(names);
         }
     }
-
     result
 }
 

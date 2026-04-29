@@ -4,7 +4,7 @@
 //! Entry points: bootstrap files, Angular modules, environment configs, polyfills
 //! Implicit: test files, Storybook, e2e, generated code, tool configs
 
-use super::{FrameworkGotchaPattern, FrameworkGotchaRule, FrameworkProfile, PathMatcher};
+use super::{FrameworkGotchaRule, FrameworkProfile, PathMatcher};
 
 const ANGULAR_GOTCHAS: &[FrameworkGotchaRule] = &[];
 
@@ -12,6 +12,8 @@ pub const PROFILE: FrameworkProfile = FrameworkProfile {
     name: "angular",
 
     markers: &["angular.json"],
+
+    dep_markers: &["@angular/core"],
 
     entry_matchers: &[
         // Bootstrap files.

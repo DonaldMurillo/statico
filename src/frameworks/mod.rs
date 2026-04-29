@@ -7,6 +7,7 @@
 //!
 //! Adding a new framework = adding one file + one line in `all_profiles()`.
 
+use std::collections::HashSet;
 use std::path::Path;
 
 pub mod angular;
@@ -16,6 +17,7 @@ pub mod nestjs;
 pub mod nextjs;
 pub mod payload;
 pub mod remix;
+pub mod shadcn;
 pub mod svelte;
 pub mod vue;
 
@@ -124,6 +126,10 @@ pub struct FrameworkProfile {
     /// Files whose presence at the project root indicates this framework.
     pub markers: &'static [&'static str],
 
+    /// Dependency names in package.json that indicate this framework.
+    /// Checked in both `dependencies` and `devDependencies`.
+    pub dep_markers: &'static [&'static str],
+
     /// Rules for explicit entry points (imported/invoked by the framework).
     pub entry_matchers: &'static [PathMatcher],
 
@@ -141,13 +147,101 @@ pub struct FrameworkProfile {
 /// Detect which profiles apply to a project by checking marker files.
 /// Returns all matching profiles (a project can be both Next.js + Payload).
 /// Always includes the generic fallback.
+///
+/// For monorepos, also searches workspace sub-directories for markers,
+/// since frameworks like Angular/NestJS/Vue may have their config in
+/// a sub-package rather than the monorepo root.
 pub fn detect_profiles(root: &Path) -> Vec<&'static FrameworkProfile> {
     let all = all_profiles();
     let mut matched: Vec<&'static FrameworkProfile> = Vec::new();
 
+    // 0. Load package.json deps once (if present).
+    let pkg_deps = load_package_deps(root);
+
+    // 1. Check markers at the project root AND dependency markers.
     for profile in all {
+        // File-based markers.
         if profile.markers.iter().any(|m| root.join(m).exists()) {
             matched.push(profile);
+            continue;
+        }
+        // Dependency-based markers.
+        if !profile.dep_markers.is_empty() && pkg_deps.as_ref().is_some_and(|deps| {
+            profile.dep_markers.iter().any(|dm| deps.contains(*dm))
+        }) {
+            matched.push(profile);
+        }
+    }
+
+    // 2. If this is a monorepo, also scan workspace package dirs for markers.
+    if matched.len() <= 1 {
+        // <=1 means only generic matched
+        if let Some(mono) = crate::monorepo::detect_monorepo(root) {
+            let ws_roots = crate::monorepo::discover_workspace_roots(root, &mono.packages);
+            for ws_root in &ws_roots {
+                let ws_deps = load_package_deps(ws_root);
+                for profile in all {
+                    if profile.name == "generic" {
+                        continue;
+                    }
+                    if profile.markers.iter().any(|m| ws_root.join(m).exists()) {
+                        if !matched.iter().any(|p| p.name == profile.name) {
+                            matched.push(profile);
+                        }
+                    }
+                    // Also check deps in workspace package.json.
+                    if !profile.dep_markers.is_empty() && ws_deps.as_ref().is_some_and(|deps| {
+                        profile.dep_markers.iter().any(|dm| deps.contains(*dm))
+                    }) {
+                        if !matched.iter().any(|p| p.name == profile.name) {
+                            matched.push(profile);
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2b. Also try a shallow scan: walk first-level subdirectories.
+        if matched.len() <= 1 {
+            if let Ok(entries) = std::fs::read_dir(root) {
+                for entry in entries.flatten() {
+                    if !entry.file_type().map_or(false, |t| t.is_dir()) {
+                        continue;
+                    }
+                    let name = entry.file_name();
+                    let name_str = name.to_string_lossy();
+                    if name_str.starts_with('.')
+                        || name_str == "node_modules"
+                        || name_str == "dist"
+                        || name_str == "build"
+                        || name_str == "target"
+                        || name_str == "benchmarks"
+                        || name_str == "fixtures"
+                        || name_str == "tools"
+                    {
+                        continue;
+                    }
+                    let sub = entry.path();
+                    let sub_deps = load_package_deps(&sub);
+                    for profile in all {
+                        if profile.name == "generic" {
+                            continue;
+                        }
+                        if profile.markers.iter().any(|m| sub.join(m).exists()) {
+                            if !matched.iter().any(|p| p.name == profile.name) {
+                                matched.push(profile);
+                            }
+                        }
+                        if !profile.dep_markers.is_empty() && sub_deps.as_ref().is_some_and(|deps| {
+                            profile.dep_markers.iter().any(|dm| deps.contains(*dm))
+                        }) {
+                            if !matched.iter().any(|p| p.name == profile.name) {
+                                matched.push(profile);
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -159,11 +253,28 @@ pub fn detect_profiles(root: &Path) -> Vec<&'static FrameworkProfile> {
     matched
 }
 
+/// Load dependency names from a package.json file.
+/// Returns None if no package.json exists.
+fn load_package_deps(dir: &Path) -> Option<HashSet<String>> {
+    let pkg_path = dir.join("package.json");
+    let content = std::fs::read_to_string(&pkg_path).ok()?;
+    let val: serde_json::Value = serde_json::from_str(&content).ok()?;
+    let mut deps = HashSet::new();
+    if let Some(obj) = val.get("dependencies").and_then(|v| v.as_object()) {
+        deps.extend(obj.keys().cloned());
+    }
+    if let Some(obj) = val.get("devDependencies").and_then(|v| v.as_object()) {
+        deps.extend(obj.keys().cloned());
+    }
+    Some(deps)
+}
+
 /// All known framework profiles, ordered by specificity (most specific first).
 pub fn all_profiles() -> &'static [&'static FrameworkProfile] {
     &[
         &nextjs::PROFILE,
         &payload::PROFILE,
+        &shadcn::PROFILE,
         &angular::PROFILE,
         &nestjs::PROFILE,
         &vue::PROFILE,

@@ -27,6 +27,8 @@ pub const PROFILE: FrameworkProfile = FrameworkProfile {
 
     markers: &["nest-cli.json"],
 
+    dep_markers: &["@nestjs/core", "@nestjs/common", "@nestjs/platform-express", "@nestjs/apollo", "@nestjs/graphql"],
+
     entry_matchers: &[
         // Bootstrap file.
         PathMatcher::FileName("main.ts"),

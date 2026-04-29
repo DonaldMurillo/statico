@@ -310,7 +310,9 @@ fn make_location(path: &str, name: &str, start: usize, end: usize, source: &str)
 
 fn truncate(s: &str) -> String {
     if s.len() > MAX_SNIPPET_LEN {
-        format!("{}...", &s[..MAX_SNIPPET_LEN])
+        // Find a valid char boundary to avoid splitting multi-byte UTF-8.
+        let end = s.floor_char_boundary(MAX_SNIPPET_LEN);
+        format!("{}...", &s[..end])
     } else {
         s.to_string()
     }

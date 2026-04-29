@@ -11,6 +11,8 @@ pub const PROFILE: FrameworkProfile = FrameworkProfile {
 
     markers: &["astro.config.mjs", "astro.config.ts"],
 
+    dep_markers: &["astro"],
+
     entry_matchers: &[
         // File-system routing — pages are entry points.
         PathMatcher::Prefix("src/pages/"),

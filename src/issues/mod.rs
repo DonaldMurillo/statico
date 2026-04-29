@@ -51,7 +51,7 @@ pub fn detect_issues(
             ));
             issues
         },
-        unused_exports: unused_exports::detect(file_exports, imported_names, framework_entries),
+        unused_exports: unused_exports::detect(file_exports, imported_names, framework_entries, file_sources),
         duplicate_exports: duplicate_exports::detect(file_exports),
         duplicate_code: duplicate_code::detect(file_blocks, file_sources),
         gotchas: gotchas::detect_with_frameworks(file_sources, profiles),

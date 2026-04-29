@@ -54,8 +54,19 @@ struct RawMatch {
 /// Larger windows are processed first. Line ranges already covered by a
 /// larger match are skipped when processing smaller windows, which avoids
 /// redundant work and ensures maximal match lengths.
+///
+/// Performance: Limits the number of candidate pairs checked per window
+/// size to avoid O(n²) explosion on large codebases.
 pub fn detect_fragments(file_sources: &[(String, String)]) -> Vec<DuplicateCodeIssue> {
     if file_sources.len() < 2 {
+        return Vec::new();
+    }
+
+    // Early exit for very large codebases — fragment detection is O(n²)
+    // and not meaningful for projects with >500 source files.
+    // Block-level detection still runs.
+    let total_lines: usize = file_sources.iter().map(|(_, s)| s.lines().count()).sum();
+    if file_sources.len() > 500 || total_lines > 200_000 {
         return Vec::new();
     }
 

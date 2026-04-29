@@ -239,7 +239,12 @@ def benchmark_one(key, cfg, update=False):
     if not local:
         return None
 
-    analyze_path = cfg.get("subpath") or local
+    subpath = cfg.get("subpath")
+    subpath = cfg.get("subpath")
+    if subpath:
+        analyze_path = os.path.join(local, subpath)
+    else:
+        analyze_path = local
     name = cfg["name"]
     feature = cfg["feature"]
 

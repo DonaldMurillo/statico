@@ -11,6 +11,8 @@ pub const PROFILE: FrameworkProfile = FrameworkProfile {
 
     markers: &["svelte.config.js"],
 
+    dep_markers: &["@sveltejs/kit", "svelte"],
+
     entry_matchers: &[
         // SvelteKit route convention files.
         PathMatcher::DirAndStems {

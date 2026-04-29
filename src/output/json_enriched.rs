@@ -50,7 +50,21 @@ impl OutputFormatter for EnrichedJsonFormatter {
             }
         }
 
-        serde_json::to_string_pretty(&enriched)
-            .map_err(|e| format!("failed to format JSON: {}", e))
+        // Use compact JSON for very large outputs (avoids the O(n) cost of
+        // pretty-printing 10MB+ payloads). Pretty-print is only useful for
+        // human reading; machines prefer compact.
+        let total_issues = output.issues.dead_code.len()
+            + output.issues.unused_exports.len()
+            + output.issues.gotchas.len()
+            + output.issues.duplicate_code.len();
+
+        if total_issues > 1000 {
+            // Compact output for large results — significantly faster.
+            serde_json::to_string(&enriched)
+                .map_err(|e| format!("failed to format JSON: {}", e))
+        } else {
+            serde_json::to_string_pretty(&enriched)
+                .map_err(|e| format!("failed to format JSON: {}", e))
+        }
     }
 }

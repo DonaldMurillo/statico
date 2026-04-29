@@ -11,6 +11,8 @@ pub const PROFILE: FrameworkProfile = FrameworkProfile {
 
     markers: &["payload.config.ts", "payload.config.js", "src/payload.config.ts", "src/payload.config.js"],
 
+    dep_markers: &["payload"],
+
     entry_matchers: &[
         PathMatcher::FileName("payload.config.ts"),
         PathMatcher::FileName("payload.config.js"),

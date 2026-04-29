@@ -11,6 +11,8 @@ pub const PROFILE: FrameworkProfile = FrameworkProfile {
 
     markers: &["remix.config.js", "remix.config.ts"],
 
+    dep_markers: &["@remix-run/react", "@remix-run/node"],
+
     entry_matchers: &[
         // Route files — the Remix file-system router.
         PathMatcher::Prefix("app/routes/"),

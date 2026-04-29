@@ -42,6 +42,8 @@ pub const PROFILE: FrameworkProfile = FrameworkProfile {
 
     markers: &["next.config.ts", "next.config.js", "next.config.mjs"],
 
+    dep_markers: &["next"],
+
     entry_matchers: &[
         // Config file.
         PathMatcher::FileName("next.config.ts"),
@@ -80,6 +82,19 @@ pub const PROFILE: FrameworkProfile = FrameworkProfile {
         // Generated directories.
         PathMatcher::PathContains("/generated/"),
         PathMatcher::PathContains("payload-types"),
+        // Storybook stories.
+        PathMatcher::FileContains(".stories."),
+        PathMatcher::FileContains(".story."),
+        // Drizzle/Prisma schema files (loaded by ORM tooling, not imported).
+        PathMatcher::PathContains("/drizzle/"),
+        PathMatcher::FileName("schema.prisma"),
+        // Storybook config.
+        PathMatcher::FileName(".storybook/preview.tsx"),
+        PathMatcher::FileName(".storybook/preview.ts"),
+        PathMatcher::FileName(".storybook/main.ts"),
+        // Instrumentation (Next.js 15+).
+        PathMatcher::FileName("instrumentation.ts"),
+        PathMatcher::FileName("instrumentation.js"),
     ],
     gotcha_rules: NEXTJS_GOTCHAS,
 };

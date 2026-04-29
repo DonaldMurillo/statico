@@ -11,6 +11,8 @@ pub const PROFILE: FrameworkProfile = FrameworkProfile {
 
     markers: &["vue.config.ts", "vue.config.js"],
 
+    dep_markers: &["vue"],
+
     entry_matchers: &[
         // Bootstrap entry.
         PathMatcher::FileName("main.ts"),

@@ -56,6 +56,11 @@ pub fn detect_with_frameworks(
         .collect();
 
     for (rel_path, source) in source_files {
+        // Skip gotcha detection in test/spec files — they're tooling, not production.
+        // This eliminates the bulk of false-positive gotcha reports.
+        if is_test_file(rel_path) {
+            continue;
+        }
         detect_in_file(rel_path, source, &mut issues);
         if !fw_rules.is_empty() {
             detect_framework_gotchas_in_file(rel_path, source, &fw_rules, &mut issues);

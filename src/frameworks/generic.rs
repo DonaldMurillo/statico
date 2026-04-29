@@ -10,6 +10,8 @@ pub const PROFILE: FrameworkProfile = FrameworkProfile {
     // No markers — always included as fallback.
     markers: &[],
 
+    dep_markers: &[],
+
     // No framework-specific entry matchers.
     // package.json/tsconfig/default detection happens in discovery.rs.
     entry_matchers: &[],
@@ -55,6 +57,12 @@ pub const PROFILE: FrameworkProfile = FrameworkProfile {
         // Test setup/fixtures.
         PathMatcher::Prefix("tests/"),
         PathMatcher::Prefix("__mocks__/"),
+        // Storybook stories.
+        PathMatcher::FileContains(".stories."),
+        PathMatcher::FileContains(".story."),
+        // Drizzle/Prisma schema files.
+        PathMatcher::PathContains("/drizzle/"),
+        PathMatcher::FileName("schema.prisma"),
     ],
     gotcha_rules: &[],
 };
