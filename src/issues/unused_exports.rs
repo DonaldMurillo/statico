@@ -45,6 +45,11 @@ pub fn detect(
             continue;
         }
 
+        // Skip golden/snapshot/fixture test files — they're expected outputs, not source.
+        if is_test_fixture(path) {
+            continue;
+        }
+
         let names_imported = imported_names.get(path);
 
         for name in exports {
@@ -176,6 +181,19 @@ fn detect_barrel_files(file_sources: &[(String, String)]) -> HashSet<String> {
         }
     }
     barrels
+}
+
+/// Check if a file is a test fixture (golden/snapshot/expected output)
+/// that shouldn't be analyzed for unused exports.
+fn is_test_fixture(path: &str) -> bool {
+    let lower = path.to_lowercase();
+    lower.contains("golden")
+        || lower.contains(".snap.")
+        || lower.contains(".expected.")
+        || lower.contains(".baseline.")
+        || lower.contains("__snapshots__")
+        || lower.contains("__fixtures__")
+        || lower.ends_with(".snap")
 }
 
 // ---------------------------------------------------------------------------
