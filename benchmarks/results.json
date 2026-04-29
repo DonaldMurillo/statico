@@ -5,22 +5,248 @@
     "remote": "calcom/cal.com",
     "feature": "dead-code, Next.js, monorepo (turborepo)",
     "statico": {
-      "dead": null,
-      "unused": null,
-      "gotchas": null,
-      "ms": 25867
+      "dead": 2863,
+      "unused": 3673,
+      "gotchas": 2471,
+      "ms": 7823
     },
     "fallow": {
-      "dead": null,
-      "ms": 28
+      "dead": 1081,
+      "unused": 1581,
+      "ms": 1181
     },
     "knip": {
       "unused": 0,
-      "ms": 2878
+      "ms": 2289
     },
     "ts_prune": {
       "unused": "skip",
       "ms": 0
+    }
+  },
+  {
+    "key": "shadcn",
+    "name": "shadcn/ui",
+    "remote": "shadcn-ui/ui",
+    "feature": "unused-exports",
+    "statico": {
+      "dead": 255,
+      "unused": 1468,
+      "gotchas": 326,
+      "ms": 6903
+    },
+    "fallow": {
+      "dead": 354,
+      "unused": 454,
+      "ms": 810
+    },
+    "knip": {
+      "unused": 0,
+      "ms": 1076
+    },
+    "ts_prune": {
+      "unused": null,
+      "ms": 567
+    }
+  },
+  {
+    "key": "nestjs",
+    "name": "NestJS",
+    "remote": "nestjs/nest",
+    "feature": "gotchas, NestJS framework detection",
+    "statico": {
+      "dead": 5,
+      "unused": 6,
+      "gotchas": 12,
+      "ms": 15
+    },
+    "fallow": {
+      "dead": 1,
+      "unused": 0,
+      "ms": 36
+    },
+    "knip": {
+      "unused": 0,
+      "ms": 313
+    },
+    "ts_prune": {
+      "unused": null,
+      "ms": 537
+    }
+  },
+  {
+    "key": "angular",
+    "name": "Angular",
+    "remote": "angular/angular",
+    "feature": "Angular framework detection",
+    "statico": {
+      "dead": 3295,
+      "unused": 4042,
+      "gotchas": 7415,
+      "ms": 11906
+    },
+    "fallow": {
+      "dead": 4618,
+      "unused": 3758,
+      "ms": 889
+    },
+    "knip": {
+      "unused": 0,
+      "ms": 3042
+    },
+    "ts_prune": {
+      "unused": "skip",
+      "ms": 0
+    }
+  },
+  {
+    "key": "turborepo",
+    "name": "Turborepo",
+    "remote": "vercel/turborepo",
+    "feature": "monorepo detection (pnpm workspaces)",
+    "statico": {
+      "dead": 309,
+      "unused": 922,
+      "gotchas": 309,
+      "ms": 1023
+    },
+    "fallow": {
+      "dead": 685,
+      "unused": 428,
+      "ms": 256
+    },
+    "knip": {
+      "unused": 0,
+      "ms": 3629
+    },
+    "ts_prune": {
+      "unused": null,
+      "ms": 687
+    }
+  },
+  {
+    "key": "payload",
+    "name": "Payload CMS",
+    "remote": "payloadcms/payload",
+    "feature": "Payload framework detection, duplication",
+    "statico": {
+      "dead": 1076,
+      "unused": 6365,
+      "gotchas": 3036,
+      "ms": 7956
+    },
+    "fallow": {
+      "dead": 2172,
+      "unused": 2000,
+      "ms": 1353
+    },
+    "knip": {
+      "unused": 0,
+      "ms": 3650
+    },
+    "ts_prune": {
+      "unused": null,
+      "ms": 573
+    }
+  },
+  {
+    "key": "vue-docs",
+    "name": "Vue.js Docs",
+    "remote": "vuejs/docs",
+    "feature": "Vue framework detection",
+    "statico": {
+      "dead": 61,
+      "unused": 126,
+      "gotchas": 6,
+      "ms": 79
+    },
+    "fallow": {
+      "dead": 177,
+      "unused": 13,
+      "ms": 40
+    },
+    "knip": {
+      "unused": "skip",
+      "ms": 0
+    },
+    "ts_prune": {
+      "unused": "skip",
+      "ms": 0
+    }
+  },
+  {
+    "key": "sveltekit",
+    "name": "shadcn-svelte",
+    "remote": "huntabyte/shadcn-svelte",
+    "feature": "Svelte framework detection",
+    "statico": {
+      "dead": 45,
+      "unused": 181,
+      "gotchas": 72,
+      "ms": 376
+    },
+    "fallow": {
+      "dead": 1726,
+      "unused": 546,
+      "ms": 484
+    },
+    "knip": {
+      "unused": 0,
+      "ms": 731
+    },
+    "ts_prune": {
+      "unused": "skip",
+      "ms": 0
+    }
+  },
+  {
+    "key": "remix",
+    "name": "Remix",
+    "remote": "remix-run/remix",
+    "feature": "Remix framework detection",
+    "statico": {
+      "dead": 412,
+      "unused": 690,
+      "gotchas": 934,
+      "ms": 2305
+    },
+    "fallow": {
+      "dead": 424,
+      "unused": 195,
+      "ms": 168
+    },
+    "knip": {
+      "unused": 0,
+      "ms": 988
+    },
+    "ts_prune": {
+      "unused": "skip",
+      "ms": 0
+    }
+  },
+  {
+    "key": "ai-sdk",
+    "name": "AI SDK",
+    "remote": "vercel/ai",
+    "feature": "stress test, large monorepo",
+    "statico": {
+      "dead": 312,
+      "unused": 1124,
+      "gotchas": 6552,
+      "ms": 4659
+    },
+    "fallow": {
+      "dead": 2024,
+      "unused": 186,
+      "ms": 1193
+    },
+    "knip": {
+      "unused": 0,
+      "ms": 2955
+    },
+    "ts_prune": {
+      "unused": null,
+      "ms": 563
     }
   }
 ]

@@ -280,9 +280,12 @@ fn build_reexport_map(
     };
 
     for (path, source) in file_sources {
-        // Only parse barrel-like files (index.ts/tsx)
-        let fname = path.rsplit('/').next().unwrap_or(path);
-        if fname != "index.ts" && fname != "index.tsx" {
+        // Skip files that clearly have no re-exports (cheap string pre-filter).
+        // We check for "export *" and "export {" + "from" patterns.
+        let has_star_reexport = source.contains("export *") || source.contains("export *");
+        // Named re-exports: "export { ... } from" — check for both patterns
+        let has_named_reexport = source.contains("} from") && source.contains("export {");
+        if !has_star_reexport && !has_named_reexport {
             continue;
         }
 

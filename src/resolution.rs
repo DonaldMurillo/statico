@@ -22,16 +22,79 @@ pub struct PathAlias {
 
 /// Resolver that handles tsconfig path aliases.
 #[derive(Clone)]
-pub struct Resolver {
+/// Path aliases loaded from a single tsconfig.json.
+struct TsconfigScope {
+    /// Directory containing this tsconfig, relative to root (e.g. "apps/web").
+    dir_rel: String,
+    /// Path aliases from this tsconfig's compilerOptions.paths.
     aliases: Vec<PathAlias>,
+}
+
+pub struct Resolver {
+    /// Global aliases (from root tsconfig + workspace packages).
+    aliases: Vec<PathAlias>,
+    /// Per-tsconfig scoped aliases for per-package path resolution.
+    /// When resolving from a file, the nearest tsconfig scope is used first.
+    scopes: Vec<TsconfigScope>,
     root: PathBuf,
+    /// Per-scope oxc_resolver instances, keyed by tsconfig directory (relative to root).
+    /// Each scope uses its nearest tsconfig.json for proper path resolution,
+    /// so `@/` in `apps/api/v2/` resolves differently than `@/` in `packages/platform/atoms/`.
+    #[cfg(feature = "deep-resolution")]
+    oxc_scopes: std::sync::Arc<OxcScopes>,
+}
+
+/// Collection of per-tsconfig oxc_resolver instances for scoped resolution.
+#[cfg(feature = "deep-resolution")]
+struct OxcScopes {
+    /// Global resolver using root tsconfig (or default if none).
+    global: oxc_resolver::Resolver,
+    /// Per-directory resolvers: (tsconfig_dir_relative, resolver).
+    scopes: Vec<(String, oxc_resolver::Resolver)>,
+    /// Workspace aliases for all scopes.
+    workspace_aliases: Vec<(String, Vec<oxc_resolver::AliasValue>)>,
+}
+
+#[cfg(not(feature = "deep-resolution"))]
+impl Clone for Resolver {
+    fn clone(&self) -> Self {
+        Self {
+            aliases: self.aliases.clone(),
+            scopes: self.scopes.clone(),
+            root: self.root.clone(),
+        }
+    }
+}
+
+#[cfg(feature = "deep-resolution")]
+impl Clone for Resolver {
+    fn clone(&self) -> Self {
+        Self {
+            aliases: self.aliases.clone(),
+            scopes: self.scopes.clone(),
+            root: self.root.clone(),
+            oxc_scopes: self.oxc_scopes.clone(), // Arc cloning is cheap
+        }
+    }
 }
 
 impl Resolver {
     /// Create a new resolver for the given project root.
     pub fn new(root: &Path) -> Self {
+        #[cfg(feature = "deep-resolution")]
+        {
+            let scopes = build_oxc_scopes(root);
+            Self {
+                aliases: Vec::new(),
+                scopes: Vec::new(),
+                root: root.to_path_buf(),
+                oxc_scopes: std::sync::Arc::new(scopes),
+            }
+        }
+        #[cfg(not(feature = "deep-resolution"))]
         Self {
             aliases: Vec::new(),
+            scopes: Vec::new(),
             root: root.to_path_buf(),
         }
     }
@@ -43,7 +106,7 @@ impl Resolver {
             Err(_) => return,
         };
 
-        let tsconfig: serde_json::Value = match serde_json::from_str(&content) {
+        let tsconfig: serde_json::Value = match serde_json::from_str(&strip_jsonc(&content)) {
             Ok(v) => v,
             Err(_) => return,
         };
@@ -139,7 +202,7 @@ impl Resolver {
             Ok(c) => c,
             Err(_) => return,
         };
-        let tsconfig: serde_json::Value = match serde_json::from_str(&content) {
+        let tsconfig: serde_json::Value = match serde_json::from_str(&strip_jsonc(&content)) {
             Ok(v) => v,
             Err(_) => return,
         };
@@ -201,17 +264,60 @@ impl Resolver {
                 .unwrap_or_default();
 
             if !prefix.is_empty() && !target_list.is_empty() {
-                // Check if we already have this prefix (from root tsconfig).
-                // Don't overwrite root-level aliases.
-                let already_loaded = self.aliases.iter().any(|a| a.prefix == prefix);
-                if !already_loaded {
-                    self.aliases.push(PathAlias {
-                        prefix,
-                        targets: target_list,
-                    });
-                }
+                // Add to global aliases (for backward compat / non-scoped resolution).
+                // Don't deduplicate — scoped resolution will pick the right one.
+                self.aliases.push(PathAlias {
+                    prefix: prefix.clone(),
+                    targets: target_list.clone(),
+                });
             }
         }
+
+        // Store as a scoped alias for per-file resolution.
+        let scoped_aliases: Vec<PathAlias> = paths
+                .iter()
+                .filter_map(|(pattern, targets)| {
+                    let is_wildcard = pattern.ends_with('*');
+                    let prefix = if is_wildcard {
+                        pattern.trim_end_matches('*').to_string()
+                    } else {
+                        pattern.clone()
+                    };
+                    let target_list: Vec<String> = targets
+                        .as_array()
+                        .map(|arr| {
+                            arr.iter()
+                                .filter_map(|v| v.as_str().map(String::from))
+                                .map(|t| {
+                                    let bare = if t.ends_with('*') {
+                                        t.trim_end_matches('*').to_string()
+                                    } else {
+                                        t.clone()
+                                    };
+                                    let resolved = if bare.starts_with('.') {
+                                        format!("./{}/{}", tsconfig_dir_rel, bare.trim_start_matches("./"))
+                                    } else {
+                                        format!("./{}/{}/{}", tsconfig_dir_rel, base_url.trim_start_matches("./"), bare.trim_start_matches("./"))
+                                    };
+                                    resolved.replace("././", "./").replace("//", "/")
+                                })
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    if !prefix.is_empty() && !target_list.is_empty() {
+                        Some(PathAlias { prefix, targets: target_list })
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+
+            if !scoped_aliases.is_empty() {
+                self.scopes.push(TsconfigScope {
+                    dir_rel: tsconfig_dir_rel.clone(),
+                    aliases: scoped_aliases,
+                });
+            }
     }
 
     /// Load workspace package mappings from all package.json files under the root.
@@ -366,12 +472,25 @@ impl Resolver {
     /// Resolve an import specifier relative to the given file directory.
     /// Returns the resolved absolute path, or None if unresolvable.
     pub fn resolve(&self, from_dir: &Path, spec: &str) -> Option<PathBuf> {
+        // 0. Try oxc_resolver with per-scope resolution.
+        #[cfg(feature = "deep-resolution")]
+        {
+            if let Some(resolved) = self.resolve_oxc(from_dir, spec) {
+                return Some(resolved);
+            }
+        }
+
         // 1. Try relative imports first.
         if spec.starts_with('.') || spec.starts_with('/') {
             return resolve_relative(from_dir, spec);
         }
 
-        // 2. Try tsconfig path aliases.
+        // 2. Try scoped tsconfig path aliases (nearest tsconfig first).
+        if let Some(resolved) = self.resolve_scoped(from_dir, spec) {
+            return Some(resolved);
+        }
+
+        // 3. Try global tsconfig path aliases.
         for alias in &self.aliases {
             if let Some(rest) = spec.strip_prefix(&alias.prefix) {
                 for target in &alias.targets {
@@ -383,10 +502,35 @@ impl Resolver {
             }
         }
 
-        // 3. Try as relative to root (for bare specifiers like "src/foo").
+        // 4. Try as relative to root (for bare specifiers like "src/foo").
         let from_root = self.root.join(spec);
         if let Some(found) = try_extensions(&from_root) {
             return Some(found);
+        }
+
+        None
+    }
+    /// Try resolving using the nearest tsconfig scope's aliases.
+    fn resolve_scoped(&self, from_dir: &Path, spec: &str) -> Option<PathBuf> {
+        let from_rel = path_relative_to(&self.root, from_dir);
+
+        // Find the nearest scope (longest matching prefix).
+        let best_scope = self.scopes
+            .iter()
+            .filter(|scope| from_rel.starts_with(&scope.dir_rel))
+            .max_by_key(|scope| scope.dir_rel.len());
+
+        let scope = best_scope?;
+
+        for alias in &scope.aliases {
+            if let Some(rest) = spec.strip_prefix(&alias.prefix) {
+                for target in &alias.targets {
+                    let resolved_path = self.root.join(target).join(rest);
+                    if let Some(found) = try_extensions(&resolved_path) {
+                        return Some(found);
+                    }
+                }
+            }
         }
 
         None
@@ -448,6 +592,48 @@ fn try_extensions(candidate: &Path) -> Option<PathBuf> {
     None
 }
 
+/// Strip JSONC comments (// and /* */) from a string so serde_json can parse it.
+/// Handles strings correctly — comments inside string literals are preserved.
+fn strip_jsonc(input: &str) -> String {
+    let mut out = String::with_capacity(input.len());
+    let chars: Vec<char> = input.chars().collect();
+    let mut i = 0;
+    let mut in_string = false;
+
+    while i < chars.len() {
+        if in_string {
+            out.push(chars[i]);
+            if chars[i] == '\\' && i + 1 < chars.len() {
+                i += 1;
+                out.push(chars[i]);
+            } else if chars[i] == '"' {
+                in_string = false;
+            }
+            i += 1;
+        } else if chars[i] == '"' {
+            in_string = true;
+            out.push(chars[i]);
+            i += 1;
+        } else if chars[i] == '/' && i + 1 < chars.len() && chars[i + 1] == '/' {
+            // Line comment — skip to end of line.
+            while i < chars.len() && chars[i] != '\n' {
+                i += 1;
+            }
+        } else if chars[i] == '/' && i + 1 < chars.len() && chars[i + 1] == '*' {
+            // Block comment — skip to */.
+            i += 2;
+            while i + 1 < chars.len() && !(chars[i] == '*' && chars[i + 1] == '/') {
+                i += 1;
+            }
+            i += 2; // skip */
+        } else {
+            out.push(chars[i]);
+            i += 1;
+        }
+    }
+    out
+}
+
 /// Get a path relative to the root.
 pub fn path_relative_to(root: &Path, path: &Path) -> String {
     match path.strip_prefix(root) {
@@ -461,6 +647,171 @@ fn canonicalize(path: &Path) -> PathBuf {
     std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
 }
 
+// ---------------------------------------------------------------------------
+// oxc_resolver integration
+// ---------------------------------------------------------------------------
+
+/// Build oxc_resolver scopes: one global + one per tsconfig sub-directory.
+/// Each scope uses its own tsconfig for correct per-package path resolution,
+/// so `@/` in `apps/api/v2/` resolves differently than `@/` in `packages/atoms/`.
+#[cfg(feature = "deep-resolution")]
+fn build_oxc_scopes(root: &Path) -> OxcScopes {
+    use oxc_resolver::{AliasValue, ResolveOptions, TsconfigDiscovery, TsconfigOptions, TsconfigReferences};
+
+    let workspace_aliases = build_workspace_aliases(root);
+    let root_str = root.to_string_lossy().to_string();
+
+    let default_opts = ResolveOptions {
+        extensions: vec![
+            ".ts".into(), ".tsx".into(), ".js".into(), ".jsx".into(),
+            ".mjs".into(), ".cjs".into(),
+        ],
+        main_fields: vec!["types".into(), "typings".into(), "module".into(), "main".into()],
+        condition_names: vec![
+            "import".into(), "module".into(), "require".into(),
+            "default".into(), "types".into(), "node".into(),
+        ],
+        alias: workspace_aliases.clone(),
+        modules: vec!["node_modules".into(), root_str.clone()],
+        ..ResolveOptions::default()
+    };
+
+    // Global resolver (no tsconfig or root tsconfig).
+    let global_tsconfig = root.join("tsconfig.json");
+    let global_opts = if global_tsconfig.exists() {
+        ResolveOptions {
+            tsconfig: Some(TsconfigDiscovery::Manual(TsconfigOptions {
+                config_file: global_tsconfig.clone(),
+                references: TsconfigReferences::Auto,
+            })),
+            ..default_opts.clone()
+        }
+    } else {
+        default_opts.clone()
+    };
+    let global = oxc_resolver::Resolver::new(global_opts);
+
+    // Per-scope resolvers from sub-project tsconfig files.
+    let mut scopes: Vec<(String, oxc_resolver::Resolver)> = Vec::new();
+    for entry in walkdir::WalkDir::new(root)
+        .max_depth(6)
+        .into_iter()
+        .filter_map(|e| e.ok())
+    {
+        let path = entry.path();
+        if !path.is_file() || path.file_name().map_or(true, |n| n != "tsconfig.json") {
+            continue;
+        }
+        let rel = path_relative_to(root, path);
+        if rel.contains("node_modules") || rel.contains(".svelte-kit")
+            || rel.contains("dist/") || rel.contains(".next/")
+            || rel == "tsconfig.json"
+        {
+            continue;
+        }
+        let tsconfig_dir = match path.parent() {
+            Some(d) => d,
+            None => continue,
+        };
+        let tsconfig_dir_rel = path_relative_to(root, tsconfig_dir);
+
+        let opts = ResolveOptions {
+            tsconfig: Some(TsconfigDiscovery::Manual(TsconfigOptions {
+                config_file: path.to_path_buf(),
+                references: TsconfigReferences::Auto,
+            })),
+            ..default_opts.clone()
+        };
+        scopes.push((tsconfig_dir_rel, oxc_resolver::Resolver::new(opts)));
+    }
+
+    OxcScopes {
+        global,
+        scopes,
+        workspace_aliases,
+    }
+}
+
+/// Build oxc-compatible alias list from workspace package.json files.
+#[cfg(feature = "deep-resolution")]
+fn build_workspace_aliases(root: &Path) -> Vec<(String, Vec<oxc_resolver::AliasValue>)> {
+    use oxc_resolver::AliasValue;
+
+    let mut aliases: Vec<(String, Vec<AliasValue>)> = Vec::new();
+
+    for entry in walkdir::WalkDir::new(root)
+        .max_depth(5)
+        .into_iter()
+        .filter_map(|e| e.ok())
+    {
+        let path = entry.path();
+        if !path.is_file() || path.file_name().map_or(true, |n| n != "package.json") {
+            continue;
+        }
+        let rel = path_relative_to(root, path);
+        if rel.contains("node_modules") {
+            continue;
+        }
+
+        let content = match std::fs::read_to_string(path) {
+            Ok(c) => c,
+            Err(_) => continue,
+        };
+        let pkg: serde_json::Value = match serde_json::from_str(&content) {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+
+        let name = match pkg.get("name").and_then(|v| v.as_str()) {
+            Some(n) => n,
+            None => continue,
+        };
+        if !name.starts_with('@') && !name.contains('/') {
+            continue;
+        }
+
+        let pkg_dir = path.parent().unwrap();
+        aliases.push((
+            format!("{}$", name),
+            vec![AliasValue::Path(pkg_dir.to_string_lossy().to_string())],
+        ));
+        aliases.push((
+            name.to_string(),
+            vec![AliasValue::Path(pkg_dir.to_string_lossy().to_string())],
+        ));
+    }
+
+    aliases
+}
+
+impl Resolver {
+    /// Try oxc resolution using the nearest tsconfig scope.
+    #[cfg(feature = "deep-resolution")]
+    fn resolve_oxc(&self, from_dir: &Path, spec: &str) -> Option<PathBuf> {
+        let from_rel = path_relative_to(&self.root, from_dir);
+
+        // Find the nearest scope (longest matching prefix).
+        let best_scope = self.oxc_scopes.scopes
+            .iter()
+            .filter(|(dir_rel, _)| from_rel.starts_with(dir_rel))
+            .max_by_key(|(dir_rel, _)| dir_rel.len())
+            .map(|(_, resolver)| resolver);
+
+        let resolver = best_scope.unwrap_or(&self.oxc_scopes.global);
+
+        match resolver.resolve(from_dir, spec) {
+            Ok(resolution) => {
+                let path = resolution.full_path();
+                if let Ok(rel) = path.strip_prefix(&self.root) {
+                    Some(self.root.join(rel))
+                } else {
+                    Some(path.to_path_buf())
+                }
+            }
+            Err(_) => None,
+        }
+    }
+}
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------

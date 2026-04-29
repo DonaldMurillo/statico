@@ -6,7 +6,7 @@ description = "Static code analyzer for TypeScript projects"
 
 [features]
 default = []
-deep-resolution = []  # Trace re-export chains for better unused export accuracy
+deep-resolution = ["dep:oxc_resolver"]  # Use oxc_resolver for proper TS module resolution
 
 [[bin]]
 name = "statico"
@@ -29,6 +29,7 @@ tree-sitter-typescript = "0.23"
 indicatif = "0.17"
 colored = "3"
 atty = "0.2"
+oxc_resolver = { version = "11", optional = true }
 
 [[bench]]
 name = "analysis_benchmarks"
