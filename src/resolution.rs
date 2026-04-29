@@ -271,7 +271,11 @@ impl Resolver {
                     }
                 });
 
-            if let Some(main_val) = main {
+            // Check if the main entry file actually exists.
+            let main_exists = main.as_ref().is_some_and(|m| pkg_dir.join(m).is_file());
+
+            if main_exists {
+                let main_val = main.unwrap();
                 let target = pkg_dir.join(main_val);
                 let target_rel = path_relative_to(&self.root, &target);
 

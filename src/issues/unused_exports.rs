@@ -220,7 +220,15 @@ fn is_test_fixture(path: &str) -> bool {
         || lower.contains(".baseline.")
         || lower.contains("__snapshots__")
         || lower.contains("__fixtures__")
+        || lower.contains("__mocks__")
         || lower.ends_with(".snap")
+        // Test files — their exports are for test runners, not production code.
+        || lower.contains(".test.")
+        || lower.contains(".spec.")
+        // Config files — consumed by tooling, not imported.
+        || lower.ends_with(".config.ts")
+        || lower.ends_with(".config.js")
+        || lower.ends_with(".config.mjs")
         // Auto-generated type files (e.g. payload-types.ts, payload-generated-schema.ts)
         || lower.ends_with("-types.ts")
         || lower.ends_with("-generated-schema.ts")

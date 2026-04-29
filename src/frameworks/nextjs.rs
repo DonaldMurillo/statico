@@ -57,7 +57,8 @@ pub const PROFILE: FrameworkProfile = FrameworkProfile {
             dir: "app",
             stems: &["page", "layout", "route", "loading", "error", "not-found", "template", "default", "global-error"],
         },
-        // Pages Router.
+        // Pages Router — match at any depth for monorepo layouts.
+        PathMatcher::PathContains("/pages/"),
         PathMatcher::Prefix("pages/"),
         PathMatcher::Prefix("src/pages/"),
     ],
