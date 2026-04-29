@@ -1,0 +1,26 @@
+[
+  {
+    "key": "calcom",
+    "name": "Cal.com",
+    "remote": "calcom/cal.com",
+    "feature": "dead-code, Next.js, monorepo (turborepo)",
+    "statico": {
+      "dead": null,
+      "unused": null,
+      "gotchas": null,
+      "ms": 25867
+    },
+    "fallow": {
+      "dead": null,
+      "ms": 28
+    },
+    "knip": {
+      "unused": 0,
+      "ms": 2878
+    },
+    "ts_prune": {
+      "unused": "skip",
+      "ms": 0
+    }
+  }
+]

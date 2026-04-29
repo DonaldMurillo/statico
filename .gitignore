@@ -8,3 +8,6 @@ pi-agent/plugins/*
 
 # Test output
 test-output/
+
+# Public benchmark repos (large, auto-managed)
+benchmarks/repos/
