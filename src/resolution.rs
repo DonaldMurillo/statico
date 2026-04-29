@@ -5,6 +5,7 @@
 //!   - tsconfig `paths` aliases (`@/components/foo` → `./src/components/foo`)
 //!   - Extension resolution (try `.ts`, `.tsx`, `.js`, `.jsx`, `index.ts`, etc.)
 
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 const SOURCE_EXTENSIONS: &[&str] = &["ts", "tsx", "js", "jsx"];
@@ -508,4 +509,44 @@ mod tests {
             vec!["./src/".to_string()]
         );
     }
+}
+
+/// Find directories containing published packages (not private).
+/// Returns a set of relative directory paths like "packages/common", "packages/core".
+pub fn find_published_package_dirs(root: &Path) -> HashSet<String> {
+    let mut published = HashSet::new();
+    for entry in walkdir::WalkDir::new(root)
+        .max_depth(4)
+        .into_iter()
+        .filter_map(|e| e.ok())
+    {
+        let path = entry.path();
+        if !path.is_file() || path.file_name().map_or(true, |n| n != "package.json") {
+            continue;
+        }
+        let rel = path_relative_to(root, path);
+        if rel.contains("node_modules") {
+            continue;
+        }
+        let content = match std::fs::read_to_string(path) {
+            Ok(c) => c,
+            Err(_) => continue,
+        };
+        let pkg: serde_json::Value = match serde_json::from_str(&content) {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+        // Skip private packages and packages without a name
+        let private = pkg.get("private").and_then(|v| v.as_bool()).unwrap_or(false);
+        let has_name = pkg.get("name").and_then(|v| v.as_str()).is_some();
+        if private || !has_name {
+            continue;
+        }
+        // The package directory is the parent of package.json
+        if let Some(pkg_dir) = path.parent() {
+            let dir_rel = path_relative_to(root, pkg_dir);
+            published.insert(dir_rel);
+        }
+    }
+    published
 }
