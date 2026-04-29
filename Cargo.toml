@@ -4,6 +4,10 @@ version = "0.1.0"
 edition = "2024"
 description = "Static code analyzer for TypeScript projects"
 
+[features]
+default = []
+deep-resolution = []  # Trace re-export chains for better unused export accuracy
+
 [[bin]]
 name = "statico"
 path = "src/main.rs"

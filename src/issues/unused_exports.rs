@@ -21,6 +21,7 @@ pub fn detect(
     entry_points: &[String],
     file_sources: &[(String, String)],
     public_api: &[String],
+    root: &std::path::Path,
 ) -> Vec<UnusedExportIssue> {
     let ep_set: HashSet<&str> = entry_points.iter().map(|s| s.as_str()).collect();
     let pa_set: HashSet<&str> = public_api.iter().map(|s| s.as_str()).collect();
@@ -29,6 +30,7 @@ pub fn detect(
     // is primarily re-exports. These form the package's public API surface.
     let barrel_files = detect_barrel_files(file_sources);
 
+    let _root = root; // Used by deep-resolution feature
     let mut unused: Vec<UnusedExportIssue> = Vec::new();
     for (path, exports) in file_exports {
         if ep_set.contains(path.as_str()) {
@@ -67,6 +69,37 @@ pub fn detect(
                 });
             }
         }
+    }
+
+    // Deep resolution: trace re-export chains.
+    // When barrel file B re-exports `Foo` from source file A, and some consumer
+    // imports `Foo` from barrel B, then A's `Foo` is transitively used.
+    #[cfg(feature = "deep-resolution")]
+    {
+        let reexport_map = build_reexport_map(file_sources, imported_names, _root);
+        unused.retain(|issue| {
+            // Check named re-export chain
+            if let Some(barrels) = reexport_map.get(&(issue.path.clone(), issue.name.clone())) {
+                for barrel_path in barrels {
+                    if let Some(names) = imported_names.get(barrel_path.as_str()) {
+                        if names.contains(&issue.name) {
+                            return false; // Transitively used via named re-export
+                        }
+                    }
+                }
+            }
+            // Check star re-export chain: barrel re-exports ALL from this file
+            if let Some(barrels) = reexport_map.get(&(issue.path.clone(), "*".to_string())) {
+                for barrel_path in barrels {
+                    if let Some(names) = imported_names.get(barrel_path.as_str()) {
+                        if names.contains(&issue.name) {
+                            return false; // Transitively used via star re-export
+                        }
+                    }
+                }
+            }
+            true
+        });
     }
 
     unused.sort_by(|a, b| a.path.cmp(&b.path).then(a.name.cmp(&b.name)));
@@ -212,6 +245,73 @@ fn is_example_directory(path: &str) -> bool {
         || lower.contains("/demos/")
 }
 
+/// Build a reverse re-export map: (source_file, export_name) → set of barrel files
+/// that re-export that name from that source.
+/// This enables transitive "used" detection: if barrel B re-exports `Foo` from A,
+/// and someone imports `Foo` from B, then A's `Foo` is transitively used.
+#[cfg(feature = "deep-resolution")]
+fn build_reexport_map(
+    file_sources: &[(String, String)],
+    _imported_names: &BTreeMap<String, HashSet<String>>,
+    root: &std::path::Path,
+) -> BTreeMap<(String, String), Vec<String>> {
+    use crate::parse::AstParser;
+
+    let mut map: BTreeMap<(String, String), Vec<String>> = BTreeMap::new();
+    let parser = match AstParser::new() {
+        Ok(p) => p,
+        Err(_) => return map,
+    };
+
+    for (path, source) in file_sources {
+        // Only parse barrel-like files (index.ts/tsx)
+        let fname = path.rsplit('/').next().unwrap_or(path);
+        if fname != "index.ts" && fname != "index.tsx" {
+            continue;
+        }
+
+        let is_tsx = path.ends_with(".tsx");
+        let parsed = match parser.parse(source, is_tsx) {
+            Some(p) => p,
+            None => continue,
+        };
+
+        // The barrel's directory as an absolute path for resolution.
+        let barrel_dir_str = path.rsplit_once('/').map(|p| p.0).unwrap_or(".");
+        let barrel_dir_abs = root.join(barrel_dir_str);
+
+        // Extract named re-exports: export { Foo, Bar } from './baz'
+        let reexports = crate::parse::exports::extract_reexport_sources(
+            parsed.tree.root_node(), source,
+        );
+        for (name, rel_spec) in &reexports {
+            let resolved = crate::resolution::resolve_import(&barrel_dir_abs, rel_spec);
+            if let Some(target_abs) = resolved {
+                let target_rel = crate::resolution::path_relative_to(root, &target_abs);
+                map.entry((target_rel, name.clone()))
+                    .or_default()
+                    .push(path.clone());
+            }
+        }
+
+        // Also handle star re-exports: export * from './foo'
+        let star_specs = crate::parse::exports::extract_star_reexport_specs(
+            parsed.tree.root_node(), source,
+        );
+        for rel_spec in &star_specs {
+            let resolved = crate::resolution::resolve_import(&barrel_dir_abs, rel_spec);
+            if let Some(target_abs) = resolved {
+                let target_rel = crate::resolution::path_relative_to(root, &target_abs);
+                map.entry((target_rel, "*".to_string()))
+                    .or_default()
+                    .push(path.clone());
+            }
+        }
+    }
+
+    map
+}
+
 fn is_test_fixture(path: &str) -> bool {
     let lower = path.to_lowercase();
     lower.contains("golden")
@@ -256,7 +356,7 @@ mod tests {
         let imported = BTreeMap::new();
         let eps = vec!["src/index.ts".into()];
         let sources = vec![];
-        let unused = detect(&exports, &imported, &eps, &sources, &[]);
+        let unused = detect(&exports, &imported, &eps, &sources, &[], std::path::Path::new("."));
         // utils.ts is not an entry point and nothing imports its names.
         assert_eq!(unused.len(), 2);
         assert_eq!(unused[0].name, "formatDate");
@@ -274,7 +374,7 @@ mod tests {
         ]);
         let eps = vec!["src/app.ts".into()];
         let sources = vec![];
-        let unused = detect(&exports, &imported, &eps, &sources, &[]);
+        let unused = detect(&exports, &imported, &eps, &sources, &[], std::path::Path::new("."));
         assert_eq!(unused.len(), 1);
         assert_eq!(unused[0].name, "oldThing");
         assert_eq!(unused[0].path, "src/dead.ts");
@@ -289,7 +389,7 @@ mod tests {
             ("src/utils.ts".into(), HashSet::from(["helper".into()])),
         ]);
         let sources = vec![];
-        let unused = detect(&exports, &imported, &[], &sources, &[]);
+        let unused = detect(&exports, &imported, &[], &sources, &[], std::path::Path::new("."));
         assert!(unused.is_empty());
     }
 
@@ -303,7 +403,7 @@ mod tests {
             ("src/utils.ts".into(), HashSet::from(["foo".into()])),
         ]);
         let sources = vec![];
-        let unused = detect(&exports, &imported, &[], &sources, &[]);
+        let unused = detect(&exports, &imported, &[], &sources, &[], std::path::Path::new("."));
         assert_eq!(unused.len(), 2);
         assert_eq!(unused[0].name, "bar");
         assert_eq!(unused[1].name, "baz");
@@ -319,7 +419,7 @@ mod tests {
         let imported = BTreeMap::new();
         let eps = vec!["src/index.ts".into()];
         let sources = vec![];
-        let unused = detect(&exports, &imported, &eps, &sources, &[]);
+        let unused = detect(&exports, &imported, &eps, &sources, &[], std::path::Path::new("."));
         // Only utils.ts exports should be flagged (index.ts is an entry point).
         assert_eq!(unused.len(), 1);
         assert_eq!(unused[0].name, "helper");
@@ -336,7 +436,7 @@ mod tests {
         let imported = BTreeMap::new(); // nobody imports these internally
         let eps = vec![]; // not an explicit entry point
         let sources = vec![("src/index.ts".to_string(), barrel_source.to_string())];
-        let unused = detect(&exports, &imported, &eps, &sources, &[]);
+        let unused = detect(&exports, &imported, &eps, &sources, &[], std::path::Path::new("."));
         // Barrel file exports should be excluded — they're the public API.
         assert!(unused.is_empty(), "barrel re-export file should not have unused exports");
     }
@@ -353,7 +453,7 @@ mod tests {
         ]);
         let eps = vec![];
         let sources = vec![("src/index.ts".to_string(), index_source.to_string())];
-        let unused = detect(&exports, &imported, &eps, &sources, &[]);
+        let unused = detect(&exports, &imported, &eps, &sources, &[], std::path::Path::new("."));
         // Not a barrel file — unusedHelper should still be flagged.
         assert_eq!(unused.len(), 1);
         assert_eq!(unused[0].name, "unusedHelper");
@@ -369,7 +469,7 @@ mod tests {
         let imported = BTreeMap::new();
         let eps = vec![];
         let sources = vec![("app/charts/charts.tsx".to_string(), barrel_source.to_string())];
-        let unused = detect(&exports, &imported, &eps, &sources, &[]);
+        let unused = detect(&exports, &imported, &eps, &sources, &[], std::path::Path::new("."));
         // Non-index barrel file should also be excluded.
         assert!(unused.is_empty(), "non-index barrel re-export file should not have unused exports");
     }
@@ -384,7 +484,7 @@ mod tests {
         let eps = vec![];
         let sources = vec![];
         let public_api = vec!["packages/ui/src/icons.tsx".to_string()];
-        let unused = detect(&exports, &imported, &eps, &sources, &public_api);
+        let unused = detect(&exports, &imported, &eps, &sources, &public_api, std::path::Path::new("."));
         // Public API file exports should be excluded.
         assert!(unused.is_empty(), "public API file should not have unused exports");
     }

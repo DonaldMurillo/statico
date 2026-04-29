@@ -278,6 +278,54 @@ fn is_pascal_case(name: &str) -> bool {
     name.chars().next().map(|c| c.is_uppercase()).unwrap_or(false)
 }
 
+/// Extract named re-exports with their source module specifiers.
+/// Returns (exported_name, module_specifier) pairs from:
+///   `export { Foo, Bar as Baz } from './utils'`
+/// Results: [("Foo", "./utils"), ("Baz", "./utils")]
+pub fn extract_reexport_sources(root: Node, source: &str) -> Vec<(String, String)> {
+    let mut results: Vec<(String, String)> = Vec::new();
+
+    for node in collect_nodes(root, &["export_statement"]) {
+        let mut has_from = false;
+        let mut has_star = false;
+        let mut export_clause: Option<Node> = None;
+        let mut module_spec: Option<String> = None;
+
+        for i in 0..node.child_count() {
+            let child = node.child(i).unwrap();
+            match child.kind() {
+                "from" => has_from = true,
+                "*" => has_star = true,
+                "export_clause" => export_clause = Some(child),
+                "string" => {
+                    let text = child.utf8_text(source.as_bytes()).unwrap_or("");
+                    module_spec = Some(super::unquote(text));
+                }
+                _ => {}
+            }
+        }
+
+        // Only process named re-exports (must have 'from', no '*', and a module spec)
+        if !has_from || has_star {
+            continue;
+        }
+        let Some(clause) = export_clause else { continue };
+        let Some(spec) = module_spec else { continue };
+
+        for i in 0..clause.child_count() {
+            let child = clause.child(i).unwrap();
+            if child.kind() == "export_specifier" {
+                // The exported name — use the alias if present (Bar as Baz → Baz)
+                if let Some(name) = get_last_identifier(child, source) {
+                    results.push((name, spec.clone()));
+                }
+            }
+        }
+    }
+
+    results
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

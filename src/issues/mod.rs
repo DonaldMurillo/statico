@@ -53,7 +53,7 @@ pub fn detect_issues(
             issues
         },
         unused_exports: unused_exports::detect(
-            file_exports, imported_names, framework_entries, file_sources, public_api,
+            file_exports, imported_names, framework_entries, file_sources, public_api, root,
         ),
         duplicate_exports: duplicate_exports::detect(file_exports),
         duplicate_code: duplicate_code::detect(file_blocks, file_sources),
