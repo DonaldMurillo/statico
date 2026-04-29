@@ -225,6 +225,9 @@ fn is_test_fixture(path: &str) -> bool {
         // Test files — their exports are for test runners, not production code.
         || lower.contains(".test.")
         || lower.contains(".spec.")
+        || lower.contains("/__tests__/")
+        || lower.contains("/__test__/")
+        || lower.contains("/__mocks__/")
         // Config files — consumed by tooling, not imported.
         || lower.ends_with(".config.ts")
         || lower.ends_with(".config.js")
