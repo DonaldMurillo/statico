@@ -102,8 +102,11 @@ fn detect_barrel_files(file_sources: &[(String, String)]) -> HashSet<String> {
                     if trimmed.contains(" from ") || trimmed.contains("from '") || trimmed.contains("from \"") {
                         export_block_has_from = true;
                     }
-                    if trimmed.contains(';') || trimmed.ends_with('}') {
-                        // Block closed.
+                    // Block closed if: has semicolon, ends with }, or is a "} from '...'" re-export
+                    let block_closed = trimmed.contains(';')
+                        || trimmed.ends_with('}')
+                        || trimmed.contains("} from ");
+                    if block_closed {
                         total_stmts += 1;
                         if export_block_has_from {
                             reexport_stmts += 1;
