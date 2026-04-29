@@ -298,6 +298,63 @@ impl Resolver {
                     targets: vec![pkg_dir_rel],
                 });
             }
+
+            // Parse package.json "exports" field for sub-path aliases.
+            // Handles patterns like "./lib/*" -> "./src/lib/*" where * is a wildcard.
+            if let Some(exports) = pkg.get("exports").and_then(|v| v.as_object()) {
+                let pkg_dir_rel = format!("./{}/", path_relative_to(&self.root, pkg_dir));
+                for (export_key, export_val) in exports {
+                    // Handle both simple string and conditional (dict) exports.
+                    // e.g. { ".": { "import": "./src/index.js", "default": "./src/index.js" } }
+                    let target_str = match export_val.as_str() {
+                        Some(s) => s.to_string(),
+                        None => {
+                            // Try conditional exports: prefer "import", then "default", then first value.
+                            let obj = match export_val.as_object() {
+                                Some(o) => o,
+                                None => continue,
+                            };
+                            if let Some(s) = obj.get("import").and_then(|v| v.as_str()) {
+                                s.to_string()
+                            } else if let Some(s) = obj.get("default").and_then(|v| v.as_str()) {
+                                s.to_string()
+                            } else if let Some(s) = obj.values().find_map(|v| v.as_str()) {
+                                s.to_string()
+                            } else {
+                                continue;
+                            }
+                        }
+                    };
+                    // Strip leading "." from both key and target.
+                    let sub_path = export_key.strip_prefix('.').unwrap_or(export_key);
+                    let target_sub = target_str.strip_prefix('.').unwrap_or(&target_str);
+                    let target_sub = target_sub.strip_prefix('/').unwrap_or(target_sub);
+
+                    if sub_path.contains('*') {
+                        // Wildcard pattern: "./lib/*" -> prefix "@scope/pkg/lib/"
+                        let prefix_part = sub_path.split('*').next().unwrap_or("");
+                        let target_part = target_sub.split('*').next().unwrap_or("");
+                        let prefix = format!("{}{}", name, prefix_part);
+                        let target = format!("{}{}", pkg_dir_rel, target_part);
+                        self.aliases.push(PathAlias {
+                            prefix,
+                            targets: vec![target],
+                        });
+                    } else {
+                        // Exact mapping: "./setupVitest" -> "./src/setupVitest.ts"
+                        let prefix = if sub_path.is_empty() {
+                            name.to_string()
+                        } else {
+                            format!("{}{}", name, sub_path)
+                        };
+                        let target = format!("{}{}", pkg_dir_rel, target_sub);
+                        self.aliases.push(PathAlias {
+                            prefix,
+                            targets: vec![target],
+                        });
+                    }
+                }
+            }
         }
     }
 

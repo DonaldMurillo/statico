@@ -194,6 +194,10 @@ fn is_test_fixture(path: &str) -> bool {
         || lower.contains("__snapshots__")
         || lower.contains("__fixtures__")
         || lower.ends_with(".snap")
+        // Auto-generated type files (e.g. payload-types.ts, payload-generated-schema.ts)
+        || lower.ends_with("-types.ts")
+        || lower.ends_with("-generated-schema.ts")
+        || lower.ends_with("-generated-types.ts")
 }
 
 // ---------------------------------------------------------------------------
