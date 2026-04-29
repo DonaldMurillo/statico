@@ -260,6 +260,11 @@ fn load_package_deps(dir: &Path) -> Option<HashSet<String>> {
     let content = std::fs::read_to_string(&pkg_path).ok()?;
     let val: serde_json::Value = serde_json::from_str(&content).ok()?;
     let mut deps = HashSet::new();
+    // Include the package's own name — enables detecting the shadcn monorepo
+    // where packages/shadcn/package.json has name "shadcn" but it's not a dep.
+    if let Some(name) = val.get("name").and_then(|v| v.as_str()) {
+        deps.insert(name.to_string());
+    }
     if let Some(obj) = val.get("dependencies").and_then(|v| v.as_object()) {
         deps.extend(obj.keys().cloned());
     }

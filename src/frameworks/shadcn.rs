@@ -15,20 +15,27 @@ pub const PROFILE: FrameworkProfile = FrameworkProfile {
 
     entry_matchers: &[
         // Registry component files — consumed by the shadcn CLI at build time.
+        // Works in both flat repos (registry/) and monorepos (apps/v4/registry/).
         PathMatcher::Prefix("registry/"),
-        // Style variant component files — also consumed by the CLI.
-        PathMatcher::PathContains("/ui/"),
+        PathMatcher::PathContains("/registry/"),
+        // Style variant directories (e.g. apps/v4/styles/base-nova/ui-rtl/button.tsx)
+        PathMatcher::PathContains("/styles/"),
     ],
 
     implicit_matchers: &[
         // Build scripts for the registry.
         PathMatcher::Prefix("scripts/"),
+        PathMatcher::PathContains("/scripts/"),
         // Example/demo pages.
         PathMatcher::Prefix("examples/"),
+        PathMatcher::PathContains("/examples/"),
+        // Block templates — also consumed by the CLI.
+        PathMatcher::PathContains("/blocks/"),
         // Generated registry output.
         PathMatcher::PathContains("/generated/"),
         // Style directories consumed by CLI.
         PathMatcher::Prefix("styles/"),
+        PathMatcher::PathContains("/styles/"),
         // Source config for content.
         PathMatcher::FileName("source.config.ts"),
     ],
@@ -53,6 +60,6 @@ mod tests {
         assert!(PROFILE
             .implicit_matchers
             .iter()
-            .any(|m| m.matches("styles/radix-lyra/ui/button.tsx")));
+            .any(|m| m.matches("apps/v4/styles/radix-lyra/ui/button.tsx")));
     }
 }
