@@ -1,8 +1,22 @@
-use std::collections::BTreeSet;
-use std::path::{Path, PathBuf};
+//! Main analysis orchestrator. Coordinates parsing, discovery, and issue detection.
 
-use crate::parse::{count_classes, count_functions, compute_complexity, count_loc, AstParser};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::path::Path;
+use std::sync::Arc;
+
+use rayon::prelude::*;
+
+use crate::parse::blocks::extract_blocks;
+use crate::parse::metrics::{count_loc, count_functions, count_classes};
+use crate::parse::exports::extract_exports;
+use crate::parse::errors::collect_errors;
+use crate::parse::AstParser;
 use crate::types::*;
+
+use crate::discovery::{discover_source_files, discover_config_files, discover_entry_points};
+use crate::issues::detect_issues;
+use crate::resolution::{Resolver, path_relative_to};
+
 
 /// Run the full analysis on a project directory.
 pub fn analyze(root: &Path) -> Result<AnalysisOutput, String> {
@@ -13,15 +27,34 @@ pub fn analyze(root: &Path) -> Result<AnalysisOutput, String> {
         return Err(format!("not a directory: {}", root.display()));
     }
 
-    let mut parser = AstParser::new().map_err(|e| format!("failed to init parser: {}", e))?;
+    let parser = AstParser::new().map_err(|e| format!("failed to init parser: {}", e))?;
 
     let source_files = discover_source_files(root)?;
-    let config_files = discover_config_files(root)?;
-    let entry_points = discover_entry_points(root, &source_files)?;
+    let config_files = discover_config_files(root);
+    let entry = discover_entry_points(root, &source_files);
+
+    let entry_points: Vec<String> = entry.framework.iter().cloned().collect();
+    let implicit_entries: Vec<String> = entry.implicit.iter().cloned().collect();
+    let all_entries: Vec<String> = entry.all().into_iter().collect();
+
+    // Build resolver with tsconfig path aliases and workspace package mappings.
+    let mut resolver = Resolver::new(root);
+    let tsconfig_path = root.join("tsconfig.json");
+    if tsconfig_path.exists() {
+        resolver.load_tsconfig_paths(&tsconfig_path);
+    }
+    // Also try tsconfig.app.json (Next.js 15+ splits these).
+    let tsconfig_app = root.join("tsconfig.app.json");
+    if tsconfig_app.exists() {
+        resolver.load_tsconfig_paths(&tsconfig_app);
+    }
+    // Load workspace package name → directory mappings for monorepo support.
+    resolver.load_workspace_packages();
 
     let structure = Structure {
         root: root.to_path_buf(),
         entry_points,
+        implicit_entries,
         source_files: source_files
             .iter()
             .map(|(rel, lang)| SourceFile {
@@ -32,379 +65,333 @@ pub fn analyze(root: &Path) -> Result<AnalysisOutput, String> {
         config_files,
     };
 
-    // Parse all files and extract imports + metrics.
-    let mut all_imports: Vec<FileImports> = Vec::new();
-    let mut all_external: BTreeSet<String> = BTreeSet::new();
-    let mut quality_files: Vec<FileQuality> = Vec::new();
+    let progress = crate::progress::shared_progress(source_files.len());
+    progress.set_quiet(true); // TODO: wire to --quiet flag
 
-    for (rel_path, _lang) in &source_files {
-        let abs_path = root.join(rel_path);
-        let source = match std::fs::read_to_string(&abs_path) {
-            Ok(s) => s,
-            Err(e) => {
-                quality_files.push(FileQuality {
-                    path: rel_path.clone(),
-                    metrics: None,
-                    parse_errors: vec![ParseError {
-                        message: format!("failed to read file: {}", e),
-                        line: 0,
-                        column: 0,
-                    }],
-                });
-                all_imports.push(FileImports {
-                    source: rel_path.clone(),
-                    targets: vec![],
-                });
-                continue;
-            }
-        };
+    let (dependencies, quality, dep_graph, file_exports, file_loc, file_total_lines, file_blocks, file_sources) =
+        parse_all_files_parallel(root, &source_files, &parser, &resolver, &progress);
+    progress.finish();
 
-        let is_tsx = rel_path.ends_with(".tsx") || rel_path.ends_with(".jsx");
-        let result = match parser.parse(&source, is_tsx) {
-            Some(r) => r,
-            None => {
-                quality_files.push(FileQuality {
-                    path: rel_path.clone(),
-                    metrics: None,
-                    parse_errors: vec![ParseError {
-                        message: "parse returned None".to_string(),
-                        line: 0,
-                        column: 0,
-                    }],
-                });
-                all_imports.push(FileImports {
-                    source: rel_path.clone(),
-                    targets: vec![],
-                });
-                continue;
-            }
-        };
+    // Build imported_names: target_file → set of names imported from that file.
+    let imported_names = build_imported_names(root, &source_files, &parser, &resolver);
 
-        let root_node = result.tree.root_node();
+    let fw_profiles = crate::frameworks::detect_profiles(root);
+    let detected_frameworks: Vec<String> = fw_profiles.iter().map(|p| p.name.to_string()).collect();
 
-        // Extract imports.
-        let (internal_specs, external_specs) =
-            crate::parse::extract_imports(root_node, &source);
+    let issues = detect_issues(
+        &all_entries,
+        &structure.entry_points,
+        &dep_graph,
+        &file_exports,
+        &file_loc,
+        &file_blocks,
+        &file_sources,
+        root,
+        &dependencies.external,
+        &imported_names,
+        &fw_profiles,
+    );
 
-        // Resolve internal specifiers to actual file paths.
-        let file_dir = abs_path.parent().unwrap_or(root);
-        let mut resolved_targets: Vec<String> = Vec::new();
-        for spec in &internal_specs {
-            if let Some(resolved) = resolve_import(file_dir, root, spec) {
-                let rel = path_relative_to(root, &resolved);
-                if !resolved_targets.contains(&rel) {
-                    resolved_targets.push(rel);
-                }
-            } else {
-                // Keep the unresolved specifier as-is.
-                if !resolved_targets.contains(spec) {
-                    resolved_targets.push(spec.clone());
-                }
-            }
-        }
-        resolved_targets.sort();
+    // Use total lines (including blanks/comments) for dup % — matches jscpd/fallow methodology.
+    let total_source_lines: usize = file_total_lines.values().sum();
+    let duplication = crate::duplication::build_duplication_section(
+        &issues.duplicate_code,
+        total_source_lines,
+    );
 
-        for ext in &external_specs {
-            all_external.insert(ext.clone());
-        }
+    // Detect monorepo setup.
+    let monorepo = crate::monorepo::detect_monorepo(root).map(|info| MonorepoInfoData {
+        kind: info.kind.to_string(),
+        packages: info.packages.clone(),
+    });
 
-        all_imports.push(FileImports {
-            source: rel_path.clone(),
-            targets: resolved_targets,
-        });
-
-        // Extract quality metrics.
-        if result.has_errors {
-            let errors = crate::parse::collect_errors(root_node, source.as_bytes());
-            let parse_errors: Vec<ParseError> = errors
-                .into_iter()
-                .map(|(msg, line, col)| ParseError {
-                    message: msg,
-                    line,
-                    column: col,
-                })
-                .collect();
-
-            // Still compute metrics if we got a partial tree.
-            let (loc, total) = count_loc(&source);
-            let funcs = count_functions(root_node);
-            let classes = count_classes(root_node);
-            let complexity = compute_complexity(root_node, &source);
-
-            quality_files.push(FileQuality {
-                path: rel_path.clone(),
-                metrics: Some(Metrics {
-                    lines_of_code: loc,
-                    total_lines: total,
-                    functions: funcs,
-                    classes,
-                    complexity,
-                }),
-                parse_errors,
-            });
-        } else {
-            let (loc, total) = count_loc(&source);
-            let funcs = count_functions(root_node);
-            let classes = count_classes(root_node);
-            let complexity = compute_complexity(root_node, &source);
-
-            quality_files.push(FileQuality {
-                path: rel_path.clone(),
-                metrics: Some(Metrics {
-                    lines_of_code: loc,
-                    total_lines: total,
-                    functions: funcs,
-                    classes,
-                    complexity,
-                }),
-                parse_errors: vec![],
-            });
-        }
-    }
-
-    // Sort for determinism.
-    all_imports.sort_by(|a, b| a.source.cmp(&b.source));
-    quality_files.sort_by(|a, b| a.path.cmp(&b.path));
-
-    let dependencies = Dependencies {
-        imports: all_imports,
-        external: all_external.into_iter().collect(),
-    };
-
-    let quality = Quality {
-        files: quality_files,
-    };
+    // Framework names derived from profiles detected earlier.
+    let detected_frameworks: Vec<String> = fw_profiles.iter().map(|p| p.name.to_string()).collect();
 
     Ok(AnalysisOutput {
+        version: None,
+        summary: None,
+        detected_frameworks: Some(detected_frameworks),
+        monorepo,
         structure,
         dependencies,
         quality,
+        issues,
+        duplication,
     })
 }
 
-// ---------------------------------------------------------------------------
-// File discovery
-// ---------------------------------------------------------------------------
+/// Per-file result from parsing.
+struct FileResult {
+    rel_path: String,
+    file_imports: FileImports,
+    external_specs: Vec<String>,
+    quality: FileQuality,
+    loc: usize,
+    total_lines: usize,
+    blocks: Vec<crate::parse::blocks::CodeBlock>,
+    source: String,
+    dep_targets: Vec<String>,
+    exports: Vec<String>,
+}
 
-const SOURCE_EXTENSIONS: &[&str] = &["ts", "tsx", "js", "jsx"];
+/// Parse all files in parallel using rayon.
+fn parse_all_files_parallel(
+    root: &Path,
+    source_files: &[(String, String)],
+    _parser: &AstParser,
+    resolver: &Resolver,
+    progress: &crate::progress::SharedProgress,
+) -> (
+    Dependencies,
+    Quality,
+    BTreeMap<String, Vec<String>>,
+    BTreeMap<String, Vec<String>>,
+    BTreeMap<String, usize>,
+    BTreeMap<String, usize>,
+    BTreeMap<String, Vec<crate::parse::blocks::CodeBlock>>,
+    Vec<(String, String)>,
+) {
+    // Wrap parser in Arc for shared access across threads.
+    // AstParser uses tree-sitter which is thread-safe for parsing
+    // (each parse creates its own tree).
+    let resolver = Arc::new(resolver.clone());
+    let root = root.to_path_buf();
 
-fn discover_source_files(root: &Path) -> Result<Vec<(String, String)>, String> {
-    let mut files: Vec<(String, String)> = Vec::new();
+    progress.set_phase("Parsing");
 
-    for entry in walkdir::WalkDir::new(root)
+    let results: Vec<Option<FileResult>> = source_files
+        .par_iter()
+        .map(|(rel_path, _lang)| {
+            // Create a new parser per thread (AstParser uses RefCell which is !Sync).
+            let parser = match AstParser::new() {
+                Ok(p) => p,
+                Err(_) => {
+                    progress.inc();
+                    return None;
+                }
+            };
+            let r = parse_single_file(&root, rel_path, &parser, &resolver);
+            progress.inc();
+            r
+        })
+        .collect();
+
+    // Merge results.
+    let mut all_imports: Vec<FileImports> = Vec::new();
+    let mut all_external: BTreeSet<String> = BTreeSet::new();
+    let mut quality_files: Vec<FileQuality> = Vec::new();
+    let mut dep_graph: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    let mut file_exports: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    let mut file_loc: BTreeMap<String, usize> = BTreeMap::new();
+    let mut file_total_lines: BTreeMap<String, usize> = BTreeMap::new();
+    let mut file_blocks: BTreeMap<String, Vec<crate::parse::blocks::CodeBlock>> = BTreeMap::new();
+    let mut file_sources: Vec<(String, String)> = Vec::new();
+
+    for res in results {
+        let Some(fr) = res else { continue };
+        for ext in fr.external_specs {
+            all_external.insert(ext);
+        }
+        dep_graph.insert(fr.rel_path.clone(), fr.dep_targets);
+        file_exports.insert(fr.rel_path.clone(), fr.exports);
+        file_loc.insert(fr.rel_path.clone(), fr.loc);
+        file_total_lines.insert(fr.rel_path.clone(), fr.total_lines);
+        file_blocks.insert(fr.rel_path.clone(), fr.blocks);
+        file_sources.push((fr.rel_path.clone(), fr.source));
+        all_imports.push(fr.file_imports);
+        quality_files.push(fr.quality);
+    }
+
+    all_imports.sort_by(|a, b| a.source.cmp(&b.source));
+    quality_files.sort_by(|a, b| a.path.cmp(&b.path));
+
+    (
+        Dependencies {
+            imports: all_imports,
+            external: all_external.into_iter().collect(),
+        },
+        Quality { files: quality_files },
+        dep_graph,
+        file_exports,
+        file_loc,
+        file_total_lines,
+        file_blocks,
+        file_sources,
+    )
+}
+
+/// Parse a single file and return its result.
+fn parse_single_file(
+    root: &Path,
+    rel_path: &str,
+    _parser: &AstParser,
+    resolver: &Resolver,
+) -> Option<FileResult> {
+    let abs_path = root.join(rel_path);
+    let source = std::fs::read_to_string(&abs_path).ok()?;
+    let source_for_blocks = source.clone();
+
+    let is_tsx = rel_path.ends_with(".tsx") || rel_path.ends_with(".jsx");
+    // Create a fresh parser — the passed-in one is just a placeholder.
+    let thread_parser = AstParser::new().ok()?;
+    let result = thread_parser.parse(&source, is_tsx)?;
+    let root_node = result.tree.root_node();
+
+    // Imports.
+    let (internal_specs, external_specs) = crate::parse::imports::extract_imports(root_node, &source);
+    let mut dep_targets = resolve_file_imports_static(root, &abs_path, &internal_specs, resolver);
+
+    // Also try resolving "external" specifiers — workspace packages like @mono/ui
+    // are classified as external by the import parser but can be resolved to
+    // local files through the workspace package mappings.
+    let mut resolved_external: Vec<String> = Vec::new();
+    for spec in &external_specs {
+        if let Some(path) = resolver.resolve(abs_path.parent().unwrap_or(root), spec) {
+            let rel = path_relative_to(root, &path);
+            if !dep_targets.contains(&rel) {
+                dep_targets.push(rel);
+            }
+            resolved_external.push(spec.clone());
+        }
+    }
+    // Only keep truly external (non-resolved) specs.
+    let truly_external: Vec<String> = external_specs
         .into_iter()
-        .filter_entry(|e| !is_skipped_dir(e.path(), root))
-    {
-        let entry = match entry {
-            Ok(e) => e,
+        .filter(|s| !resolved_external.contains(s))
+        .collect();
+
+    // Exports.
+    let exports = extract_exports(root_node, &source);
+
+    // Metrics.
+    let (loc, total) = count_loc(&source);
+    let funcs = count_functions(root_node);
+    let classes = count_classes(root_node);
+    let cx_metrics = crate::parse::complexity::compute_metrics(root_node, source.as_bytes());
+
+    // Code blocks.
+    let blocks = extract_blocks(root_node, source.as_bytes());
+
+    // Parse errors.
+    let parse_errors = if result.has_errors {
+        collect_errors(root_node, source.as_bytes())
+            .into_iter()
+            .map(|(msg, line, col)| ParseError { message: msg, line, column: col })
+            .collect()
+    } else {
+        vec![]
+    };
+
+    Some(FileResult {
+        rel_path: rel_path.to_string(),
+        file_imports: FileImports {
+            source: rel_path.to_string(),
+            targets: dep_targets.clone(),
+        },
+        external_specs: truly_external,
+        quality: FileQuality {
+            path: rel_path.to_string(),
+            metrics: Some(Metrics {
+                lines_of_code: loc,
+                total_lines: total,
+                functions: funcs,
+                classes,
+                complexity: cx_metrics.complexity,
+                max_nesting_depth: cx_metrics.max_nesting_depth,
+            }),
+            exports: exports.clone(),
+            parse_errors,
+        },
+        loc,
+        total_lines: total,
+        blocks,
+        source: source_for_blocks,
+        dep_targets,
+        exports,
+    })
+}
+
+/// Static version of resolve_file_imports that takes &Resolver (not &mut).
+fn resolve_file_imports_static(
+    root: &Path,
+    abs_path: &Path,
+    specs: &[String],
+    resolver: &Resolver,
+) -> Vec<String> {
+    let file_dir = abs_path.parent().unwrap_or(root);
+    let mut resolved: Vec<String> = Vec::new();
+    for spec in specs {
+        if let Some(path) = resolver.resolve(file_dir, spec) {
+            let rel = path_relative_to(root, &path);
+            if !resolved.contains(&rel) {
+                resolved.push(rel);
+            }
+        } else if !resolved.contains(spec) {
+            resolved.push(spec.clone());
+        }
+    }
+    resolved.sort();
+    resolved
+}
+
+/// Build a map: resolved target file path → set of names imported FROM that file.
+fn build_imported_names(
+    root: &Path,
+    source_files: &[(String, String)],
+    _parser: &AstParser,
+    resolver: &Resolver,
+) -> BTreeMap<String, HashSet<String>> {
+    let mut result: BTreeMap<String, HashSet<String>> = BTreeMap::new();
+    let parser = match AstParser::new() {
+        Ok(p) => p,
+        Err(_) => return result,
+    };
+
+    for (rel_path, _lang) in source_files {
+        let abs_path = root.join(rel_path);
+        let source = match std::fs::read_to_string(&abs_path) {
+            Ok(s) => s,
             Err(_) => continue,
         };
 
-        if !entry.file_type().is_file() {
+        let is_tsx = rel_path.ends_with(".tsx") || rel_path.ends_with(".jsx");
+        let Some(parsed) = parser.parse(&source, is_tsx) else {
             continue;
-        }
-
-        let path = entry.path();
-        let rel = path_relative_to(root, path);
-        let ext = match path.extension().and_then(|e| e.to_str()) {
-            Some(e) => e,
-            None => continue,
         };
 
-        if !SOURCE_EXTENSIONS.contains(&ext) {
-            continue;
-        }
+        let raw_named = crate::parse::imports::extract_named_imports(parsed.tree.root_node(), &source);
+        let file_dir = abs_path.parent().unwrap_or(root);
 
-        // Skip .d.ts declaration files.
-        if rel.ends_with(".d.ts") {
-            continue;
-        }
-
-        let lang = match ext {
-            "ts" => "typescript",
-            "tsx" => "tsx",
-            "js" => "javascript",
-            "jsx" => "jsx",
-            _ => continue,
-        };
-
-        files.push((rel, lang.to_string()));
-    }
-
-    // Sort for determinism.
-    files.sort_by(|a, b| a.0.cmp(&b.0));
-    Ok(files)
-}
-
-fn discover_config_files(root: &Path) -> Result<Vec<String>, String> {
-    let configs = ["tsconfig.json", "package.json", "jsconfig.json"];
-    let mut found: Vec<String> = Vec::new();
-    for name in &configs {
-        if root.join(name).exists() {
-            found.push(name.to_string());
-        }
-    }
-    found.sort();
-    Ok(found)
-}
-
-fn discover_entry_points(
-    root: &Path,
-    source_files: &[(String, String)],
-) -> Result<Vec<String>, String> {
-    let mut entry_points: BTreeSet<String> = BTreeSet::new();
-
-    // Check package.json for main/module/exports fields.
-    if let Ok(content) = std::fs::read_to_string(root.join("package.json"))
-        && let Ok(pkg) = serde_json::from_str::<serde_json::Value>(&content)
-    {
-        for field in &["main", "module", "browser"] {
-            if let Some(val) = pkg.get(field).and_then(|v| v.as_str()) {
-                let rel = normalize_entry(val);
-                if source_files.iter().any(|(p, _)| p == &rel) {
-                    entry_points.insert(rel);
-                } else {
-                    // The entry might reference a .js file that has a .ts counterpart.
-                    let ts_rel = rel
-                        .replace(".js", ".ts")
-                        .replace(".jsx", ".tsx");
-                    if source_files.iter().any(|(p, _)| p == &ts_rel) {
-                        entry_points.insert(ts_rel);
-                    } else {
-                        entry_points.insert(rel);
-                    }
-                }
-            }
-        }
-        // Check exports field.
-        if let Some(exports) = pkg.get("exports") {
-            extract_exports_paths(exports, &mut entry_points);
+        for (raw_spec, names) in raw_named {
+            // Resolve the raw specifier to a canonical relative path.
+            let resolved = resolver.resolve(file_dir, &raw_spec);
+            let target_key = match resolved {
+                Some(p) => path_relative_to(root, &p),
+                None => raw_spec,
+            };
+            result
+                .entry(target_key)
+                .or_default()
+                .extend(names);
         }
     }
 
-    // Check tsconfig.json for files/include fields.
-    if let Ok(content) = std::fs::read_to_string(root.join("tsconfig.json"))
-        && let Ok(tsconfig) = serde_json::from_str::<serde_json::Value>(&content)
-        && let Some(files) = tsconfig.get("files").and_then(|v| v.as_array())
-    {
-        for f in files {
-            if let Some(s) = f.as_str() {
-                entry_points.insert(s.to_string());
-            }
-        }
-    }
-
-    // Default entry point locations.
-    let defaults = [
-        "src/index.ts",
-        "src/index.tsx",
-        "src/index.js",
-        "src/index.jsx",
-        "src/main.ts",
-        "src/main.tsx",
-        "index.ts",
-        "index.tsx",
-        "index.js",
-        "index.jsx",
-        "main.ts",
-    ];
-    for def in &defaults {
-        if source_files.iter().any(|(p, _)| p == *def) {
-            entry_points.insert(def.to_string());
-        }
-    }
-
-    let mut result: Vec<String> = entry_points.into_iter().collect();
-    result.sort();
-    Ok(result)
-}
-
-fn extract_exports_paths(exports: &serde_json::Value, paths: &mut BTreeSet<String>) {
-    match exports {
-        serde_json::Value::String(s) => {
-            paths.insert(s.clone());
-        }
-        serde_json::Value::Object(map) => {
-            // Look for "." key or iterate all keys.
-            for val in map.values() {
-                extract_exports_paths(val, paths);
-            }
-        }
-        _ => {}
-    }
-}
-
-fn normalize_entry(path: &str) -> String {
-    let p = path.trim_start_matches("./");
-    p.to_string()
+    result
 }
 
 // ---------------------------------------------------------------------------
-// Import resolution
+// Tests
 // ---------------------------------------------------------------------------
 
-/// Try to resolve a relative import specifier to an actual file path.
-fn resolve_import(from_dir: &Path, _project_root: &Path, spec: &str) -> Option<PathBuf> {
-    let candidate = from_dir.join(spec);
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    // Try exact path.
-    if candidate.is_file() {
-        return Some(canonicalize(&candidate));
+    #[test]
+    fn analyze_nonexistent_path() {
+        let result = analyze(Path::new("/no/such/path"));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("path not found"));
     }
-
-    // Try with extensions.
-    for ext in SOURCE_EXTENSIONS {
-        let with_ext = candidate.with_extension(ext);
-        if with_ext.is_file() {
-            return Some(canonicalize(&with_ext));
-        }
-    }
-
-    // Try index file in directory.
-    if candidate.is_dir() {
-        for ext in SOURCE_EXTENSIONS {
-            let index = candidate.join(format!("index.{}", ext));
-            if index.is_file() {
-                return Some(canonicalize(&index));
-            }
-        }
-    }
-
-    None
-}
-
-fn canonicalize(path: &Path) -> PathBuf {
-    std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
-}
-
-// ---------------------------------------------------------------------------
-// Path helpers
-// ---------------------------------------------------------------------------
-
-/// Get a path relative to the root.
-fn path_relative_to(root: &Path, path: &Path) -> String {
-    match path.strip_prefix(root) {
-        Ok(rel) => rel.to_string_lossy().to_string(),
-        Err(_) => path.to_string_lossy().to_string(),
-    }
-    .replace('\\', "/")
-}
-
-/// Directories to skip during file traversal.
-fn is_skipped_dir(path: &Path, _root: &Path) -> bool {
-    let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
-    matches!(
-        name,
-        "node_modules"
-            | ".git"
-            | "dist"
-            | "build"
-            | "out"
-            | ".next"
-            | ".nuxt"
-            | "coverage"
-            | ".cache"
-            | "target"
-            | ".turbo"
-    )
 }
