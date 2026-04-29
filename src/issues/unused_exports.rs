@@ -20,8 +20,10 @@ pub fn detect(
     imported_names: &BTreeMap<String, HashSet<String>>,
     entry_points: &[String],
     file_sources: &[(String, String)],
+    public_api: &[String],
 ) -> Vec<UnusedExportIssue> {
     let ep_set: HashSet<&str> = entry_points.iter().map(|s| s.as_str()).collect();
+    let pa_set: HashSet<&str> = public_api.iter().map(|s| s.as_str()).collect();
 
     // Build a set of barrel re-export files — index.ts/js files whose content
     // is primarily re-exports. These form the package's public API surface.
@@ -30,6 +32,11 @@ pub fn detect(
     let mut unused: Vec<UnusedExportIssue> = Vec::new();
     for (path, exports) in file_exports {
         if ep_set.contains(path.as_str()) {
+            continue;
+        }
+
+        // Skip public API files — their exports are the package's external interface.
+        if pa_set.contains(path.as_str()) {
             continue;
         }
 
@@ -55,22 +62,19 @@ pub fn detect(
     unused
 }
 
-/// Detect barrel re-export files — index.ts/js files whose primary purpose
-/// is to re-export from sub-modules. These form a package's public API surface.
+/// Detect barrel re-export files — files whose primary purpose is to re-export
+/// from sub-modules. These form a package's public API surface.
 ///
 /// A file is considered a barrel if:
-///   - It's named index.ts or index.tsx or index.js or index.jsx
-///   - More than 60% of its non-blank, non-comment lines are re-export lines
-///     (export { ... } from, export * from, export type { ... } from)
+///   - It's named index.ts/tsx/js/jsx AND >60% of lines are re-exports, OR
+///   - ANY filename where >80% of non-blank lines are re-export lines
+///     (catches files like charts.tsx that re-export many components)
 fn detect_barrel_files(file_sources: &[(String, String)]) -> HashSet<String> {
     let mut barrels = HashSet::new();
     for (path, source) in file_sources {
         let filename = path.rsplit('/').next().unwrap_or(path);
-        if filename != "index.ts" && filename != "index.tsx"
-            && filename != "index.js" && filename != "index.jsx"
-        {
-            continue;
-        }
+        let is_index = filename == "index.ts" || filename == "index.tsx"
+            || filename == "index.js" || filename == "index.jsx";
 
         let mut total_lines = 0usize;
         let mut reexport_lines = 0usize;
@@ -89,8 +93,13 @@ fn detect_barrel_files(file_sources: &[(String, String)]) -> HashSet<String> {
             }
         }
 
-        // If more than 60% of meaningful lines are re-exports, it's a barrel.
-        if total_lines > 0 && reexport_lines as f64 / total_lines as f64 > 0.6 {
+        if total_lines == 0 {
+            continue;
+        }
+        let ratio = reexport_lines as f64 / total_lines as f64;
+        // index files: >60% re-exports → barrel. Other files: >80% → barrel.
+        let threshold = if is_index { 0.6 } else { 0.8 };
+        if ratio > threshold {
             barrels.insert(path.clone());
         }
     }
@@ -115,7 +124,7 @@ mod tests {
         let imported = BTreeMap::new();
         let eps = vec!["src/index.ts".into()];
         let sources = vec![];
-        let unused = detect(&exports, &imported, &eps, &sources);
+        let unused = detect(&exports, &imported, &eps, &sources, &[]);
         // utils.ts is not an entry point and nothing imports its names.
         assert_eq!(unused.len(), 2);
         assert_eq!(unused[0].name, "formatDate");
@@ -133,7 +142,7 @@ mod tests {
         ]);
         let eps = vec!["src/app.ts".into()];
         let sources = vec![];
-        let unused = detect(&exports, &imported, &eps, &sources);
+        let unused = detect(&exports, &imported, &eps, &sources, &[]);
         assert_eq!(unused.len(), 1);
         assert_eq!(unused[0].name, "oldThing");
         assert_eq!(unused[0].path, "src/dead.ts");
@@ -148,7 +157,7 @@ mod tests {
             ("src/utils.ts".into(), HashSet::from(["helper".into()])),
         ]);
         let sources = vec![];
-        let unused = detect(&exports, &imported, &[], &sources);
+        let unused = detect(&exports, &imported, &[], &sources, &[]);
         assert!(unused.is_empty());
     }
 
@@ -162,7 +171,7 @@ mod tests {
             ("src/utils.ts".into(), HashSet::from(["foo".into()])),
         ]);
         let sources = vec![];
-        let unused = detect(&exports, &imported, &[], &sources);
+        let unused = detect(&exports, &imported, &[], &sources, &[]);
         assert_eq!(unused.len(), 2);
         assert_eq!(unused[0].name, "bar");
         assert_eq!(unused[1].name, "baz");
@@ -178,7 +187,7 @@ mod tests {
         let imported = BTreeMap::new();
         let eps = vec!["src/index.ts".into()];
         let sources = vec![];
-        let unused = detect(&exports, &imported, &eps, &sources);
+        let unused = detect(&exports, &imported, &eps, &sources, &[]);
         // Only utils.ts exports should be flagged (index.ts is an entry point).
         assert_eq!(unused.len(), 1);
         assert_eq!(unused[0].name, "helper");
@@ -195,7 +204,7 @@ mod tests {
         let imported = BTreeMap::new(); // nobody imports these internally
         let eps = vec![]; // not an explicit entry point
         let sources = vec![("src/index.ts".to_string(), barrel_source.to_string())];
-        let unused = detect(&exports, &imported, &eps, &sources);
+        let unused = detect(&exports, &imported, &eps, &sources, &[]);
         // Barrel file exports should be excluded — they're the public API.
         assert!(unused.is_empty(), "barrel re-export file should not have unused exports");
     }
@@ -212,9 +221,39 @@ mod tests {
         ]);
         let eps = vec![];
         let sources = vec![("src/index.ts".to_string(), index_source.to_string())];
-        let unused = detect(&exports, &imported, &eps, &sources);
+        let unused = detect(&exports, &imported, &eps, &sources, &[]);
         // Not a barrel file — unusedHelper should still be flagged.
         assert_eq!(unused.len(), 1);
         assert_eq!(unused[0].name, "unusedHelper");
+    }
+
+    #[test]
+    fn non_index_barrel_file_excluded() {
+        // A non-index file (charts.tsx) that is primarily re-exports.
+        let barrel_source = "export { ChartArea } from './chart-area'\nexport { ChartBar } from './chart-bar'\nexport { ChartLine } from './chart-line'\nexport { ChartPie } from './chart-pie'\n";
+        let exports = BTreeMap::from([
+            ("app/charts/charts.tsx".into(), vec!["ChartArea".into(), "ChartBar".into(), "ChartLine".into(), "ChartPie".into()]),
+        ]);
+        let imported = BTreeMap::new();
+        let eps = vec![];
+        let sources = vec![("app/charts/charts.tsx".to_string(), barrel_source.to_string())];
+        let unused = detect(&exports, &imported, &eps, &sources, &[]);
+        // Non-index barrel file should also be excluded.
+        assert!(unused.is_empty(), "non-index barrel re-export file should not have unused exports");
+    }
+
+    #[test]
+    fn public_api_file_excluded() {
+        // A file that's declared as a package's public API via package.json.
+        let exports = BTreeMap::from([
+            ("packages/ui/src/icons.tsx".into(), vec!["IconA".into(), "IconB".into(), "IconC".into()]),
+        ]);
+        let imported = BTreeMap::new(); // nobody imports these internally
+        let eps = vec![];
+        let sources = vec![];
+        let public_api = vec!["packages/ui/src/icons.tsx".to_string()];
+        let unused = detect(&exports, &imported, &eps, &sources, &public_api);
+        // Public API file exports should be excluded.
+        assert!(unused.is_empty(), "public API file should not have unused exports");
     }
 }

@@ -97,31 +97,36 @@ fn detect_in_file(rel_path: &str, source: &str, issues: &mut Vec<GotchaIssue>) {
     for (i, line) in lines.iter().enumerate() {
         let line_num = i + 1;
 
-        // == instead of === (but not !==)
-        if line.contains("==") && !line.contains("===") && !line.contains("!==") {
-            if !is_comment_line(line) {
+        // == instead of === (TypeScript/ESLint catches this; only flag at low confidence)
+        if !is_test && !is_comment_line(line) && !is_example_or_script(rel_path) {
+            // Only flag bare == not inside >=, <=, =>, !=, !==, ===
+            let has_bare_eq = line.contains("==") && !line.contains("===")
+                && !line.contains("!==") && !line.contains("<=")
+                && !line.contains(">=") && !line.contains("=>");
+            if has_bare_eq {
                 issues.push(GotchaIssue {
                     file: rel_path.to_string(),
                     line: line_num,
                     rule: "loose-equality".into(),
-                    severity: "warning".into(),
+                    severity: "info".into(),
                     message: "Use `===` instead of `==` to avoid type coercion bugs".into(),
-                    confidence: 0.85,
+                    confidence: 0.4,
                     snippet: truncate_line(line),
                 });
             }
         }
 
-        // != instead of !==
-        if line.contains("!=") && !line.contains("!==") {
-            if !is_comment_line(line) {
+        // != instead of !== (same reasoning)
+        if !is_test && !is_comment_line(line) && !is_example_or_script(rel_path) {
+            let has_bare_neq = line.contains("!=") && !line.contains("!==");
+            if has_bare_neq {
                 issues.push(GotchaIssue {
                     file: rel_path.to_string(),
                     line: line_num,
                     rule: "loose-inequality".into(),
-                    severity: "warning".into(),
+                    severity: "info".into(),
                     message: "Use `!==` instead of `!=` to avoid type coercion bugs".into(),
-                    confidence: 0.85,
+                    confidence: 0.4,
                     snippet: truncate_line(line),
                 });
             }
@@ -205,18 +210,17 @@ fn detect_in_file(rel_path: &str, source: &str, issues: &mut Vec<GotchaIssue>) {
             });
         }
 
-        // Console statements in production code.
-        if !is_test && !is_comment_line(line) {
-            if line.contains("console.log(") || line.contains("console.warn(")
-                || line.contains("console.error(") || line.contains("console.debug(")
-            {
+        // Console statements: only flag console.log/debug (not warn/error which are
+        // intentional error handling). Skip in test, example, script, and server files.
+        if !is_test && !is_comment_line(line) && !is_example_or_script(rel_path) {
+            if line.contains("console.log(") || line.contains("console.debug(") {
                 issues.push(GotchaIssue {
                     file: rel_path.to_string(),
                     line: line_num,
                     rule: "console-statement".into(),
                     severity: "info".into(),
                     message: "Console statement left in production code".into(),
-                    confidence: 0.6,
+                    confidence: 0.4,
                     snippet: truncate_line(line),
                 });
             }
@@ -581,6 +585,21 @@ fn is_test_file(path: &str) -> bool {
         || lower.contains("/fixtures/")
 }
 
+/// Check if a path is an example, script, server, or CLI file where console is expected.
+fn is_example_or_script(path: &str) -> bool {
+    let lower = path.to_lowercase();
+    lower.contains("/examples/")
+        || lower.contains("/example/")
+        || lower.contains("/scripts/")
+        || lower.contains("/server/")
+        || lower.contains("/cli/")
+        || lower.contains("/bin/")
+        || lower.contains("/migrations/")
+        || lower.contains("/tools/")
+        || lower.contains("gulpfile")
+        || lower.contains("gruntfile")
+}
+
 fn truncate_line(line: &str) -> String {
     let trimmed = line.trim();
     if trimmed.len() > 120 {
@@ -600,10 +619,10 @@ mod tests {
 
     #[test]
     fn detects_loose_equality() {
-        let issues = detect(&[("test.ts".into(), "if (x == null) {}\n".into())]);
+        let issues = detect(&[("src/app.ts".into(), "if (x == null) {}\n".into())]);
         let loose: Vec<_> = issues.iter().filter(|i| i.rule == "loose-equality").collect();
         assert_eq!(loose.len(), 1);
-        assert_eq!(loose[0].severity, "warning");
+        assert_eq!(loose[0].severity, "info");
     }
 
     #[test]
@@ -699,7 +718,7 @@ mod tests {
         let issues = detect(&[("src/app.ts".into(), "console.log('debug');\n".into())]);
         let cs: Vec<_> = issues.iter().filter(|i| i.rule == "console-statement").collect();
         assert_eq!(cs.len(), 1);
-        assert_eq!(cs[0].confidence, 0.6);
+        assert_eq!(cs[0].confidence, 0.4);
     }
 
     #[test]

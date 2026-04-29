@@ -87,12 +87,22 @@ pub struct EntryPoints {
     /// Tooling/config/scripts (tests, scripts, generated files, migrations, etc.).
     /// Their exports should still be checked for usage.
     pub implicit: BTreeSet<String>,
+    /// Package public API files — files referenced by package.json `main`/`module`/`exports`
+    /// in ANY workspace package. Their exports form the package's public API and should
+    /// NOT be flagged as unused, even if no internal file imports them.
+    pub public_api: BTreeSet<String>,
 }
 
 impl EntryPoints {
-    /// Union of framework and implicit entries.
+    /// Union of framework, implicit, and public API entries.
     pub fn all(&self) -> BTreeSet<String> {
-        self.framework.union(&self.implicit).cloned().collect()
+        self.framework
+            .union(&self.implicit)
+            .cloned()
+            .collect::<BTreeSet<_>>()
+            .union(&self.public_api)
+            .cloned()
+            .collect()
     }
 }
 
@@ -104,6 +114,7 @@ pub fn discover_entry_points(
 ) -> EntryPoints {
     let mut framework: BTreeSet<String> = BTreeSet::new();
     let mut implicit: BTreeSet<String> = BTreeSet::new();
+    let mut public_api: BTreeSet<String> = BTreeSet::new();
     let source_set: HashSet<&str> = source_files.iter().map(|(p, _)| p.as_str()).collect();
 
     // 1. Detect active framework profiles.
@@ -131,7 +142,7 @@ pub fn discover_entry_points(
     add_package_json_entries(root, &source_set, &mut framework);
 
     // 4b. For monorepos, also discover entry points from each workspace package.
-    add_workspace_entries(root, &source_set, &mut framework);
+    add_workspace_entries(root, &source_set, &mut framework, &mut public_api);
 
     // 5. tsconfig.json files field → framework entries.
     add_tsconfig_entries(root, &mut framework);
@@ -142,7 +153,7 @@ pub fn discover_entry_points(
     // 7. Tooling & config scripts → implicit entries (loaded by config, not ES imports).
     add_tooling_entries(source_files, &mut implicit);
 
-    EntryPoints { framework, implicit }
+    EntryPoints { framework, implicit, public_api }
 }
 
 // ---------------------------------------------------------------------------
@@ -203,12 +214,13 @@ fn add_tsconfig_entries(root: &Path, entry_points: &mut BTreeSet<String>) {
 }
 
 /// For monorepos, discover entry points from each workspace package.
-/// Looks for package.json main/module fields and default entry files
+/// Looks for package.json main/module/exports fields and default entry files
 /// within each workspace package directory.
 fn add_workspace_entries(
     root: &Path,
     source_set: &HashSet<&str>,
     entry_points: &mut BTreeSet<String>,
+    public_api: &mut BTreeSet<String>,
 ) {
     let mono = match crate::monorepo::detect_monorepo(root) {
         Some(m) => m,
@@ -259,10 +271,11 @@ fn add_workspace_entries(
     }
 
     for pkg_dir in &pkg_dirs {
-        // Try package.json main/module fields.
+        // Try package.json main/module/exports fields.
         let pkg_json_path = root.join(pkg_dir).join("package.json");
         if let Ok(content) = std::fs::read_to_string(&pkg_json_path) {
             if let Ok(pkg) = serde_json::from_str::<serde_json::Value>(&content) {
+                // main/module → both entry_point and public_api
                 for field in &["main", "module"] {
                     if let Some(val) = pkg.get(field).and_then(|v| v.as_str()) {
                         let rel = format!(
@@ -270,13 +283,22 @@ fn add_workspace_entries(
                             pkg_dir,
                             val.trim_start_matches("./")
                         );
-                        if source_set.contains(rel.as_str()) {
-                            entry_points.insert(rel);
-                        } else {
-                            let ts_rel = rel.replace(".js", ".ts").replace(".jsx", ".tsx");
-                            if source_set.contains(ts_rel.as_str()) {
-                                entry_points.insert(ts_rel);
-                            }
+                        let resolved = resolve_to_source(&rel, source_set);
+                        if let Some(r) = resolved {
+                            entry_points.insert(r.clone());
+                            public_api.insert(r);
+                        }
+                    }
+                }
+                // exports field → public_api (these define the package's external interface)
+                if let Some(exports) = pkg.get("exports") {
+                    let mut export_paths = BTreeSet::new();
+                    extract_exports_paths(exports, &mut export_paths);
+                    for ep in &export_paths {
+                        let rel = format!("{}/{}", pkg_dir, ep.trim_start_matches("./"));
+                        let resolved = resolve_to_source(&rel, source_set);
+                        if let Some(r) = resolved {
+                            public_api.insert(r);
                         }
                     }
                 }
@@ -334,6 +356,24 @@ fn extract_exports_paths(exports: &serde_json::Value, paths: &mut BTreeSet<Strin
 
 fn normalize_entry(path: &str) -> String {
     path.trim_start_matches("./").to_string()
+}
+
+/// Resolve a path (possibly .js/.jsx) to an actual source file in the set.
+fn resolve_to_source(rel: &str, source_set: &HashSet<&str>) -> Option<String> {
+    if source_set.contains(rel) {
+        return Some(rel.to_string());
+    }
+    // Try .ts/.tsx extensions
+    let ts_rel = rel.replace(".js", ".ts").replace(".jsx", ".tsx");
+    if source_set.contains(ts_rel.as_str()) {
+        return Some(ts_rel);
+    }
+    // Try appending /index.ts
+    let idx = format!("{}/index.ts", rel.trim_end_matches(".ts").trim_end_matches(".js"));
+    if source_set.contains(idx.as_str()) {
+        return Some(idx);
+    }
+    None
 }
 
 /// Directories to skip during file traversal.

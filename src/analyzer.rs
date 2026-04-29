@@ -35,6 +35,7 @@ pub fn analyze(root: &Path) -> Result<AnalysisOutput, String> {
 
     let entry_points: Vec<String> = entry.framework.iter().cloned().collect();
     let implicit_entries: Vec<String> = entry.implicit.iter().cloned().collect();
+    let public_api: Vec<String> = entry.public_api.iter().cloned().collect();
     let all_entries: Vec<String> = entry.all().into_iter().collect();
 
     // Build resolver with tsconfig path aliases and workspace package mappings.
@@ -89,6 +90,7 @@ pub fn analyze(root: &Path) -> Result<AnalysisOutput, String> {
         &dependencies.external,
         &imported_names,
         &fw_profiles,
+        &public_api,
     );
 
     // Use total lines (including blanks/comments) for dup % — matches jscpd/fallow methodology.
