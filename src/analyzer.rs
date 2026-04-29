@@ -38,12 +38,16 @@ pub fn analyze(root: &Path) -> Result<AnalysisOutput, String> {
     let mut public_api: Vec<String> = entry.public_api.iter().cloned().collect();
     let all_entries: Vec<String> = entry.all().into_iter().collect();
 
-    // Auto-detect published packages — their exports are public API.
+    // Auto-detect published packages under packages/ — their source files
+    // are public API. Published packages expose their exports for external
+    // consumers, so unused exports within the monorepo are expected.
     let published_dirs = crate::resolution::find_published_package_dirs(root);
     if !published_dirs.is_empty() {
         for (rel_path, _lang) in &source_files {
             for pkg_dir in &published_dirs {
-                if rel_path.starts_with(pkg_dir.as_str()) || rel_path.starts_with(&format!("{}/", pkg_dir)) {
+                if rel_path.starts_with(pkg_dir.as_str())
+                    || rel_path.starts_with(&format!("{}/", pkg_dir))
+                {
                     public_api.push(rel_path.clone());
                     break;
                 }

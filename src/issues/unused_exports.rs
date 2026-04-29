@@ -50,6 +50,12 @@ pub fn detect(
             continue;
         }
 
+        // Skip example/demo/sample/integration directories — their exports
+        // showcase library usage and aren't consumed by the main codebase.
+        if is_example_directory(path) {
+            continue;
+        }
+
         let names_imported = imported_names.get(path);
 
         for name in exports {
@@ -188,6 +194,24 @@ fn detect_barrel_files(file_sources: &[(String, String)]) -> HashSet<String> {
 
 /// Check if a file is a test fixture (golden/snapshot/expected output)
 /// that shouldn't be analyzed for unused exports.
+fn is_example_directory(path: &str) -> bool {
+    let lower = path.to_lowercase();
+    lower.starts_with("integration/")
+        || lower.starts_with("sample/")
+        || lower.starts_with("samples/")
+        || lower.starts_with("examples/")
+        || lower.starts_with("example/")
+        || lower.starts_with("demo/")
+        || lower.starts_with("demos/")
+        || lower.contains("/integration/")
+        || lower.contains("/sample/")
+        || lower.contains("/samples/")
+        || lower.contains("/examples/")
+        || lower.contains("/example/")
+        || lower.contains("/demo/")
+        || lower.contains("/demos/")
+}
+
 fn is_test_fixture(path: &str) -> bool {
     let lower = path.to_lowercase();
     lower.contains("golden")

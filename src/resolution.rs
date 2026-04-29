@@ -513,6 +513,8 @@ mod tests {
 
 /// Find directories containing published packages (not private).
 /// Returns a set of relative directory paths like "packages/common", "packages/core".
+/// Only includes packages under "packages/" or at root level — excludes examples,
+/// demos, test directories, and apps that happen to have package.json files.
 pub fn find_published_package_dirs(root: &Path) -> HashSet<String> {
     let mut published = HashSet::new();
     for entry in walkdir::WalkDir::new(root)
@@ -526,6 +528,12 @@ pub fn find_published_package_dirs(root: &Path) -> HashSet<String> {
         }
         let rel = path_relative_to(root, path);
         if rel.contains("node_modules") {
+            continue;
+        }
+        // Only include packages in "packages/" directories.
+        // Skip examples/, demos/, test/, apps/ etc.
+        let pkg_rel = rel.replace("\\", "/");
+        if !pkg_rel.starts_with("packages/") && !pkg_rel.starts_with("./packages/") {
             continue;
         }
         let content = match std::fs::read_to_string(path) {
