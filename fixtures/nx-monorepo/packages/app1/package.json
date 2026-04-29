@@ -1,0 +1,8 @@
+{
+  "name": "@mono/app1",
+  "private": true,
+  "dependencies": {
+    "@mono/ui": "*",
+    "@mono/data": "*"
+  }
+}

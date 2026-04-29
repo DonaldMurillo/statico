@@ -1,0 +1,4 @@
+export const CONSTANTS = {
+  MAX_CONNECTIONS: 10,
+  TIMEOUT: 5000,
+};

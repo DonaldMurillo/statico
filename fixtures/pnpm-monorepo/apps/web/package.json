@@ -1,0 +1,8 @@
+{
+  "name": "@mono/web",
+  "private": true,
+  "dependencies": {
+    "@mono/ui": "workspace:*",
+    "@mono/shared": "workspace:*"
+  }
+}

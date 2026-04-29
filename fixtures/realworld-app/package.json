@@ -1,0 +1,9 @@
+{
+  "name": "realworld-app",
+  "main": "src/app/page.tsx",
+  "dependencies": {
+    "next": "^14",
+    "react": "^18",
+    "react-dom": "^18"
+  }
+}

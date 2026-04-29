@@ -1,0 +1,5 @@
+{
+  "name": "@mono/data",
+  "main": "src/index.ts",
+  "types": "src/index.ts"
+}

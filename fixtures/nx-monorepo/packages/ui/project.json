@@ -1,0 +1,13 @@
+{
+  "name": "ui",
+  "sourceRoot": "src",
+  "projectType": "library",
+  "targets": {
+    "build": {
+      "executor": "@nx/js:tsc",
+      "options": {
+        "outputPath": "dist/packages/ui"
+      }
+    }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "name": "vue-project",
+  "dependencies": {
+    "vue": "^3"
+  }
+}

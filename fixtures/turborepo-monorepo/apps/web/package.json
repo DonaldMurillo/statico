@@ -1,0 +1,8 @@
+{
+  "name": "@repo/web",
+  "private": true,
+  "dependencies": {
+    "@repo/ui": "*",
+    "@repo/config": "*"
+  }
+}

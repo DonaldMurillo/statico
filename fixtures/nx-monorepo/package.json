@@ -1,0 +1,8 @@
+{
+  "name": "nx-monorepo",
+  "private": true,
+  "devDependencies": {
+    "nx": "19.0.0"
+  },
+  "workspaces": ["packages/*"]
+}

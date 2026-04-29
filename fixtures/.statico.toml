@@ -1,0 +1,5 @@
+# statico configuration
+format = "json"
+min_confidence = 0.5
+exclude = ["node_modules", "dist", "build", ".git"]
+max_file_size = 1000000
