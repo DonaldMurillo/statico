@@ -74,31 +74,47 @@ pub fn detect(
     // Deep resolution: trace re-export chains.
     // When barrel file B re-exports `Foo` from source file A, and some consumer
     // imports `Foo` from barrel B, then A's `Foo` is transitively used.
+    // Also handles multi-level chains: C→B→A via BFS.
     #[cfg(feature = "deep-resolution")]
     {
         let reexport_map = build_reexport_map(file_sources, imported_names, _root);
         unused.retain(|issue| {
-            // Check named re-export chain
-            if let Some(barrels) = reexport_map.get(&(issue.path.clone(), issue.name.clone())) {
-                for barrel_path in barrels {
-                    if let Some(names) = imported_names.get(barrel_path.as_str()) {
-                        if names.contains(&issue.name) {
-                            return false; // Transitively used via named re-export
+            // BFS: start from (issue.path, issue.name), follow re-export chains upward.
+            // A file's export is "transitively used" if any file in the chain
+            // has the name directly imported.
+            let mut visited: HashSet<(String, String)> = HashSet::new();
+            let mut queue: std::collections::VecDeque<(String, String)> = std::collections::VecDeque::new();
+            queue.push_back((issue.path.clone(), issue.name.clone()));
+
+            while let Some((file, name)) = queue.pop_front() {
+                // Check: is this (file, name) directly imported somewhere?
+                if let Some(names) = imported_names.get(file.as_str()) {
+                    if names.contains(&name) {
+                        return false; // Transitively used
+                    }
+                }
+
+                // Follow re-export chains: who re-exports `name` from `file`?
+                // Named: (file, name) → barrel files
+                if let Some(barrels) = reexport_map.get(&(file.clone(), name.clone())) {
+                    for barrel in barrels {
+                        let key = (barrel.clone(), name.clone());
+                        if visited.insert(key.clone()) {
+                            queue.push_back(key);
+                        }
+                    }
+                }
+                // Star: (file, "*") → barrel files that re-export everything
+                if let Some(barrels) = reexport_map.get(&(file.clone(), "*".to_string())) {
+                    for barrel in barrels {
+                        let key = (barrel.clone(), name.clone());
+                        if visited.insert(key.clone()) {
+                            queue.push_back(key);
                         }
                     }
                 }
             }
-            // Check star re-export chain: barrel re-exports ALL from this file
-            if let Some(barrels) = reexport_map.get(&(issue.path.clone(), "*".to_string())) {
-                for barrel_path in barrels {
-                    if let Some(names) = imported_names.get(barrel_path.as_str()) {
-                        if names.contains(&issue.name) {
-                            return false; // Transitively used via star re-export
-                        }
-                    }
-                }
-            }
-            true
+            true // Not transitively used
         });
     }
 

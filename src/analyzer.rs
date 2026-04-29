@@ -90,12 +90,9 @@ pub fn analyze(root: &Path) -> Result<AnalysisOutput, String> {
     let progress = crate::progress::shared_progress(source_files.len());
     progress.set_quiet(true); // TODO: wire to --quiet flag
 
-    let (dependencies, quality, dep_graph, file_exports, file_loc, file_total_lines, file_blocks, file_sources) =
+    let (dependencies, quality, dep_graph, file_exports, file_loc, file_total_lines, file_blocks, file_sources, imported_names) =
         parse_all_files_parallel(root, &source_files, &parser, &resolver, &progress);
     progress.finish();
-
-    // Build imported_names: target_file → set of names imported from that file.
-    let imported_names = build_imported_names(root, &source_files, &parser, &resolver);
 
     let fw_profiles = crate::frameworks::detect_profiles(root);
 
@@ -155,6 +152,8 @@ struct FileResult {
     source: String,
     dep_targets: Vec<String>,
     exports: Vec<String>,
+    /// Per-resolved-target imported names: (target_file, vec_of_names).
+    imported_names: Vec<(String, Vec<String>)>,
 }
 
 /// Parse all files in parallel using rayon.
@@ -173,6 +172,7 @@ fn parse_all_files_parallel(
     BTreeMap<String, usize>,
     BTreeMap<String, Vec<crate::parse::blocks::CodeBlock>>,
     Vec<(String, String)>,
+    BTreeMap<String, HashSet<String>>,
 ) {
     // Wrap parser in Arc for shared access across threads.
     // AstParser uses tree-sitter which is thread-safe for parsing
@@ -209,6 +209,7 @@ fn parse_all_files_parallel(
     let mut file_total_lines: BTreeMap<String, usize> = BTreeMap::new();
     let mut file_blocks: BTreeMap<String, Vec<crate::parse::blocks::CodeBlock>> = BTreeMap::new();
     let mut file_sources: Vec<(String, String)> = Vec::new();
+    let mut imported_names: BTreeMap<String, HashSet<String>> = BTreeMap::new();
 
     for res in results {
         let Some(fr) = res else { continue };
@@ -223,6 +224,9 @@ fn parse_all_files_parallel(
         file_sources.push((fr.rel_path.clone(), fr.source));
         all_imports.push(fr.file_imports);
         quality_files.push(fr.quality);
+        for (target_key, names) in fr.imported_names {
+            imported_names.entry(target_key).or_default().extend(names);
+        }
     }
 
     all_imports.sort_by(|a, b| a.source.cmp(&b.source));
@@ -240,6 +244,7 @@ fn parse_all_files_parallel(
         file_total_lines,
         file_blocks,
         file_sources,
+        imported_names,
     )
 }
 
@@ -263,6 +268,19 @@ fn parse_single_file(
     // Imports.
     let (internal_specs, external_specs) = crate::parse::imports::extract_imports(root_node, &source);
     let mut dep_targets = resolve_file_imports_static(root, &abs_path, &internal_specs, resolver);
+
+    // Named imports per resolved target (for unused-exports detection).
+    let raw_named = crate::parse::imports::extract_named_imports(root_node, &source);
+    let file_dir = abs_path.parent().unwrap_or(root);
+    let mut imported_names: Vec<(String, Vec<String>)> = Vec::new();
+    for (raw_spec, names) in raw_named {
+        let resolved = resolver.resolve(file_dir, &raw_spec);
+        let target_key = match resolved {
+            Some(p) => crate::resolution::path_relative_to(root, &p),
+            None => raw_spec,
+        };
+        imported_names.push((target_key, names));
+    }
 
     // Also try resolving "external" specifiers — workspace packages like @mono/ui
     // are classified as external by the import parser but can be resolved to
@@ -331,6 +349,7 @@ fn parse_single_file(
         source: source_for_blocks,
         dep_targets,
         exports,
+        imported_names,
     })
 }
 
@@ -357,53 +376,7 @@ fn resolve_file_imports_static(
     resolved
 }
 
-/// Build a map: resolved target file path → set of names imported FROM that file.
-/// Uses rayon for parallel parsing of source files.
-fn build_imported_names(
-    root: &Path,
-    source_files: &[(String, String)],
-    _parser: &AstParser,
-    resolver: &Resolver,
-) -> BTreeMap<String, HashSet<String>> {
-    let resolver = Arc::new(resolver.clone());
-    let root = root.to_path_buf();
 
-    let results: Vec<(String, Vec<(String, Vec<String>)>)> = source_files
-        .par_iter()
-        .filter_map(|(rel_path, _lang)| {
-            let parser = AstParser::new().ok()?;
-            let resolver = resolver.clone();
-            let abs_path = root.join(rel_path);
-            let source = std::fs::read_to_string(&abs_path).ok()?;
-
-            let is_tsx = rel_path.ends_with(".tsx") || rel_path.ends_with(".jsx");
-            let parsed = parser.parse(&source, is_tsx)?;
-
-            let raw_named = crate::parse::imports::extract_named_imports(parsed.tree.root_node(), &source);
-            let file_dir = abs_path.parent().unwrap_or(&root);
-
-            let mut local_results: Vec<(String, Vec<String>)> = Vec::new();
-            for (raw_spec, names) in raw_named {
-                let resolved = resolver.resolve(file_dir, &raw_spec);
-                let target_key = match resolved {
-                    Some(p) => crate::resolution::path_relative_to(&root, &p),
-                    None => raw_spec,
-                };
-                local_results.push((target_key, names));
-            }
-            Some((rel_path.clone(), local_results))
-        })
-        .collect();
-
-    // Merge results from all threads.
-    let mut result: BTreeMap<String, HashSet<String>> = BTreeMap::new();
-    for (_, local_results) in results {
-        for (target_key, names) in local_results {
-            result.entry(target_key).or_default().extend(names);
-        }
-    }
-    result
-}
 
 // ---------------------------------------------------------------------------
 // Tests

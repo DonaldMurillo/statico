@@ -47,7 +47,7 @@ pub fn detect_with_frameworks(
     source_files: &[(String, String)],
     profiles: &[&crate::frameworks::FrameworkProfile],
 ) -> Vec<GotchaIssue> {
-    let mut issues: Vec<GotchaIssue> = Vec::new();
+    use rayon::prelude::*;
 
     // Collect all framework gotcha rules from matched profiles.
     let fw_rules: Vec<&crate::frameworks::FrameworkGotchaRule> = profiles
@@ -55,17 +55,22 @@ pub fn detect_with_frameworks(
         .flat_map(|p| p.gotcha_rules.iter())
         .collect();
 
-    for (rel_path, source) in source_files {
-        // Skip gotcha detection in test/spec files — they're tooling, not production.
-        // This eliminates the bulk of false-positive gotcha reports.
-        if is_test_file(rel_path) {
-            continue;
-        }
-        detect_in_file(rel_path, source, &mut issues);
-        if !fw_rules.is_empty() {
-            detect_framework_gotchas_in_file(rel_path, source, &fw_rules, &mut issues);
-        }
-    }
+    // Parallelize gotcha detection across files.
+    let mut issues: Vec<GotchaIssue> = source_files
+        .par_iter()
+        .flat_map(|(rel_path, source)| {
+            // Skip gotcha detection in test/spec files — they're tooling, not production.
+            if is_test_file(rel_path) {
+                return Vec::new();
+            }
+            let mut local: Vec<GotchaIssue> = Vec::new();
+            detect_in_file(rel_path, source, &mut local);
+            if !fw_rules.is_empty() {
+                detect_framework_gotchas_in_file(rel_path, source, &fw_rules, &mut local);
+            }
+            local
+        })
+        .collect();
 
     // Sort by severity (critical first), then by file.
     issues.sort_by(|a, b| {
