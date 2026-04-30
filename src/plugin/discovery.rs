@@ -14,6 +14,8 @@ pub enum PluginKind {
     TypeScript,
     /// A Rust plugin directory (has Cargo.toml, compile then run)
     Rust,
+    /// A Python plugin (has .py entry, run with python3)
+    Python,
 }
 
 impl std::fmt::Display for PluginKind {
@@ -22,6 +24,7 @@ impl std::fmt::Display for PluginKind {
             PluginKind::Executable => write!(f, "executable"),
             PluginKind::TypeScript => write!(f, "typescript"),
             PluginKind::Rust => write!(f, "rust"),
+            PluginKind::Python => write!(f, "python"),
         }
     }
 }
@@ -87,16 +90,38 @@ fn detect_plugin_kind(path: &Path) -> PluginKind {
     if path.is_file() {
         PluginKind::Executable
     } else if path.is_dir() {
-        if path.join("package.json").exists() {
+        // Check package.json for statico.runtime hint first.
+        let pkg_path = path.join("package.json");
+        if pkg_path.exists() {
+            if let Ok(contents) = std::fs::read_to_string(&pkg_path) {
+                if let Ok(pkg) = serde_json::from_str::<serde_json::Value>(&contents) {
+                    if let Some(runtime) = pkg
+                        .get("statico")
+                        .and_then(|s| s.get("runtime"))
+                        .and_then(|r| r.as_str())
+                    {
+                        return match runtime {
+                            "python3" | "python" => PluginKind::Python,
+                            "bun" | "typescript" => PluginKind::TypeScript,
+                            "rust" | "cargo" => PluginKind::Rust,
+                            _ => PluginKind::Executable,
+                        };
+                    }
+                }
+            }
+            // Default: package.json without statico.runtime = TypeScript
             PluginKind::TypeScript
         } else if path.join("Cargo.toml").exists() {
             PluginKind::Rust
         } else {
             // Check for common entry files.
             let has_index_ts = path.join("index.ts").exists() || path.join("src/index.ts").exists();
+            let has_main_py = path.join("main.py").exists() || path.join("plugin.py").exists();
             let has_main_rs = path.join("main.rs").exists() || path.join("src/main.rs").exists();
             if has_index_ts {
                 PluginKind::TypeScript
+            } else if has_main_py {
+                PluginKind::Python
             } else if has_main_rs {
                 PluginKind::Rust
             } else {

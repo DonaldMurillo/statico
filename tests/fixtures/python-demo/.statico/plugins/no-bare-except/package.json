@@ -1,0 +1,9 @@
+{
+  "name": "no-bare-except",
+  "version": "1.0.0",
+  "statico": {
+    "language": "python",
+    "entry": "plugin.py",
+    "runtime": "python3"
+  }
+}

@@ -220,6 +220,10 @@ fn build_command(plugin: &DiscoveredPlugin) -> Result<(String, Vec<String>), Str
                 ))
             }
         }
+        PluginKind::Python => {
+            let entry = find_python_entry(&plugin.path)?;
+            Ok(("python3".to_string(), vec![entry]))
+        }
     }
 }
 
@@ -233,6 +237,39 @@ fn find_ts_entry(dir: &Path) -> Result<String, String> {
     }
     Err(format!(
         "No TypeScript entry point found in {}",
+        dir.display()
+    ))
+}
+
+/// Find the Python entry point in a plugin directory.
+fn find_python_entry(dir: &Path) -> Result<String, String> {
+    // Check package.json statico.entry first.
+    let pkg_path = dir.join("package.json");
+    if pkg_path.exists() {
+        if let Ok(contents) = std::fs::read_to_string(&pkg_path) {
+            if let Ok(pkg) = serde_json::from_str::<serde_json::Value>(&contents) {
+                if let Some(entry) = pkg
+                    .get("statico")
+                    .and_then(|s| s.get("entry"))
+                    .and_then(|e| e.as_str())
+                {
+                    let candidate = dir.join(entry);
+                    if candidate.exists() {
+                        return Ok(candidate.to_string_lossy().to_string());
+                    }
+                }
+            }
+        }
+    }
+    // Fallback: common Python entry files.
+    for name in &["plugin.py", "main.py", "index.py", "src/main.py"] {
+        let candidate = dir.join(name);
+        if candidate.exists() {
+            return Ok(candidate.to_string_lossy().to_string());
+        }
+    }
+    Err(format!(
+        "No Python entry point found in {}",
         dir.display()
     ))
 }

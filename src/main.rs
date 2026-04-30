@@ -1500,6 +1500,10 @@ fn run_plugin_build(name: Option<&str>, path: &str) {
             statico::plugin::discovery::PluginKind::Executable => {
                 println!("Skipping executable plugin '{}' (no build step)", plugin.name);
             }
+            statico::plugin::discovery::PluginKind::Python => {
+                print!("Python plugin '{}' (no build needed)... ", plugin.name);
+                println!("ok");
+            }
         }
     }
 }

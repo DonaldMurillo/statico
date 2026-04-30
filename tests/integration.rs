@@ -998,4 +998,83 @@ fn test_plugin_run_clean_file_no_issues() {
     assert!(stdout.contains("Issues: 0"), "expected 0 issues in: {}", stdout);
 }
 
+#[test]
+fn test_python_plugin_detects_bare_excepts() {
+    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/python-demo");
+
+    let has_python = std::process::Command::new("which")
+        .arg("python3")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false);
+    if !has_python {
+        eprintln!("Skipping test_python_plugin (python3 not installed)");
+        return;
+    }
+
+    let output = Command::new(statico_bin())
+        .args([
+            "plugin",
+            "run",
+            "no-bare-except",
+            "--file",
+            "src/main.py",
+        ])
+        .arg("--path")
+        .arg(&fixture)
+        .output()
+        .expect("run plugin run");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    assert!(output.status.success(), "stderr: {}", stderr);
+    assert!(stdout.contains("Issues: 2"), "expected 2 issues in: {}", stdout);
+    assert!(
+        stdout.contains("bare except") || stdout.contains("Bare"),
+        "expected bare except message in: {}",
+        stdout
+    );
+}
+
+#[test]
+fn test_python_plugin_clean_file_no_issues() {
+    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/python-demo");
+
+    let has_python = std::process::Command::new("which")
+        .arg("python3")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false);
+    if !has_python {
+        eprintln!("Skipping test_python_plugin_clean (python3 not installed)");
+        return;
+    }
+
+    let output = Command::new(statico_bin())
+        .args([
+            "plugin",
+            "run",
+            "no-bare-except",
+            "--file",
+            "src/utils.py",
+        ])
+        .arg("--path")
+        .arg(&fixture)
+        .output()
+        .expect("run plugin run");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    assert!(output.status.success(), "stderr: {}", stderr);
+    assert!(stdout.contains("Issues: 0"), "expected 0 issues in: {}", stdout);
+}
+
 
