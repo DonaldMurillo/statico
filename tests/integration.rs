@@ -338,3 +338,134 @@ fn real_repo_metacollector_analyzes_cleanly() {
     let eps = json["structure"]["entry_points"].as_array().expect("entry_points should be array");
     assert!(!eps.is_empty(), "metacollector should now detect entry points");
 }
+
+// ---------------------------------------------------------------------------
+// CLI: update, init, doctor commands
+// ---------------------------------------------------------------------------
+
+#[test]
+fn cli_version_flag_works() {
+    let output = Command::new(statico_bin())
+        .arg("--version")
+        .output()
+        .expect("failed to execute statico --version");
+
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    assert!(output.status.success(), "--version should exit 0");
+    assert!(stdout.contains("0.1.0"), "version should contain 0.1.0, got: {stdout}");
+}
+
+#[test]
+fn cli_help_lists_new_commands() {
+    let output = Command::new(statico_bin())
+        .arg("--help")
+        .output()
+        .expect("failed to execute statico --help");
+
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    assert!(output.status.success());
+    assert!(stdout.contains("update"), "help should mention 'update' command");
+    assert!(stdout.contains("init"), "help should mention 'init' command");
+    assert!(stdout.contains("doctor"), "help should mention 'doctor' command");
+}
+
+#[test]
+fn cli_update_check_handles_missing_releases() {
+    let output = Command::new(statico_bin())
+        .args(["update", "--check"])
+        .output()
+        .expect("failed to execute statico update --check");
+
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+    assert!(!output.status.success(), "expected non-zero exit for missing releases");
+    assert!(
+        stderr.contains("failed to check for updates") || stderr.contains("404"),
+        "expected error message about update failure, got: {stderr}"
+    );
+    assert!(!stderr.contains("panic"), "should not panic");
+}
+
+#[test]
+fn cli_doctor_runs_without_crash() {
+    let output = Command::new(statico_bin())
+        .arg("doctor")
+        .output()
+        .expect("failed to execute statico doctor");
+
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    assert!(output.status.success(), "doctor should exit 0, stderr: {}",
+        String::from_utf8_lossy(&output.stderr));
+    assert!(stdout.contains("Binary:"), "doctor should report binary location");
+    assert!(stdout.contains("Version:"), "doctor should report version");
+    assert!(stdout.contains("PATH:"), "doctor should check PATH");
+    assert!(stdout.contains("Alias:"), "doctor should check alias");
+    assert!(stdout.contains("Complete:"), "doctor should check completions");
+    assert!(stdout.contains("Updates:"), "doctor should check update status");
+}
+
+#[test]
+fn cli_init_writes_shell_rc_file() {
+    let tmp = tempfile::tempdir().expect("failed to create temp dir");
+    let home = tmp.path().to_path_buf();
+
+    // Create a fake .zshrc
+    let zshrc = home.join(".zshrc");
+    std::fs::write(&zshrc, "# existing content\n").expect("write .zshrc");
+
+    let output = Command::new(statico_bin())
+        .args(["init", "--shell", "zsh"])
+        .env("HOME", &home)
+        .env("SHELL", "/bin/zsh")
+        .output()
+        .expect("failed to execute statico init");
+
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    assert!(output.status.success(), "init should exit 0, stderr: {}",
+        String::from_utf8_lossy(&output.stderr));
+    assert!(stdout.contains("Shell integration configured"), "expected success message, got: {stdout}");
+
+    // Verify .zshrc was modified.
+    let rc_content = std::fs::read_to_string(&zshrc).expect("read .zshrc");
+    assert!(rc_content.contains("# statico"), "rc file should contain statico marker, got: {rc_content}");
+    assert!(rc_content.contains("alias st='statico'"), "rc file should contain alias, got: {rc_content}");
+    assert!(rc_content.contains("source"), "rc file should source completions, got: {rc_content}");
+    // Should preserve existing content.
+    assert!(rc_content.contains("# existing content"), "rc file should preserve existing content, got: {rc_content}");
+}
+
+#[test]
+fn cli_init_is_idempotent() {
+    let tmp = tempfile::tempdir().expect("failed to create temp dir");
+    let home = tmp.path().to_path_buf();
+    let zshrc = home.join(".zshrc");
+    std::fs::write(&zshrc, "").expect("write .zshrc");
+
+    // Run init twice.
+    for _ in 0..2 {
+        let output = Command::new(statico_bin())
+            .args(["init", "--shell", "zsh"])
+            .env("HOME", &home)
+            .env("SHELL", "/bin/zsh")
+            .output()
+            .expect("failed to execute statico init");
+        assert!(output.status.success());
+    }
+
+    let rc_content = std::fs::read_to_string(&zshrc).expect("read .zshrc");
+    let count = rc_content.matches("# statico").count();
+    assert_eq!(count, 1, "init should be idempotent, but # statico appeared {} times:\n{}", count, rc_content);
+    let alias_count = rc_content.matches("alias st='statico'").count();
+    assert_eq!(alias_count, 1, "alias should appear once, appeared {} times", alias_count);
+}
+
+#[test]
+fn cli_quiet_suppresses_update_notification() {
+    let output = Command::new(statico_bin())
+        .args(["--quiet", "analyze", "."])
+        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .output()
+        .expect("failed to execute");
+
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+    assert!(!stderr.contains("panic"), "should not panic with --quiet");
+}
