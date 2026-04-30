@@ -622,8 +622,8 @@ fn cli_setup_generates_claude_files() {
     assert!(stdout.contains("wrote"), "should report files written: {stdout}");
 
     assert!(tmp_path.join(".claude/CLAUDE.md").exists(), "CLAUDE.md should exist");
-    assert!(tmp_path.join(".claude/skills/statico-analyze.md").exists(), "analyze skill should exist");
-    assert!(tmp_path.join(".claude/skills/statico-fix.md").exists(), "fix skill should exist");
+    assert!(tmp_path.join(".claude/skills/statico-analyze/SKILL.md").exists(), "analyze skill should exist");
+    assert!(tmp_path.join(".claude/skills/statico-fix/SKILL.md").exists(), "fix skill should exist");
 
     // Verify .gitignore updated.
     let gitignore = std::fs::read_to_string(tmp_path.join(".gitignore")).expect("read gitignore");
@@ -701,4 +701,31 @@ fn cli_setup_force_overwrites() {
     let content = std::fs::read_to_string(tmp_path.join(".claude/CLAUDE.md")).expect("read");
     assert!(content.contains("statico"), "should be regenerated: {content}");
     assert!(!content.contains("CUSTOM CONTENT"), "custom content should be gone");
+}
+
+#[test]
+fn cli_setup_generates_pi_skills() {
+    let tmp = tempfile::tempdir().expect("temp dir");
+    let tmp_path = tmp.path();
+    std::process::Command::new("git").arg("init").current_dir(tmp_path).output().ok();
+    std::fs::write(tmp_path.join(".gitignore"), "node_modules/\n").expect("gitignore");
+
+    let output = std::process::Command::new(statico_bin())
+        .args(["setup", "--target", "pi"])
+        .arg("--path")
+        .arg(tmp_path)
+        .output()
+        .expect("run setup");
+
+    assert!(output.status.success(), "setup should succeed");
+    assert!(tmp_path.join(".pi/skills/statico-analyze/SKILL.md").exists(), "pi analyze skill should exist");
+    assert!(tmp_path.join(".pi/skills/statico-fix/SKILL.md").exists(), "pi fix skill should exist");
+
+    // Verify frontmatter has correct name field.
+    let content = std::fs::read_to_string(tmp_path.join(".pi/skills/statico-analyze/SKILL.md")).expect("read");
+    assert!(content.contains("name: statico-analyze"), "SKILL.md should have correct name frontmatter: {content}");
+
+    // Verify .gitignore updated.
+    let gitignore = std::fs::read_to_string(tmp_path.join(".gitignore")).expect("read gitignore");
+    assert!(gitignore.contains(".pi/"), ".gitignore should contain .pi/: {gitignore}");
 }

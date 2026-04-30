@@ -145,13 +145,13 @@ enum Commands {
 
     /// Set up AI integration for the current project.
     ///
-    /// Generates .claude/ skills, CLAUDE.md context, and agent configs
-    /// so AI assistants (Claude Code, Cursor, etc.) can run statico
-    /// analysis and understand the results.
+    /// Generates skills for Claude Code, pi, and Cursor so AI assistants
+    /// can run statico analysis and understand the results.
     Setup {
         /// What to generate.
         ///
         /// - claude: .claude/ directory with skills + CLAUDE.md
+        /// - pi: .pi/skills/ with SKILL.md files
         /// - cursor: .cursor/rules with statico context
         /// - all: everything (default)
         #[arg(long, default_value = "all", value_name = "TARGET")]
@@ -487,77 +487,76 @@ fn run_setup(target: &str, path: &str, force: bool) {
     let generate_all = target == "all";
     let generate_claude = generate_all || target == "claude";
     let generate_cursor = generate_all || target == "cursor";
+    let generate_pi = generate_all || target == "pi";
 
-    if !generate_claude && !generate_cursor {
-        eprintln!("error: unknown target '{}'. Use: claude, cursor, or all", target);
+    if !generate_claude && !generate_cursor && !generate_pi {
+        eprintln!("error: unknown target '{}'. Use: claude, cursor, pi, or all", target);
         process::exit(1);
     }
 
     let mut files_written = 0usize;
 
+    // Update .gitignore for user-specific AI config dirs.
+    let gitignore = root.join(".gitignore");
+    if gitignore.exists() {
+        let content = std::fs::read_to_string(&gitignore).unwrap_or_default();
+        let mut additions = Vec::new();
+        if generate_claude && !content.lines().any(|l| l == ".claude/") {
+            additions.push(".claude/");
+        }
+        if generate_pi && !content.lines().any(|l| l == ".pi/") {
+            additions.push(".pi/");
+        }
+        if !additions.is_empty() {
+            let mut f = std::fs::OpenOptions::new().append(true).open(&gitignore).expect("open .gitignore");
+            for a in &additions {
+                let _ = f.write_all(format!("\n{}\n", a).as_bytes());
+            }
+        }
+    }
+
     // --- Claude Code setup ---
     if generate_claude {
         let claude_dir = root.join(".claude");
-        let skills_dir = claude_dir.join("skills");
 
-        // Ensure .claude/ is in .gitignore (user-specific, not project-specific)
-        let gitignore = root.join(".gitignore");
-        if gitignore.exists() {
-            let content = std::fs::read_to_string(&gitignore).unwrap_or_default();
-            if !content.lines().any(|l| l == ".claude/") {
-                let mut f = std::fs::OpenOptions::new().append(true).open(&gitignore).expect("open .gitignore");
-                f.write_all(b"\n.claude/\n").expect("write .gitignore");
-            }
-        }
-
-        // CLAUDE.md — project-level context for statico
+        // CLAUDE.md — project-level context
         let claude_md = claude_dir.join("CLAUDE.md");
         if claude_md.exists() && !force {
             println!("  skipping {} (already exists, use --force to overwrite)", claude_md.display());
         } else {
             std::fs::create_dir_all(&claude_dir).expect("create .claude dir");
-            let content = generate_claude_md();
-            std::fs::write(&claude_md, &content).expect("write CLAUDE.md");
+            std::fs::write(&claude_md, generate_claude_md()).expect("write CLAUDE.md");
             println!("  wrote {}", claude_md.display());
             files_written += 1;
         }
 
-        // Claude Code skill: statico-analyze
-        let skill_file = skills_dir.join("statico-analyze.md");
-        if skill_file.exists() && !force {
-            println!("  skipping {} (already exists)", skill_file.display());
-        } else {
-            std::fs::create_dir_all(&skills_dir).expect("create skills dir");
-            let content = generate_claude_skill();
-            std::fs::write(&skill_file, &content).expect("write skill");
-            println!("  wrote {}", skill_file.display());
-            files_written += 1;
-        }
+        // Skill: .claude/skills/statico-analyze/SKILL.md
+        files_written += write_skill(&claude_dir.join("skills").join("statico-analyze"), "statico-analyze", generate_skill_analyze(), force);
 
-        // Claude Code skill: statico-fix
-        let fix_skill = skills_dir.join("statico-fix.md");
-        if fix_skill.exists() && !force {
-            println!("  skipping {} (already exists)", fix_skill.display());
-        } else {
-            std::fs::create_dir_all(&skills_dir).expect("create skills dir");
-            let content = generate_claude_fix_skill();
-            std::fs::write(&fix_skill, &content).expect("write fix skill");
-            println!("  wrote {}", fix_skill.display());
-            files_written += 1;
-        }
+        // Skill: .claude/skills/statico-fix/SKILL.md
+        files_written += write_skill(&claude_dir.join("skills").join("statico-fix"), "statico-fix", generate_skill_fix(), force);
+    }
+
+    // --- Pi setup ---
+    if generate_pi {
+        let pi_dir = root.join(".pi");
+
+        // Skill: .pi/skills/statico-analyze/SKILL.md
+        files_written += write_skill(&pi_dir.join("skills").join("statico-analyze"), "statico-analyze", generate_skill_analyze(), force);
+
+        // Skill: .pi/skills/statico-fix/SKILL.md
+        files_written += write_skill(&pi_dir.join("skills").join("statico-fix"), "statico-fix", generate_skill_fix(), force);
     }
 
     // --- Cursor setup ---
     if generate_cursor {
-        let cursor_dir = root.join(".cursor");
-        let rules_file = cursor_dir.join("rules").join("statico.mdc");
+        let rules_file = root.join(".cursor").join("rules").join("statico.mdc");
 
         if rules_file.exists() && !force {
             println!("  skipping {} (already exists)", rules_file.display());
         } else {
             std::fs::create_dir_all(rules_file.parent().unwrap()).expect("create cursor rules dir");
-            let content = generate_cursor_rules();
-            std::fs::write(&rules_file, &content).expect("write cursor rules");
+            std::fs::write(&rules_file, generate_cursor_rules()).expect("write cursor rules");
             println!("  wrote {}", rules_file.display());
             files_written += 1;
         }
@@ -568,6 +567,19 @@ fn run_setup(target: &str, path: &str, force: bool) {
     } else {
         println!("All files already exist. Use --force to overwrite.");
     }
+}
+
+/// Write a skill directory with SKILL.md. Returns 1 if written, 0 if skipped.
+fn write_skill(dir: &std::path::Path, _name: &str, content: String, force: bool) -> usize {
+    let skill_file = dir.join("SKILL.md");
+    if skill_file.exists() && !force {
+        println!("  skipping {} (already exists)", skill_file.display());
+        return 0;
+    }
+    std::fs::create_dir_all(dir).unwrap_or_else(|_| panic!("create {} dir", dir.display()));
+    std::fs::write(&skill_file, &content).unwrap_or_else(|_| panic!("write {}", skill_file.display()));
+    println!("  wrote {}", skill_file.display());
+    1
 }
 
 fn generate_claude_md() -> String {
@@ -632,8 +644,9 @@ No existing code needs modification.
 "#)
 }
 
-fn generate_claude_skill() -> String {
-    format!(r#"---
+fn generate_skill_analyze() -> String {
+    r#"---
+name: statico-analyze
 description: Run statico code analysis on the current project. Use when asked to check code health, find dead code, review code quality, or analyze dependencies.
 ---
 
@@ -680,12 +693,13 @@ description: Run statico code analysis on the current project. Use when asked to
    statico analyze . --format json > after.json
    statico diff before.json after.json
    ```
-"#)
+"#.to_string()
 }
 
-fn generate_claude_fix_skill() -> String {
-    format!(r#"---
-description: Fix code quality issues found by statico. Use after running statico analyze to automatically address dead code, unused exports, and other detected issues.
+fn generate_skill_fix() -> String {
+    r#"---
+name: statico-fix
+description: Fix code quality issues found by statico. Use after running statico analyze to address dead code, unused exports, and other detected issues.
 ---
 
 # statico-fix
@@ -730,7 +744,7 @@ description: Fix code quality issues found by statico. Use after running statico
    statico analyze . --format ai
    ```
    Health score should improve.
-"#)
+"#.to_string()
 }
 
 fn generate_cursor_rules() -> String {
