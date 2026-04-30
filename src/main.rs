@@ -177,6 +177,40 @@ enum Commands {
         #[arg(long)]
         force: bool,
     },
+
+    /// Manage statico plugins.
+    ///
+    /// Discover, inspect, and manage plugins that extend statico's
+    /// analysis pipeline. Plugins communicate via JSON-RPC over stdin/stdout.
+    Plugin {
+        #[command(subcommand)]
+        action: PluginAction,
+    },
+}
+
+#[derive(clap::Subcommand)]
+enum PluginAction {
+    /// List discovered plugins and their status.
+    List {
+        /// Project path (defaults to current directory).
+        #[arg(long, default_value = ".")]
+        path: String,
+    },
+
+    /// Print the JSON schema for the plugin protocol.
+    ///
+    /// Useful for LLMs and plugin developers to understand the exact contract.
+    Schema {
+        /// Output format (text or json).
+        #[arg(long, default_value = "text", value_name = "FORMAT")]
+        format: String,
+    },
+
+    /// Print the full plugin protocol reference documentation.
+    ///
+    /// Human-readable guide to building plugins. Covers all hooks,
+    /// message types, and lifecycle.
+    Docs,
 }
 
 fn main() {
@@ -236,6 +270,13 @@ fn main() {
             force,
         } => {
             run_setup(&target, &path, force);
+        }
+        Commands::Plugin { action } => {
+            match action {
+                PluginAction::List { path } => run_plugin_list(&path),
+                PluginAction::Schema { format } => run_plugin_schema(&format),
+                PluginAction::Docs => run_plugin_docs(),
+            }
         }
     }
 }
@@ -877,4 +918,171 @@ fn which_statico() -> Option<std::path::PathBuf> {
         }
     }
     None
+}
+
+fn run_plugin_list(path: &str) {
+    let root = std::path::Path::new(path);
+    let root = match std::fs::canonicalize(root) {
+        Ok(c) => c,
+        Err(_) => root.to_path_buf(),
+    };
+
+    let plugins = statico::plugin::discovery::discover_plugins(&root);
+
+    if plugins.is_empty() {
+        println!("No plugins found in {}", root.display());
+        println!();
+        println!("Add plugins to .statico/plugins/ or configure them in .statico.toml");
+        return;
+    }
+
+    println!("Plugins in {}:\n", root.display());
+    for p in &plugins {
+        let status = if p.enabled { "\u{2713}" } else { "\u{2717}" };
+        let kind = p.kind.to_string();
+        println!("  {} {} ({}) — {}", status, p.name, kind, p.path.display());
+        if p.override_all {
+            println!("    \u{2514} override: all hooks");
+        }
+        if !p.languages.is_empty() {
+            println!("    \u{2514} languages: {}", p.languages.join(", "));
+        }
+    }
+}
+
+fn run_plugin_schema(format: &str) {
+    match format {
+        "json" => {
+            let schema = serde_json::json!({
+                "protocol": "json-rpc-2.0",
+                "transport": "newline-delimited JSON over stdin/stdout",
+                "methods": {
+                    "init": {
+                        "params": { "root": "string", "config": "object", "plugin_settings": "object" },
+                        "result": "PluginCapabilities"
+                    },
+                    "analyze_file": {
+                        "params": { "path": "string", "source": "string", "language": "string", "existing_issues": "PluginIssue[]" },
+                        "result": { "issues": "PluginIssue[]", "exports": "string[]", "dependencies": "string[]", "metrics": "PluginMetrics?" }
+                    },
+                    "discover_entries": {
+                        "params": { "root": "string", "config_files": "string[]", "language": "string" },
+                        "result": { "entry_points": "EntryPoint[]" }
+                    },
+                    "resolve_import": {
+                        "params": { "from_file": "string", "specifier": "string", "root": "string" },
+                        "result": { "resolved_path": "string", "external": "bool" }
+                    },
+                    "post_analysis": {
+                        "params": { "results": "object", "health_score": "f64", "total_files": "usize", "language": "string" },
+                        "result": { "issues": "PluginIssue[]", "suggestions": "string[]" }
+                    },
+                    "format_output": {
+                        "params": { "results": "object", "format": "string", "health_score": "f64" },
+                        "result": { "output": "string", "exit_code": "i32" }
+                    },
+                    "shutdown": { "params": null, "result": null }
+                },
+                "types": {
+                    "PluginCapabilities": {
+                        "name": "string",
+                        "version": "string?",
+                        "hooks": "Record<HookName, HookMode>",
+                        "languages": "string[]",
+                        "rules": "Rule[]"
+                    },
+                    "HookName": "analyze_file | discover_entries | resolve_import | post_analysis | format_output",
+                    "HookMode": "add | override",
+                    "Severity": "error | warning | info",
+                    "Rule": { "id": "string", "severity": "Severity", "description": "string" },
+                    "PluginIssue": { "rule_id": "string", "severity": "Severity", "message": "string", "file": "string", "line": "usize", "column": "usize?", "end_line": "usize?", "end_column": "usize?", "confidence": "f64?", "suggestion": "string?" },
+                    "EntryPoint": { "path": "string", "type": "string?", "framework": "string?" }
+                }
+            });
+            println!("{}", serde_json::to_string_pretty(&schema).unwrap());
+        }
+        _ => {
+            println!("statico Plugin Protocol \u{2014} JSON-RPC 2.0");
+            println!();
+            println!("Transport: newline-delimited JSON over stdin/stdout");
+            println!("stderr: passed through for debug logging");
+            println!();
+            println!("HOOKS:");
+            println!("  analyze_file     \u{2014} Per-file analysis [add | override]");
+            println!("  discover_entries  \u{2014} Entry point discovery [override only]");
+            println!("  resolve_import   \u{2014} Import resolution [override only]");
+            println!("  post_analysis    \u{2014} After full analysis [add only]");
+            println!("  format_output    \u{2014} Custom output formatting [override only]");
+            println!();
+            println!("LIFECYCLE:");
+            println!("  1. statico spawns plugin subprocess");
+            println!("  2. Sends 'init' request with project root");
+            println!("  3. Plugin responds with capabilities (name, hooks, rules)");
+            println!("  4. statico calls hook methods per the declared capabilities");
+            println!("  5. statico sends 'shutdown' \u{2014} plugin exits");
+            println!();
+            println!("Run 'statico plugin schema --format json' for machine-readable schema.");
+        }
+    }
+}
+
+fn run_plugin_docs() {
+    let docs = r#"statico Plugin Development Guide
+================================
+
+Overview
+--------
+Plugins extend statico's analysis pipeline. They are subprocesses that
+communicate via newline-delimited JSON-RPC over stdin/stdout.
+
+Quick Start
+-----------
+  statico plugin init my-rule --lang typescript   # scaffold
+  cd .statico/plugins/my-rule
+  # edit index.ts
+  statico plugin build --name my-rule
+  statico plugin run my-rule --file src/foo.ts
+
+Plugin Types
+------------
+  typescript  — Bun runs .ts entry point (auto-installs Bun if needed)
+  rust        — Compiled binary via cargo
+  executable  — Any binary/script that speaks the protocol
+
+Configuration (.statico.toml)
+-----------------------------
+  [[plugin]]
+  name = "my-rule"
+  path = "./plugins/my-rule"
+  enabled = true
+  languages = ["typescript"]
+  settings = { max_complexity = 10 }
+
+  [[plugin]]
+  name = "acme-fork"
+  override = true    # replaces ALL hooks it registers
+
+Hook Modes
+----------
+  add       — contribute alongside built-in analysis
+  override  — replace the built-in stage entirely
+
+  Two plugins cannot override the same hook. statico will error.
+
+Protocol Messages
+-----------------
+Init:
+  → {"method":"init","params":{"root":"/path/to/project"}}
+  ← {"result":{"name":"my-plugin","hooks":{"analyze_file":"add"},"rules":[...]}}
+
+Analyze File:
+  → {"method":"analyze_file","params":{"path":"src/foo.ts","source":"...","language":"typescript"}}
+  ← {"result":{"issues":[...]}}
+
+Shutdown:
+  → {"method":"shutdown"}
+
+Full schema: statico plugin schema --format json
+"#;
+    println!("{}", docs);
 }
