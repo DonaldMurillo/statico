@@ -11,3 +11,5 @@ test-output/
 
 # Public benchmark repos (large, auto-managed)
 benchmarks/repos/
+benchmarks/rust-repos/
+benchmarks/rust-results/

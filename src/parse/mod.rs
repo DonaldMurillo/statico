@@ -76,6 +76,7 @@ pub mod errors;
 pub mod exports;
 pub mod imports;
 pub mod metrics;
+pub mod rust;
 
 // ---------------------------------------------------------------------------
 // Tests

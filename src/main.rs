@@ -105,7 +105,7 @@ fn run_analyze(path: &str, format: Option<&str>, min_confidence: Option<f64>, ex
         eprintln!("info: include patterns: {:?}", config.include);
     }
 
-    let output = match statico::analyzer::analyze(&root) {
+    let output = match statico::analyzer::analyze_with_excludes(&root, &config.exclude) {
         Ok(o) => o,
         Err(msg) => {
             eprintln!("error: {}", msg);

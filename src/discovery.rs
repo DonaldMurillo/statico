@@ -8,9 +8,10 @@ use std::path::Path;
 
 use crate::frameworks;
 
-const SOURCE_EXTENSIONS: &[&str] = &["ts", "tsx", "js", "jsx"];
+const SOURCE_EXTENSIONS: &[&str] = &["ts", "tsx", "js", "jsx", "rs"];
 
 /// Discover all source files in the project, returning (relative_path, language).
+/// If `exclude` is provided, files matching those glob patterns are skipped.
 pub fn discover_source_files(root: &Path) -> Result<Vec<(String, String)>, String> {
     let mut files: Vec<(String, String)> = Vec::new();
 
@@ -47,6 +48,7 @@ pub fn discover_source_files(root: &Path) -> Result<Vec<(String, String)>, Strin
             "tsx" => "tsx",
             "js" => "javascript",
             "jsx" => "jsx",
+            "rs" => "rust",
             _ => continue,
         };
 
@@ -55,6 +57,82 @@ pub fn discover_source_files(root: &Path) -> Result<Vec<(String, String)>, Strin
 
     files.sort_by(|a, b| a.0.cmp(&b.0));
     Ok(files)
+}
+
+/// Filter source files by exclude glob patterns.
+/// Returns only files that don't match any exclude pattern.
+/// Supports `*` wildcard and `**` for recursive matching.
+pub fn filter_excluded(
+    files: Vec<(String, String)>,
+    exclude: &[String],
+) -> Vec<(String, String)> {
+    if exclude.is_empty() {
+        return files;
+    }
+    files.into_iter().filter(|(rel, _)| {
+        for pat in exclude {
+            if match_glob(pat, rel) {
+                return false;
+            }
+        }
+        true
+    }).collect()
+}
+
+/// Simple glob matcher supporting `*` (any non-slash) and `**` (any including slashes).
+fn match_glob(pattern: &str, path: &str) -> bool {
+    let parts: Vec<&str> = pattern.split("**").collect();
+    if parts.len() == 1 {
+        // No ** — treat as simple glob
+        return match_simple_glob(pattern, path);
+    }
+    // Split on ** and check each segment appears in order
+    let mut idx = 0;
+    for (i, part) in parts.iter().enumerate() {
+        if part.is_empty() {
+            continue;
+        }
+        if let Some(pos) = path[idx..].find(part) {
+            idx += pos + part.len();
+        } else if i == 0 {
+            // First part must match from start
+            return path.starts_with(part);
+        } else {
+            return false;
+        }
+    }
+    // If pattern ends with /**, it matches everything after
+    pattern.ends_with("**") || idx >= path.len()
+}
+
+/// Match a simple glob pattern (no **, just * for any non-slash chars).
+fn match_simple_glob(pattern: &str, path: &str) -> bool {
+    if pattern.contains('*') {
+        let regex = pattern.replace('*', "*/?"); // rough approach
+        // Use a simpler approach: split on * and check segments in order
+        let segments: Vec<&str> = pattern.split('*').collect();
+        if segments.len() == 1 {
+            return path == pattern;
+        }
+        let mut idx = 0;
+        for (i, seg) in segments.iter().enumerate() {
+            if seg.is_empty() { continue; }
+            if i == 0 {
+                if !path.starts_with(seg) { return false; }
+                idx = seg.len();
+            } else if i == segments.len() - 1 {
+                if !path.ends_with(seg) { return false; }
+            } else {
+                if let Some(pos) = path[idx..].find(seg) {
+                    idx += pos + seg.len();
+                } else {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+    path == pattern
 }
 
 /// Discover config files present in the project root.
@@ -69,6 +147,7 @@ pub fn discover_config_files(root: &Path) -> Vec<String> {
         "pnpm-workspace.yaml",
         "nx.json",
         "turbo.json",
+        "Cargo.toml",
     ];
     let mut found: Vec<String> = Vec::new();
     for name in &configs {
@@ -150,8 +229,18 @@ pub fn discover_entry_points(
     // 6. Default entry point locations → framework entries.
     add_default_entries(&source_set, &mut framework);
 
+    // 6b. Rust workspace crates: find Cargo.toml files and add their src/lib.rs, src/main.rs.
+    add_rust_crate_entries(root, &source_set, &mut framework);
+
+    // 6c. Parse Cargo.toml for [lib] path and [[bin]] targets → entry points.
+    add_rust_cargo_entries(root, &source_set, &mut framework);
+
     // 7. Tooling & config scripts → implicit entries (loaded by config, not ES imports).
     add_tooling_entries(source_files, &mut implicit);
+
+    // 7b. Rust implicit entries: build.rs, tests/, benches/, examples/, fuzz/.
+    // Also src/bin/ files as FRAMEWORK entries (they're runtime binaries).
+    add_rust_implicit_entries(source_files, &mut implicit, &mut framework);
 
     EntryPoints { framework, implicit, public_api }
 }
@@ -234,6 +323,8 @@ fn add_workspace_entries(
         "src/main.tsx",
         "index.ts",
         "main.ts",
+        "src/main.rs",
+        "src/lib.rs",
     ];
 
     // Enumerate actual package directories from the workspace prefixes.
@@ -328,6 +419,8 @@ fn add_default_entries(source_set: &HashSet<&str>, entry_points: &mut BTreeSet<S
         "index.js",
         "index.jsx",
         "main.ts",
+        "src/main.rs",
+        "src/lib.rs",
     ];
     for def in &defaults {
         if source_set.contains(*def) {
@@ -407,6 +500,287 @@ const TOOLING_DIRS: &[&str] = &[
     "gulpfile",
     "gruntfile",
 ];
+
+/// Discover entry points from Rust workspace crates.
+/// Each subdirectory with a Cargo.toml is a potential crate root.
+/// Its src/lib.rs and src/main.rs are entry points.
+fn add_rust_crate_entries(
+    root: &Path,
+    source_set: &HashSet<&str>,
+    entry_points: &mut BTreeSet<String>,
+) {
+    // Only run if there's a root Cargo.toml (Rust project)
+    if !root.join("Cargo.toml").exists() {
+        return;
+    }
+
+    let rust_entries = ["src/lib.rs", "src/main.rs"];
+
+    // Check root crate
+    for entry in &rust_entries {
+        if source_set.contains(*entry) {
+            entry_points.insert(entry.to_string());
+        }
+    }
+
+    // Find nested Cargo.toml files (workspace members)
+    // Walk up to 3 levels deep to avoid scanning everything
+    for entry in walkdir::WalkDir::new(root)
+        .max_depth(4)
+        .into_iter()
+        .filter_entry(|e| {
+            let name = e.file_name().to_string_lossy();
+            name != ".git" && name != "target" && name != "node_modules"
+        })
+        .filter_map(|e| e.ok())
+    {
+        if !entry.file_type().is_file() { continue; }
+        let path = entry.path();
+        if path.file_name() != Some(std::ffi::OsStr::new("Cargo.toml")) { continue; }
+
+        let rel_cargo = crate::resolution::path_relative_to(root, path);
+        let crate_dir = rel_cargo.rsplit_once('/').map(|(d, _)| d).unwrap_or("");
+
+        for entry in &rust_entries {
+            let rel = format!("{}/{}", crate_dir, entry);
+            if source_set.contains(rel.as_str()) {
+                entry_points.insert(rel);
+            }
+        }
+    }
+}
+
+/// Parse Cargo.toml for `[lib] path =` and `[[bin]]` targets → entry points.
+fn add_rust_cargo_entries(
+    root: &Path,
+    source_set: &HashSet<&str>,
+    entry_points: &mut BTreeSet<String>,
+) {
+    // Only run if there's a root Cargo.toml
+    if !root.join("Cargo.toml").exists() {
+        return;
+    }
+
+    // Walk all Cargo.toml files (workspace members)
+    for entry in walkdir::WalkDir::new(root)
+        .max_depth(4)
+        .into_iter()
+        .filter_entry(|e| {
+            let name = e.file_name().to_string_lossy();
+            name != ".git" && name != "target" && name != "node_modules"
+        })
+        .filter_map(|e| e.ok())
+    {
+        if !entry.file_type().is_file() { continue; }
+        let path = entry.path();
+        if path.file_name() != Some(std::ffi::OsStr::new("Cargo.toml")) { continue; }
+
+        let rel_cargo = crate::resolution::path_relative_to(root, path);
+        let crate_dir = rel_cargo.rsplit_once('/').map(|(d, _)| d).unwrap_or("");
+
+        let content = match std::fs::read_to_string(path) {
+            Ok(c) => c,
+            Err(_) => continue,
+        };
+
+        // Parse [lib] path = "..."
+        if let Some(lib_path) = parse_cargo_lib_path(&content) {
+            let rel = if crate_dir.is_empty() {
+                lib_path.clone()
+            } else {
+                format!("{}/{}", crate_dir, lib_path)
+            };
+            if source_set.contains(rel.as_str()) {
+                entry_points.insert(rel);
+            }
+        }
+
+        // Parse [[bin]] targets
+        for bin_path in parse_cargo_bin_paths(&content) {
+            let rel = if crate_dir.is_empty() {
+                bin_path.clone()
+            } else {
+                format!("{}/{}", crate_dir, bin_path)
+            };
+            if source_set.contains(rel.as_str()) {
+                entry_points.insert(rel);
+            }
+        }
+
+        // Also check [[test]], [[bench]], [[example]] targets
+        for target_path in parse_cargo_target_paths(&content) {
+            let rel = if crate_dir.is_empty() {
+                target_path.clone()
+            } else {
+                format!("{}/{}", crate_dir, target_path)
+            };
+            if source_set.contains(rel.as_str()) {
+                entry_points.insert(rel);
+            }
+        }
+    }
+}
+
+/// Extract `[lib] path = "..."` from Cargo.toml content.
+fn parse_cargo_lib_path(content: &str) -> Option<String> {
+    let mut in_lib = false;
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed == "[lib]" {
+            in_lib = true;
+            continue;
+        }
+        if in_lib {
+            if trimmed.starts_with('[') { break; }
+            if let Some(path) = parse_toml_string_value(trimmed, "path") {
+                return Some(path);
+            }
+        }
+    }
+    None
+}
+
+/// Extract `[[bin]]` paths from Cargo.toml content.
+/// If `path` is not specified, uses convention: `src/bin/{name}.rs`.
+fn parse_cargo_bin_paths(content: &str) -> Vec<String> {
+    let mut paths = Vec::new();
+    let mut in_section = false;
+    let mut current_path: Option<String> = None;
+    let mut current_name: Option<String> = None;
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed == "[[bin]]" {
+            // Flush previous section
+            if let Some(p) = current_path.take() {
+                paths.push(p);
+            } else if let Some(n) = current_name.take() {
+                // Convention: src/bin/{name}.rs
+                paths.push(format!("src/bin/{}.rs", n));
+            }
+            current_name = None;
+            in_section = true;
+            continue;
+        }
+        if in_section {
+            if trimmed.starts_with("[[") {
+                // New section — flush
+                if let Some(p) = current_path.take() {
+                    paths.push(p);
+                } else if let Some(n) = current_name.take() {
+                    paths.push(format!("src/bin/{}.rs", n));
+                }
+                in_section = false;
+                continue;
+            }
+            if trimmed.starts_with('[') {
+                if let Some(p) = current_path.take() {
+                    paths.push(p);
+                } else if let Some(n) = current_name.take() {
+                    paths.push(format!("src/bin/{}.rs", n));
+                }
+                in_section = false;
+                continue;
+            }
+            if let Some(p) = parse_toml_string_value(trimmed, "path") {
+                current_path = Some(p);
+            }
+            if let Some(n) = parse_toml_string_value(trimmed, "name") {
+                current_name = Some(n);
+            }
+        }
+    }
+    // Flush last section
+    if let Some(p) = current_path {
+        paths.push(p);
+    } else if let Some(n) = current_name {
+        paths.push(format!("src/bin/{}.rs", n));
+    }
+    paths
+}
+
+/// Extract paths from [[test]], [[bench]], [[example]] sections.
+fn parse_cargo_target_paths(content: &str) -> Vec<String> {
+    let mut paths = Vec::new();
+    for section in &["[[test]]", "[[bench]]", "[[example]]"] {
+        paths.extend(parse_cargo_array_paths(content, section));
+    }
+    paths
+}
+
+/// Extract `path = "..."` values from TOML array-of-tables sections.
+fn parse_cargo_array_paths(content: &str, section: &str) -> Vec<String> {
+    let mut paths = Vec::new();
+    let mut in_section = false;
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed == section {
+            in_section = true;
+            continue;
+        }
+        if in_section {
+            if trimmed.starts_with("[[") || (trimmed.starts_with('[') && !trimmed.starts_with("[")) {
+                in_section = false;
+                continue;
+            }
+            if trimmed.starts_with('[') && trimmed != section {
+                in_section = false;
+                continue;
+            }
+            if let Some(path) = parse_toml_string_value(trimmed, "path") {
+                paths.push(path);
+            }
+        }
+    }
+    paths
+}
+
+/// Parse `key = "value"` from a TOML line.
+fn parse_toml_string_value(line: &str, key: &str) -> Option<String> {
+    let prefix = format!("{} = ", key);
+    let trimmed = line.trim();
+    if !trimmed.starts_with(&prefix) { return None; }
+    let rest = trimmed[prefix.len()..].trim();
+    // Extract quoted string
+    if rest.starts_with('"') && rest.ends_with('"') && rest.len() >= 2 {
+        Some(rest[1..rest.len()-1].to_string())
+    } else { None }
+}
+
+/// Rust implicit entries: build.rs, files in tests/, benches/, examples/, fuzz/, exercises/.
+/// These are compiled by cargo but not imported via `mod`.
+fn add_rust_implicit_entries(
+    source_files: &[(String, String)],
+    entry_points: &mut BTreeSet<String>,
+    framework_eps: &mut BTreeSet<String>,
+) {
+    for (rel, lang) in source_files {
+        if lang != "rust" { continue; }
+
+        // build.rs in any crate root
+        if rel.ends_with("/build.rs") || rel == "build.rs" {
+            entry_points.insert(rel.clone());
+            continue;
+        }
+
+        let lower = rel.to_lowercase();
+
+        // src/bin/ files are runtime binaries → framework entries
+        if lower.contains("/src/bin/") || lower.starts_with("src/bin/") {
+            framework_eps.insert(rel.clone());
+            continue;
+        }
+
+        // Standard Rust target directories → implicit entries
+        for dir in &[
+            "tests/", "benches/", "examples/", "fuzz/", "exercises/", "solutions/",
+        ] {
+            if lower.contains(&format!("/{}", dir)) || lower.starts_with(dir) {
+                entry_points.insert(rel.clone());
+                break;
+            }
+        }
+    }
+}
 
 fn add_tooling_entries(
     source_files: &[(String, String)],
