@@ -319,22 +319,28 @@ export class Plugin {
       }
     };
 
-    // Read stdin line by line.
-    Bun.stdin.stream().on("data", (chunk: Uint8Array) => {
-      buffer += decoder.decode(chunk, { stream: true });
-      const lines = buffer.split("\n");
-      // Keep the last (potentially incomplete) line in the buffer.
-      buffer = lines.pop() ?? "";
+    // Read stdin line by line using Bun's streaming API.
+    const reader = Bun.stdin.stream().getReader();
 
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (trimmed) {
-          handleLine(trimmed);
+    const pump = async () => {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        // Keep the last (potentially incomplete) line in the buffer.
+        buffer = lines.pop() ?? "";
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (trimmed) {
+            await handleLine(trimmed);
+          }
         }
       }
-    });
+    };
 
-    // Keep the process alive.
-    // The process will exit when stdin closes (statico sends shutdown first).
+    pump().catch(() => process.exit(0));
   }
 }

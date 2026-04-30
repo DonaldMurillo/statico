@@ -918,4 +918,84 @@ fn test_plugin_build_empty() {
     assert!(stdout.contains("No plugins found"), "expected no plugins message in: {stdout}");
 }
 
+#[test]
+fn test_plugin_run_discovers_console_log() {
+    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/plugin-demo");
+
+    // Check bun is available (skip test if not).
+    let has_bun = std::process::Command::new("which")
+        .arg("bun")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false);
+    if !has_bun {
+        eprintln!("Skipping test_plugin_run (bun not installed)");
+        return;
+    }
+
+    let output = Command::new(statico_bin())
+        .args([
+            "plugin",
+            "run",
+            "no-console-log",
+            "--file",
+            "src/index.ts",
+        ])
+        .arg("--path")
+        .arg(&fixture)
+        .output()
+        .expect("run plugin run");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    assert!(output.status.success(), "stderr: {}", stderr);
+    assert!(stdout.contains("Issues: 3"), "expected 3 issues in: {}", stdout);
+    assert!(
+        stdout.contains("console.log"),
+        "expected console.log message in: {}",
+        stdout
+    );
+}
+
+#[test]
+fn test_plugin_run_clean_file_no_issues() {
+    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/plugin-demo");
+
+    let has_bun = std::process::Command::new("which")
+        .arg("bun")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false);
+    if !has_bun {
+        eprintln!("Skipping test_plugin_run_clean (bun not installed)");
+        return;
+    }
+
+    let output = Command::new(statico_bin())
+        .args([
+            "plugin",
+            "run",
+            "no-console-log",
+            "--file",
+            "src/utils.ts",
+        ])
+        .arg("--path")
+        .arg(&fixture)
+        .output()
+        .expect("run plugin run");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    assert!(output.status.success(), "stderr: {}", stderr);
+    assert!(stdout.contains("Issues: 0"), "expected 0 issues in: {}", stdout);
+}
+
 

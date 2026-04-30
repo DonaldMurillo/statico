@@ -82,6 +82,7 @@ pub struct PluginCapabilities {
 
 /// A single issue reported by a plugin.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PluginIssue {
     pub rule_id: String,
     pub severity: Severity,
@@ -156,6 +157,7 @@ pub struct InitParams {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AnalyzeFileParams {
     pub path: String,
     pub source: String,
@@ -165,6 +167,7 @@ pub struct AnalyzeFileParams {
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AnalyzeFileResult {
     #[serde(default)]
     pub issues: Vec<PluginIssue>,
@@ -183,6 +186,7 @@ pub struct PluginMetrics {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DiscoverEntriesParams {
     pub root: String,
     #[serde(default)]
@@ -192,12 +196,14 @@ pub struct DiscoverEntriesParams {
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DiscoverEntriesResult {
     #[serde(default)]
     pub entry_points: Vec<EntryPoint>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct EntryPoint {
     pub path: String,
     #[serde(default)]
@@ -207,6 +213,7 @@ pub struct EntryPoint {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ResolveImportParams {
     pub from_file: String,
     pub specifier: String,
@@ -214,12 +221,14 @@ pub struct ResolveImportParams {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ResolveImportResult {
     pub resolved_path: String,
     pub external: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PostAnalysisParams {
     pub results: serde_json::Value,
     pub health_score: f64,
@@ -229,6 +238,7 @@ pub struct PostAnalysisParams {
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PostAnalysisResult {
     #[serde(default)]
     pub issues: Vec<PluginIssue>,
@@ -237,6 +247,7 @@ pub struct PostAnalysisResult {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct FormatOutputParams {
     pub results: serde_json::Value,
     pub format: String,
@@ -244,6 +255,7 @@ pub struct FormatOutputParams {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct FormatOutputResult {
     pub output: String,
     #[serde(default)]
