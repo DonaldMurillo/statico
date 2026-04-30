@@ -668,6 +668,9 @@ fn run_setup(target: &str, path: &str, force: bool) {
 
         // Skill: .claude/skills/statico-fix/SKILL.md
         files_written += write_skill(&claude_dir.join("skills").join("statico-fix"), "statico-fix", generate_skill_fix(), force);
+
+        // Skill: .claude/skills/statico-plugin/SKILL.md
+        files_written += write_skill(&claude_dir.join("skills").join("statico-plugin"), "statico-plugin", generate_skill_plugin(), force);
     }
 
     // --- Pi setup ---
@@ -679,6 +682,9 @@ fn run_setup(target: &str, path: &str, force: bool) {
 
         // Skill: .pi/skills/statico-fix/SKILL.md
         files_written += write_skill(&pi_dir.join("skills").join("statico-fix"), "statico-fix", generate_skill_fix(), force);
+
+        // Skill: .pi/skills/statico-plugin/SKILL.md
+        files_written += write_skill(&pi_dir.join("skills").join("statico-plugin"), "statico-plugin", generate_skill_plugin(), force);
     }
 
     // --- Cursor setup ---
@@ -774,6 +780,22 @@ Adding a new language:
 3. Optionally add language-specific rules
 
 No existing code needs modification.
+
+## Plugin System
+
+statico supports external plugins via a subprocess-based JSON-RPC 2.0 protocol.
+
+```bash
+statico plugin init my-rule --lang typescript  # Scaffold plugin
+statico plugin run my-rule --file test.ts      # Test plugin
+statico plugin doctor                          # Check runtimes
+statico plugin docs                            # Protocol reference
+```
+
+- TypeScript plugins use Bun runtime (auto-downloaded)
+- Rust plugins compile via system cargo
+- Plugin SDKs: `sdks/typescript/` and `sdks/rust/`
+- 5 pipeline hooks: `analyze_file`, `discover_entries`, `resolve_import`, `post_analysis`, `format_output`
 "#)
 }
 
@@ -880,6 +902,104 @@ description: Fix code quality issues found by statico. Use after running statico
 "#.to_string()
 }
 
+fn generate_skill_plugin() -> String {
+    r#"# statico Plugin Development
+
+Use when the user wants to create, modify, or debug a statico plugin.
+
+## Quick Start
+
+```bash
+# Scaffold a new TypeScript plugin
+statico plugin init my-plugin --lang typescript
+
+# Scaffold a new Rust plugin
+statico plugin init my-plugin --lang rust
+
+# Run a plugin against a test file
+statico plugin run my-plugin --file fixtures/sample.ts
+
+# Check runtime readiness
+statico plugin doctor
+```
+
+## Plugin Protocol
+
+Plugins communicate via JSON-RPC 2.0 over stdin/stdout (newline-delimited).
+
+### Lifecycle
+
+1. statico spawns the plugin subprocess
+2. Sends `init` request → plugin responds with capabilities
+3. Sends hook requests (`analyze_file`, `discover_entries`, etc.)
+4. Sends `shutdown` → plugin exits
+
+### Hooks
+
+| Hook | When | Mode |
+|------|------|------|
+| `analyze_file` | Per-file analysis | add |
+| `discover_entries` | Find entry points | add |
+| `resolve_import` | Resolve import specifiers | override |
+| `post_analysis` | After full analysis | add |
+| `format_output` | Before displaying results | override |
+
+### Modes
+
+- **add**: Contribute alongside built-in analysis and other plugins
+- **override**: Replace the built-in stage entirely (only one plugin per hook)
+
+## TypeScript SDK
+
+```typescript
+import { Plugin } from "@statico/plugin-sdk";
+
+const plugin = Plugin.create("my-rule", {
+  hooks: { analyze_file: "add" },
+  languages: ["typescript"],
+  rules: [{ id: "my-rule", severity: "warning", description: "..." }],
+});
+
+plugin.onAnalyzeFile((params) => {
+  const issues = [];
+  // params.path, params.source, params.language
+  // Detect patterns in params.source
+  return { issues };
+});
+
+plugin.start();
+```
+
+## Rust SDK
+
+```rust
+use statico_plugin_sdk::{Plugin, PluginManifest, HookName, HookMode};
+use std::collections::HashMap;
+
+fn main() {
+    let mut plugin = Plugin::create("my-rule", PluginManifest {
+        version: Some("0.1.0".to_string()),
+        hooks: HashMap::from([(HookName::AnalyzeFile, HookMode::Add)]),
+        languages: vec!["rust".to_string()],
+        rules: vec![],
+    });
+
+    plugin.on_analyze_file(|params| {
+        // params.path, params.source, params.language
+        statico_plugin_sdk::AnalyzeFileResult::default()
+    });
+
+    plugin.start();
+}
+```
+
+## Protocol Reference
+
+Run `statico plugin docs` for the full protocol reference.
+Run `statico plugin schema --format json` for the JSON schema.
+"#.to_string()
+}
+
 fn generate_cursor_rules() -> String {
     format!(r#"---
 description: statico code analysis rules and patterns for the AI assistant
@@ -893,6 +1013,10 @@ description: statico code analysis rules and patterns for the AI assistant
 - `statico analyze . --format fix` — Get fix suggestions
 - `statico analyze . --format mermaid` — Dependency graph
 - `statico diff before.json after.json` — Compare analyses
+- `statico plugin init <name> --lang typescript` — Create a plugin
+- `statico plugin run <name> --file <path>` — Test a plugin
+- `statico plugin doctor` — Check runtime readiness
+- `statico plugin docs` — Full protocol reference
 
 ## Issue Types
 

@@ -624,6 +624,7 @@ fn cli_setup_generates_claude_files() {
     assert!(tmp_path.join(".claude/CLAUDE.md").exists(), "CLAUDE.md should exist");
     assert!(tmp_path.join(".claude/skills/statico-analyze/SKILL.md").exists(), "analyze skill should exist");
     assert!(tmp_path.join(".claude/skills/statico-fix/SKILL.md").exists(), "fix skill should exist");
+    assert!(tmp_path.join(".claude/skills/statico-plugin/SKILL.md").exists(), "plugin skill should exist");
 
     // Verify .gitignore updated.
     let gitignore = std::fs::read_to_string(tmp_path.join(".gitignore")).expect("read gitignore");
@@ -720,6 +721,7 @@ fn cli_setup_generates_pi_skills() {
     assert!(output.status.success(), "setup should succeed");
     assert!(tmp_path.join(".pi/skills/statico-analyze/SKILL.md").exists(), "pi analyze skill should exist");
     assert!(tmp_path.join(".pi/skills/statico-fix/SKILL.md").exists(), "pi fix skill should exist");
+    assert!(tmp_path.join(".pi/skills/statico-plugin/SKILL.md").exists(), "pi plugin skill should exist");
 
     // Verify frontmatter has correct name field.
     let content = std::fs::read_to_string(tmp_path.join(".pi/skills/statico-analyze/SKILL.md")).expect("read");
