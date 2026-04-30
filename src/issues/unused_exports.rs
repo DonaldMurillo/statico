@@ -58,9 +58,21 @@ pub fn detect(
             continue;
         }
 
+        // Rust: lib.rs is the crate root — its re-exports are the public API.
+        if is_rust_lib_file(path) {
+            continue;
+        }
+
         let names_imported = imported_names.get(path);
 
+        // Check for Rust glob import: if any file does `use foo::*`,
+        // all exports from `foo` are considered used.
+        let has_glob_import = names_imported.is_some_and(|set| set.contains("*"));
+
         for name in exports {
+            if has_glob_import {
+                continue;
+            }
             let is_used = names_imported.is_some_and(|set| set.contains(name));
             if !is_used {
                 unused.push(UnusedExportIssue { name: name.clone(), path: path.clone() });
@@ -336,6 +348,17 @@ fn is_test_fixture(path: &str) -> bool {
         || lower.ends_with("-types.ts")
         || lower.ends_with("-generated-schema.ts")
         || lower.ends_with("-generated-types.ts")
+        // Rust test files
+        || lower.ends_with("_test.rs")
+        || lower.contains("/tests/")
+        || lower.contains("/examples/")
+        || lower.ends_with("/benches/")
+}
+
+/// Check if a file is a Rust lib.rs — the crate root whose re-exports
+/// form the public API surface (similar to barrel/index files in TS).
+fn is_rust_lib_file(path: &str) -> bool {
+    path.ends_with("/lib.rs") || path == "lib.rs"
 }
 
 // ---------------------------------------------------------------------------

@@ -45,10 +45,17 @@ pub fn parse_rust_file(
             } else {
                 imported_names.push((imp.raw_path.clone(), imp.names.clone()));
             }
-        } else if let Some(resolved_glob) = resolve_rust_use_path(root, rel_path, &imp.raw_path)
-            && !dep_targets.contains(&resolved_glob) {
-                dep_targets.push(resolved_glob);
+        } else {
+            // Glob import: use foo::* — marks the file as a dependency.
+            // We record a wildcard marker so the unused-exports detector
+            // knows ALL exports from this target are imported.
+            if let Some(resolved_glob) = resolve_rust_use_path(root, rel_path, &imp.raw_path) {
+                if !dep_targets.contains(&resolved_glob) {
+                    dep_targets.push(resolved_glob.clone());
+                }
+                imported_names.push((resolved_glob, vec!["*".to_string()]));
             }
+        }
     }
 
     // Module declarations: mod foo; → resolve to foo.rs or foo/mod.rs
@@ -151,10 +158,14 @@ pub fn parse_rust_file(
         } else {
             format!("{}/{}/{}", crate_src, current_dir_in_crate, mod_decl.name)
         };
-        if let Some(resolved) = try_rust_file(root, &mod_path)
-            && !dep_targets.contains(&resolved) {
-                dep_targets.push(resolved);
+        if let Some(resolved) = try_rust_file(root, &mod_path) {
+            if !dep_targets.contains(&resolved) {
+                dep_targets.push(resolved.clone());
             }
+            // `mod foo;` is effectively `use foo::*` — all pub items become
+            // accessible as `foo::item`. Record as a glob import.
+            imported_names.push((resolved, vec!["*".to_string()]));
+        }
     }
 
     // Metrics
@@ -235,6 +246,7 @@ pub fn find_crate_src_root(root: &Path, rel_path: &str) -> String {
 /// - `super::foo` → go up from current module
 /// - `self::foo` → current module's sub-module
 /// - `foo::bar` → relative to current module (same as `self::foo::bar`)
+/// - `<crate_name>::foo` → same as `crate::foo` (for binary→library references)
 ///
 /// Returns `None` for external crates (std, serde, etc.) and unresolvable paths.
 fn resolve_rust_use_path(root: &Path, current_rel: &str, use_path: &str) -> Option<String> {
@@ -248,19 +260,24 @@ fn resolve_rust_use_path(root: &Path, current_rel: &str, use_path: &str) -> Opti
     let file_rel_to_crate = current_rel.strip_prefix(&crate_src).unwrap_or(current_rel);
     let current_dir_in_crate = file_rel_to_crate.trim_start_matches('/').rsplit_once('/').map(|(d, _)| d).unwrap_or("");
 
+    // Detect if the first segment is the crate name (e.g., `statico::` in binary)
+    let crate_name = detect_crate_name(root, current_rel);
+    let is_crate_name = crate_name.as_ref().is_some_and(|cn| cn == parts[0]);
+
     match parts[0] {
-        "crate" => {
+        "crate" | _ if is_crate_name => {
             // Absolute from crate root: crate::foo::bar → {crate_src}/foo/bar
-            let mod_parts = &parts[1..];
+            let skip = if parts[0] == "crate" || is_crate_name { 1 } else { 0 };
+            let mod_parts = &parts[skip..];
             if mod_parts.is_empty() {
                 return None;
             }
             let full = format!("{}/{}", crate_src, mod_parts.join("/"));
-            try_rust_file(root, &full)
+            try_resolve_with_fallback(root, &full, mod_parts.len(), &crate_src, "")
         }
         "super" => {
             // Go up from current module's parent (relative to crate src)
-            let mut supers = 0;
+            let mut supers: usize = 0;
             for p in &parts {
                 if *p == "super" {
                     supers += 1;
@@ -268,8 +285,18 @@ fn resolve_rust_use_path(root: &Path, current_rel: &str, use_path: &str) -> Opti
                     break;
                 }
             }
+            // For non-module-root files (e.g., src/output/ai.rs), the file itself
+            // is a submodule, so the first `super` should go to the file's parent
+            // directory (the module it belongs to). Additional `super`s go further up.
             let mut dir = current_dir_in_crate.to_string();
-            for _ in 0..supers {
+            let supers_to_apply = if !is_module_root_file(current_rel) {
+                // First super: stay in current dir (go from submodule to its parent module)
+                // Then go up from there for additional supers
+                supers.saturating_sub(1)
+            } else {
+                supers
+            };
+            for _ in 0..supers_to_apply {
                 dir = dir.rsplit_once('/').map(|(d, _)| d).unwrap_or("").to_string();
             }
             let remaining = &parts[supers..];
@@ -281,7 +308,7 @@ fn resolve_rust_use_path(root: &Path, current_rel: &str, use_path: &str) -> Opti
             } else {
                 format!("{}/{}/{}", crate_src, dir, remaining.join("/"))
             };
-            try_rust_file(root, &full)
+            try_resolve_with_fallback(root, &full, remaining.len(), &crate_src, &dir)
         }
         "self" => {
             // Current module: self::foo → current_dir/foo
@@ -294,7 +321,7 @@ fn resolve_rust_use_path(root: &Path, current_rel: &str, use_path: &str) -> Opti
             } else {
                 format!("{}/{}/{}", crate_src, current_dir_in_crate, remaining.join("/"))
             };
-            try_rust_file(root, &full)
+            try_resolve_with_fallback(root, &full, remaining.len(), &crate_src, current_dir_in_crate)
         }
         _ => {
             // External crate or local module name
@@ -307,9 +334,100 @@ fn resolve_rust_use_path(root: &Path, current_rel: &str, use_path: &str) -> Opti
             } else {
                 format!("{}/{}/{}", crate_src, current_dir_in_crate, parts.join("/"))
             };
-            try_rust_file(root, &full)
+            try_resolve_with_fallback(root, &full, parts.len(), &crate_src, current_dir_in_crate)
         }
     }
+}
+
+/// Try resolving a module path, falling back to progressively shorter prefixes.
+///
+/// Rust `use` paths include the item name (e.g., `crate::issues::detect_issues`),
+/// but the filesystem only has the module file (`src/issues/mod.rs`). We try:
+///   1. Full path (e.g., `src/issues/detect_issues`) — might be a submodule
+///   2. Strip last segment (e.g., `src/issues`) — the item is in the parent module
+///   3. Continue stripping until we find a file or run out of segments
+fn try_resolve_with_fallback(
+    root: &Path,
+    full_path: &str,
+    segment_count: usize,
+    _crate_src: &str,
+    _dir: &str,
+) -> Option<String> {
+    // Try the full path first (could be a submodule like src/foo/bar.rs)
+    if let Some(resolved) = try_rust_file(root, full_path) {
+        return Some(resolved);
+    }
+    // Fallback: strip segments from the end. The last segment is likely the
+    // item name (function, struct, etc.) not a module.
+    // E.g., src/issues/detect_functions → src/issues (the module containing it)
+    let mut current = full_path;
+    for _ in 1..segment_count {
+        let Some((shortened, _)) = current.rsplit_once('/') else {
+            break;
+        };
+        if shortened.is_empty() {
+            break;
+        }
+        if let Some(resolved) = try_rust_file(root, shortened) {
+            return Some(resolved);
+        }
+        current = shortened;
+    }
+    None
+}
+
+/// Check if a file is a module root (mod.rs, lib.rs, main.rs).
+/// Non-root files like `src/output/ai.rs` are submodules — `super` from them
+/// should resolve to their parent directory, not go up from it.
+/// Detect the crate name by reading Cargo.toml.
+/// Cached per-invocation (reads once, stores in thread-local).
+fn detect_crate_name(root: &Path, rel_path: &str) -> Option<String> {
+    use std::cell::RefCell;
+    thread_local! {
+        static CACHE: RefCell<Option<Option<String>>> = const { RefCell::new(None) };
+    }
+    CACHE.with(|c| {
+        if c.borrow().is_some() {
+            return c.borrow().as_ref().unwrap().clone();
+        }
+        let name = read_crate_name(root, rel_path);
+        *c.borrow_mut() = Some(name.clone());
+        name
+    })
+}
+
+/// Read the [package].name from the Cargo.toml nearest to the file.
+fn read_crate_name(root: &Path, rel_path: &str) -> Option<String> {
+    let crate_src = find_crate_src_root(root, rel_path);
+    // crate_src is like "src" — go up one level for Cargo.toml
+    let cargo_dir = crate_src.rsplit_once('/').map(|(d, _)| d).unwrap_or("");
+    let cargo_path = if cargo_dir.is_empty() {
+        root.join("Cargo.toml")
+    } else {
+        root.join(format!("{}/Cargo.toml", cargo_dir))
+    };
+    let contents = std::fs::read_to_string(&cargo_path).ok()?;
+    for line in contents.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("name") {
+            if let Some(eq) = trimmed.find('=') {
+                let val = trimmed[eq + 1..].trim().trim_matches('"').trim_matches('\'');
+                if !val.is_empty() {
+                    return Some(val.to_string());
+                }
+            }
+        }
+        // Stop at the end of [package] section
+        if trimmed.starts_with('[') && !trimmed.starts_with("[package") {
+            break;
+        }
+    }
+    None
+}
+
+fn is_module_root_file(rel_path: &str) -> bool {
+    rel_path.ends_with("/mod.rs") || rel_path.ends_with("/lib.rs") || rel_path.ends_with("/main.rs")
+        || rel_path == "lib.rs" || rel_path == "main.rs" || rel_path == "mod.rs"
 }
 
 /// Check if a file is a crate root (lib.rs, main.rs).
