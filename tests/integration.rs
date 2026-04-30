@@ -367,6 +367,7 @@ fn cli_help_lists_new_commands() {
     assert!(stdout.contains("update"), "help should mention 'update' command");
     assert!(stdout.contains("init"), "help should mention 'init' command");
     assert!(stdout.contains("doctor"), "help should mention 'doctor' command");
+    assert!(stdout.contains("setup"), "help should mention 'setup' command");
 }
 
 #[test]
@@ -590,4 +591,114 @@ fn cli_update_downloads_and_extracts_from_mock_server() {
         verify_stdout.contains("99.0.0"),
         "binary should have been replaced with mock, got: {verify_stdout}"
     );
+}
+
+// ---------------------------------------------------------------------------
+// setup command tests
+// ---------------------------------------------------------------------------
+
+#[test]
+fn cli_setup_generates_claude_files() {
+    let tmp = tempfile::tempdir().expect("temp dir");
+    let tmp_path = tmp.path();
+
+    // Init a git repo so .gitignore works.
+    std::process::Command::new("git")
+        .arg("init")
+        .current_dir(tmp_path)
+        .output()
+        .expect("git init");
+    std::fs::write(tmp_path.join(".gitignore"), "node_modules/\n").expect("gitignore");
+
+    let output = std::process::Command::new(statico_bin())
+        .args(["setup", "--target", "claude"])
+        .arg("--path")
+        .arg(tmp_path)
+        .output()
+        .expect("run setup");
+
+    assert!(output.status.success(), "setup should succeed");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("wrote"), "should report files written: {stdout}");
+
+    assert!(tmp_path.join(".claude/CLAUDE.md").exists(), "CLAUDE.md should exist");
+    assert!(tmp_path.join(".claude/skills/statico-analyze.md").exists(), "analyze skill should exist");
+    assert!(tmp_path.join(".claude/skills/statico-fix.md").exists(), "fix skill should exist");
+
+    // Verify .gitignore updated.
+    let gitignore = std::fs::read_to_string(tmp_path.join(".gitignore")).expect("read gitignore");
+    assert!(gitignore.contains(".claude/"), ".gitignore should contain .claude/: {gitignore}");
+}
+
+#[test]
+fn cli_setup_generates_cursor_rules() {
+    let tmp = tempfile::tempdir().expect("temp dir");
+
+    let output = std::process::Command::new(statico_bin())
+        .args(["setup", "--target", "cursor"])
+        .arg("--path")
+        .arg(tmp.path())
+        .output()
+        .expect("run setup");
+
+    assert!(output.status.success(), "setup should succeed");
+    assert!(tmp.path().join(".cursor/rules/statico.mdc").exists(), "cursor rules should exist");
+}
+
+#[test]
+fn cli_setup_is_idempotent() {
+    let tmp = tempfile::tempdir().expect("temp dir");
+    let tmp_path = tmp.path();
+    std::process::Command::new("git").arg("init").current_dir(tmp_path).output().ok();
+
+    // Run twice.
+    let first = std::process::Command::new(statico_bin())
+        .args(["setup"])
+        .arg("--path")
+        .arg(tmp_path)
+        .output()
+        .expect("first setup");
+    assert!(first.status.success());
+
+    let second = std::process::Command::new(statico_bin())
+        .args(["setup"])
+        .arg("--path")
+        .arg(tmp_path)
+        .output()
+        .expect("second setup");
+    assert!(second.status.success());
+    let stdout = String::from_utf8_lossy(&second.stdout);
+    assert!(stdout.contains("already exist"), "second run should say already exist: {stdout}");
+}
+
+#[test]
+fn cli_setup_force_overwrites() {
+    let tmp = tempfile::tempdir().expect("temp dir");
+    let tmp_path = tmp.path();
+    std::process::Command::new("git").arg("init").current_dir(tmp_path).output().ok();
+
+    // Run once, then modify a file, then --force.
+    let first = std::process::Command::new(statico_bin())
+        .args(["setup"])
+        .arg("--path")
+        .arg(tmp_path)
+        .output()
+        .expect("first setup");
+    assert!(first.status.success());
+
+    // Overwrite CLAUDE.md with custom content.
+    std::fs::write(tmp_path.join(".claude/CLAUDE.md"), "CUSTOM CONTENT").expect("overwrite");
+
+    let force = std::process::Command::new(statico_bin())
+        .args(["setup", "--force"])
+        .arg("--path")
+        .arg(tmp_path)
+        .output()
+        .expect("force setup");
+    assert!(force.status.success());
+
+    // File should be overwritten.
+    let content = std::fs::read_to_string(tmp_path.join(".claude/CLAUDE.md")).expect("read");
+    assert!(content.contains("statico"), "should be regenerated: {content}");
+    assert!(!content.contains("CUSTOM CONTENT"), "custom content should be gone");
 }
