@@ -4,9 +4,7 @@ use std::path::Path;
 
 use crate::parse::blocks::extract_blocks;
 use crate::parse::metrics::count_loc;
-use crate::resolution::Resolver;
 use crate::languages::FileAnalysis;
-use crate::analyzer::parse_typescript::FileResult;
 
 /// Parse a Rust file and return its result as a `FileAnalysis` (plugin interface).
 ///
@@ -18,35 +16,6 @@ pub fn parse_rust_file_standalone(
     source: &str,
 ) -> Option<FileAnalysis> {
     parse_rust_file_inner(root, rel_path, source)
-}
-
-/// Parse a Rust file and return its result (legacy interface).
-pub fn parse_rust_file(
-    root: &Path,
-    rel_path: &str,
-    _abs_path: &Path,
-    source: &str,
-    _resolver: &Resolver,
-) -> Option<FileResult> {
-    parse_rust_file_inner(root, rel_path, source).map(|fa| {
-        let quality = fa.to_file_quality();
-        FileResult {
-            rel_path: fa.rel_path.clone(),
-            file_imports: crate::types::FileImports {
-                source: fa.rel_path,
-                targets: fa.dep_targets.clone(),
-            },
-            external_specs: fa.external_specs,
-            quality,
-            loc: fa.loc,
-            total_lines: fa.total_lines,
-            blocks: fa.blocks,
-            source: fa.source,
-            dep_targets: fa.dep_targets,
-            exports: fa.exports,
-            imported_names: fa.imported_names,
-        }
-    })
 }
 
 fn parse_rust_file_inner(
