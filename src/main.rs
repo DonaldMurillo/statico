@@ -1454,11 +1454,49 @@ fn run_plugin_doctor(path: &str) {
     print_status("statico binary", bin_ok);
 
     // Check runtimes.
-    let bun_ok = which_exists("bun");
-    print_status("bun (TypeScript plugins)", bun_ok);
+    let bun_system = which_exists("bun");
+    let bun_managed = statico::plugin::runtime::bun_is_installed();
+    let bun_ok = bun_system || bun_managed;
+    let bun_label = if bun_system {
+        "bun (system)"
+    } else if bun_managed {
+        "bun (managed)"
+    } else {
+        "bun (TypeScript plugins)"
+    };
+    print_status(bun_label, bun_ok);
+    if bun_ok {
+        if let Some(bun_path) = statico::plugin::runtime::find_bun() {
+            if let Ok(ver) = statico::plugin::runtime::check_bun_version(&bun_path) {
+                println!("    version: {}", ver);
+            }
+        }
+    }
 
     let cargo_ok = which_exists("cargo");
     print_status("cargo (Rust plugins)", cargo_ok);
+    if cargo_ok {
+        let output = std::process::Command::new("cargo").arg("--version").output().ok();
+        if let Some(out) = output {
+            let ver = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            println!("    {}", ver);
+        }
+    }
+
+    // Check managed runtime dir.
+    let runtime_dir = dirs::home_dir()
+        .unwrap_or_default()
+        .join(".statico/runtimes");
+    println!("\nRuntime directory: {}", runtime_dir.display());
+    if runtime_dir.exists() {
+        for entry in std::fs::read_dir(&runtime_dir).unwrap_or_else(|_| panic!("read_dir")) {
+            if let Ok(e) = entry {
+                println!("  {}", e.file_name().to_string_lossy());
+            }
+        }
+    } else {
+        println!("  (not created yet)");
+    }
 
     // Check for plugins.
     let plugins = statico::plugin::discovery::discover_plugins(&root);

@@ -200,7 +200,9 @@ fn build_command(plugin: &DiscoveredPlugin) -> Result<(String, Vec<String>), Str
         }
         PluginKind::TypeScript => {
             let entry = find_ts_entry(&plugin.path)?;
-            Ok(("bun".to_string(), vec![entry]))
+            let bun = crate::plugin::runtime::ensure_bun()
+                .map_err(|e| format!("Bun runtime unavailable: {}", e))?;
+            Ok((bun.to_string_lossy().to_string(), vec![entry]))
         }
         PluginKind::Rust => {
             let name = plugin
