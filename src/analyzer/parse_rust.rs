@@ -5,11 +5,22 @@ use std::path::Path;
 use crate::parse::blocks::extract_blocks;
 use crate::parse::metrics::count_loc;
 use crate::resolution::Resolver;
-use crate::types::*;
+use crate::languages::FileAnalysis;
+use crate::analyzer::parse_typescript::FileResult;
 
-use super::parse_typescript::FileResult;
+/// Parse a Rust file and return its result as a `FileAnalysis` (plugin interface).
+///
+/// This is the standalone version used by the `RustPlugin` language plugin.
+/// It does not need a `Resolver` because Rust has its own module resolution.
+pub fn parse_rust_file_standalone(
+    root: &Path,
+    rel_path: &str,
+    source: &str,
+) -> Option<FileAnalysis> {
+    parse_rust_file_inner(root, rel_path, source)
+}
 
-/// Parse a Rust file and return its result.
+/// Parse a Rust file and return its result (legacy interface).
 pub fn parse_rust_file(
     root: &Path,
     rel_path: &str,
@@ -17,6 +28,32 @@ pub fn parse_rust_file(
     source: &str,
     _resolver: &Resolver,
 ) -> Option<FileResult> {
+    parse_rust_file_inner(root, rel_path, source).map(|fa| {
+        let quality = fa.to_file_quality();
+        FileResult {
+            rel_path: fa.rel_path.clone(),
+            file_imports: crate::types::FileImports {
+                source: fa.rel_path,
+                targets: fa.dep_targets.clone(),
+            },
+            external_specs: fa.external_specs,
+            quality,
+            loc: fa.loc,
+            total_lines: fa.total_lines,
+            blocks: fa.blocks,
+            source: fa.source,
+            dep_targets: fa.dep_targets,
+            exports: fa.exports,
+            imported_names: fa.imported_names,
+        }
+    })
+}
+
+fn parse_rust_file_inner(
+    root: &Path,
+    rel_path: &str,
+    source: &str,
+) -> Option<FileAnalysis> {
     use crate::parse::rust::{
         RustAstParser, extract_exports as rust_extract_exports, extract_imports as rust_extract_imports,
         extract_mod_decls as rust_extract_mod_decls,
@@ -175,30 +212,21 @@ pub fn parse_rust_file(
     let cx_metrics = crate::parse::complexity::compute_metrics(root_node, source.as_bytes());
     let blocks = extract_blocks(root_node, source.as_bytes());
 
-    Some(FileResult {
+    Some(FileAnalysis {
         rel_path: rel_path.to_string(),
-        file_imports: FileImports { source: rel_path.to_string(), targets: dep_targets.clone() },
+        dep_targets,
         external_specs: vec![],
-        quality: FileQuality {
-            path: rel_path.to_string(),
-            metrics: Some(Metrics {
-                lines_of_code: loc,
-                total_lines: total,
-                functions: funcs,
-                classes,
-                complexity: cx_metrics.complexity,
-                max_nesting_depth: cx_metrics.max_nesting_depth,
-            }),
-            exports: exports.clone(),
-            parse_errors: vec![],
-        },
+        imported_names,
+        exports,
         loc,
         total_lines: total,
+        functions: funcs,
+        classes,
+        complexity: cx_metrics.complexity,
+        max_nesting_depth: cx_metrics.max_nesting_depth,
+        parse_errors: vec![],
         blocks,
         source: source.to_string(),
-        dep_targets,
-        exports,
-        imported_names,
     })
 }
 

@@ -5,6 +5,7 @@ pub mod discovery;
 pub mod duplication;
 pub mod frameworks;
 pub mod issues;
+pub mod languages;
 pub mod monorepo;
 pub mod output;
 pub mod parse;
