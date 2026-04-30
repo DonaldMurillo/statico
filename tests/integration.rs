@@ -427,6 +427,7 @@ fn cli_init_writes_shell_rc_file() {
     // Verify .zshrc was modified.
     let rc_content = std::fs::read_to_string(&zshrc).expect("read .zshrc");
     assert!(rc_content.contains("# statico"), "rc file should contain statico marker, got: {rc_content}");
+    assert!(rc_content.contains("export PATH="), "rc file should contain PATH export, got: {rc_content}");
     assert!(rc_content.contains("alias st='statico'"), "rc file should contain alias, got: {rc_content}");
     assert!(rc_content.contains("source"), "rc file should source completions, got: {rc_content}");
     // Should preserve existing content.

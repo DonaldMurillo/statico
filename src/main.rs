@@ -385,20 +385,24 @@ fn run_init(shell: Option<&str>) {
         generate(shell_type, &mut Cli::command(), "statico", &mut file);
     }
 
-    // Build the rc snippet.
+    // Build the rc snippet — PATH + alias + completions.
+    let exe = std::env::current_exe().expect("cannot determine current executable");
+    let bin_dir = exe.parent().unwrap_or_else(|| std::path::Path::new("/usr/local/bin"));
+    let bin_dir_str = bin_dir.display();
+
     let snippet = if is_fish {
         format!(
-            "\n# statico\nalias st statico\nsource {}\n",
+            "\n# statico\nset -gx PATH {bin_dir_str} $PATH\nalias st statico\nsource {}\n",
             completion_file.display()
         )
     } else if is_zsh {
         format!(
-            "\n# statico\nalias st='statico'\nsource {}\n",
+            "\n# statico\nexport PATH=\"{bin_dir_str}:$PATH\"\nalias st='statico'\nsource {}\n",
             completion_file.display()
         )
     } else {
         format!(
-            "\n# statico\nalias st='statico'\nsource {}\n",
+            "\n# statico\nexport PATH=\"{bin_dir_str}:$PATH\"\nalias st='statico'\nsource {}\n",
             completion_file.display()
         )
     };
