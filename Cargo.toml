@@ -19,7 +19,7 @@ tempfile = "3"
 tiny_http = "0.2"
 
 [dependencies]
-clap = { version = "4", features = ["derive"] }
+clap = { version = "4", features = ["derive", "color", "unstable-styles"] }
 clap_complete = "4"
 git-version = "0.3"
 serde = { version = "1", features = ["derive"] }

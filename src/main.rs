@@ -24,6 +24,16 @@ fn version_with_git() -> &'static str {
 /// Detects dead code, unused exports, circular dependencies, and other
 /// issues in TypeScript codebases. Supports multiple output formats
 /// including JSON, SARIF, Markdown, HTML, and AI-friendly formats.
+use clap::builder::styling::{AnsiColor, Styles};
+
+const STYLES: Styles = Styles::styled()
+    .header(AnsiColor::Green.on_default().bold())
+    .usage(AnsiColor::Green.on_default().bold())
+    .literal(AnsiColor::Cyan.on_default())
+    .placeholder(AnsiColor::Cyan.on_default())
+    .valid(AnsiColor::Green.on_default())
+    .invalid(AnsiColor::Yellow.on_default());
+
 #[derive(Parser)]
 #[command(
     name = "statico",
@@ -39,7 +49,8 @@ fn version_with_git() -> &'static str {
           statico update              # Self-update to latest version\n\
           statico init                # Set up shell alias & completions",
     arg_required_else_help = true,
-    help_template = "{name} {version}\n\n{about-with-newline}\n{usage-heading} {usage}\n\n{all-args}{after-help}",
+    styles = STYLES,
+    help_template = "{name} {version}\n\n{about-with-newline}{usage-heading} {usage}\n\n{all-args}{after-help}",
 )]
 struct Cli {
     /// Suppress non-essential output (progress bars, info messages).
