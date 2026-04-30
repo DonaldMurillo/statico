@@ -3,10 +3,15 @@
 //! All formatters implement the `OutputFormatter` trait and produce a string
 //! representation of an `AnalysisOutput` in various formats.
 
+pub mod ai;
+pub mod context;
 pub mod diff;
+pub mod fix;
 pub mod html;
 pub mod json_enriched;
 pub mod markdown;
+pub mod mermaid;
+pub mod pr_comment;
 pub mod sarif;
 
 use crate::types::AnalysisOutput;

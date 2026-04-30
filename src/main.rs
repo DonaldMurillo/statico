@@ -23,7 +23,7 @@ enum Commands {
         /// Path to the TypeScript project directory.
         path: String,
 
-        /// Output format: json, sarif, markdown, html.
+        /// Output format: json, sarif, markdown, html, ai, context, mermaid, pr-comment, fix.
         /// Defaults to config file value or "json".
         #[arg(long)]
         format: Option<String>,
@@ -125,7 +125,15 @@ fn run_analyze(path: &str, format: Option<&str>, min_confidence: Option<f64>, ex
         "sarif" => statico::output::sarif::SarifFormatter.format(&filtered),
         "markdown" | "md" => statico::output::markdown::MarkdownFormatter.format(&filtered),
         "html" => statico::output::html::HtmlFormatter.format(&filtered),
-        other => Err(format!("unknown format: '{}'. Use json, sarif, markdown, or html.", other)),
+        "ai" => statico::output::ai::AiFormatter.format(&filtered),
+        "context" => statico::output::context::ContextFormatter.format(&filtered),
+        "mermaid" => statico::output::mermaid::MermaidFormatter.format(&filtered),
+        "pr-comment" | "pr_comment" => statico::output::pr_comment::PrCommentFormatter.format(&filtered),
+        "fix" => statico::output::fix::FixFormatter.format(&filtered),
+        other => Err(format!(
+            "unknown format: '{}'. Use json, sarif, markdown, html, ai, context, mermaid, pr-comment, or fix.",
+            other
+        )),
     };
 
     match result {
