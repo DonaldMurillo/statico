@@ -830,3 +830,90 @@ fn test_plugin_docs_output() {
     assert!(stdout.contains("Hook Modes"), "expected Hook Modes in: {stdout}");
 }
 
+#[test]
+fn test_plugin_init_typescript() {
+    let tmp = tempfile::tempdir().unwrap();
+    let output = Command::new(statico_bin())
+        .args(["plugin", "init", "my-rule", "--lang", "typescript"])
+        .arg("--path")
+        .arg(tmp.path())
+        .output()
+        .expect("run plugin init");
+    assert!(output.status.success(), "stderr: {}", String::from_utf8_lossy(&output.stderr));
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("Created TypeScript plugin"), "expected success in: {stdout}");
+
+    let plugin_dir = tmp.path().join(".statico/plugins/my-rule");
+    assert!(plugin_dir.join("index.ts").exists(), "index.ts should exist");
+    assert!(plugin_dir.join("package.json").exists(), "package.json should exist");
+    assert!(plugin_dir.join("fixtures/sample.ts").exists(), "fixture should exist");
+}
+
+#[test]
+fn test_plugin_init_rust() {
+    let tmp = tempfile::tempdir().unwrap();
+    let output = Command::new(statico_bin())
+        .args(["plugin", "init", "my-rule", "--lang", "rust"])
+        .arg("--path")
+        .arg(tmp.path())
+        .output()
+        .expect("run plugin init");
+    assert!(output.status.success(), "stderr: {}", String::from_utf8_lossy(&output.stderr));
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("Created Rust plugin"), "expected success in: {stdout}");
+
+    let plugin_dir = tmp.path().join(".statico/plugins/my-rule");
+    assert!(plugin_dir.join("src/main.rs").exists(), "main.rs should exist");
+    assert!(plugin_dir.join("Cargo.toml").exists(), "Cargo.toml should exist");
+}
+
+#[test]
+fn test_plugin_init_rejects_duplicate() {
+    let tmp = tempfile::tempdir().unwrap();
+    // First init succeeds.
+    let out1 = Command::new(statico_bin())
+        .args(["plugin", "init", "dup-rule", "--lang", "typescript"])
+        .arg("--path")
+        .arg(tmp.path())
+        .output()
+        .expect("run plugin init");
+    assert!(out1.status.success());
+
+    // Second init fails.
+    let out2 = Command::new(statico_bin())
+        .args(["plugin", "init", "dup-rule", "--lang", "typescript"])
+        .arg("--path")
+        .arg(tmp.path())
+        .output()
+        .expect("run plugin init");
+    assert!(!out2.status.success(), "should fail on duplicate");
+    let stderr = String::from_utf8_lossy(&out2.stderr);
+    assert!(stderr.contains("already exists"), "expected error in: {stderr}");
+}
+
+#[test]
+fn test_plugin_doctor() {
+    let output = Command::new(statico_bin())
+        .args(["plugin", "doctor"])
+        .output()
+        .expect("run plugin doctor");
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("Plugin Doctor"), "expected Doctor header in: {stdout}");
+}
+
+#[test]
+fn test_plugin_build_empty() {
+    let tmp = tempfile::tempdir().unwrap();
+    let output = Command::new(statico_bin())
+        .args(["plugin", "build"])
+        .arg("--path")
+        .arg(tmp.path())
+        .output()
+        .expect("run plugin build");
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("No plugins found"), "expected no plugins message in: {stdout}");
+}
+
+

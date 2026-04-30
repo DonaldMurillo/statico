@@ -211,6 +211,63 @@ enum PluginAction {
     /// Human-readable guide to building plugins. Covers all hooks,
     /// message types, and lifecycle.
     Docs,
+
+    /// Scaffold a new plugin project.
+    ///
+    /// Creates a plugin directory in .statico/plugins/ with all
+    /// necessary files to get started.
+    Init {
+        /// Plugin name (used as directory name).
+        name: String,
+
+        /// Plugin language: typescript or rust.
+        #[arg(long, default_value = "typescript", value_name = "LANG")]
+        lang: String,
+
+        /// Project path (defaults to current directory).
+        #[arg(long, default_value = ".")]
+        path: String,
+    },
+
+    /// Build one or all plugins.
+    ///
+    /// Compiles Rust plugins via cargo, bundles TypeScript plugins via bun.
+    Build {
+        /// Build only this plugin (by name).
+        #[arg(long, value_name = "NAME")]
+        name: Option<String>,
+
+        /// Project path (defaults to current directory).
+        #[arg(long, default_value = ".")]
+        path: String,
+    },
+
+    /// Run a single plugin against a file.
+    ///
+    /// Spawns the plugin, sends init + analyze_file, prints the result.
+    /// Useful for development and debugging.
+    Run {
+        /// Plugin name to run.
+        name: String,
+
+        /// File to analyze.
+        #[arg(long, value_name = "FILE")]
+        file: String,
+
+        /// Project path (defaults to current directory).
+        #[arg(long, default_value = ".")]
+        path: String,
+    },
+
+    /// Check runtime readiness for plugin development.
+    ///
+    /// Verifies Bun (for TS plugins) and cargo (for Rust plugins)
+    /// are available and reports any issues.
+    Doctor {
+        /// Project path (defaults to current directory).
+        #[arg(long, default_value = ".")]
+        path: String,
+    },
 }
 
 fn main() {
@@ -276,6 +333,10 @@ fn main() {
                 PluginAction::List { path } => run_plugin_list(&path),
                 PluginAction::Schema { format } => run_plugin_schema(&format),
                 PluginAction::Docs => run_plugin_docs(),
+                PluginAction::Init { name, lang, path } => run_plugin_init(&name, &lang, &path),
+                PluginAction::Build { name, path } => run_plugin_build(name.as_deref(), &path),
+                PluginAction::Run { name, file, path } => run_plugin_run(&name, &file, &path),
+                PluginAction::Doctor { path } => run_plugin_doctor(&path),
             }
         }
     }
@@ -1085,4 +1146,361 @@ Shutdown:
 Full schema: statico plugin schema --format json
 "#;
     println!("{}", docs);
+}
+
+fn run_plugin_init(name: &str, lang: &str, path: &str) {
+    let root = std::path::Path::new(path);
+    let root = match std::fs::canonicalize(root) {
+        Ok(c) => c,
+        Err(_) => root.to_path_buf(),
+    };
+
+    let plugin_dir = root.join(".statico/plugins").join(name);
+    if plugin_dir.exists() {
+        eprintln!("Error: plugin '{}' already exists at {}", name, plugin_dir.display());
+        std::process::exit(1);
+    }
+
+    match lang {
+        "typescript" | "ts" => scaffold_typescript_plugin(name, &plugin_dir),
+        "rust" | "rs" => scaffold_rust_plugin(name, &plugin_dir),
+        other => {
+            eprintln!("Error: unsupported language '{}'. Use 'typescript' or 'rust'.", other);
+            std::process::exit(1);
+        }
+    }
+}
+
+fn scaffold_typescript_plugin(name: &str, dir: &std::path::Path) {
+    std::fs::create_dir_all(dir).unwrap();
+    std::fs::create_dir_all(dir.join("fixtures")).unwrap();
+
+    std::fs::write(
+        dir.join("package.json"),
+        serde_json::to_string_pretty(&serde_json::json!({
+            "name": name,
+            "version": "0.1.0",
+            "main": "index.ts",
+            "dependencies": {
+                "@statico/plugin-sdk": "../../sdks/typescript"
+            }
+        }))
+        .unwrap(),
+    ).unwrap();
+
+    std::fs::write(
+        dir.join("tsconfig.json"),
+        r#"{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true
+  },
+  "include": ["index.ts"]
+}"#,
+    ).unwrap();
+
+    std::fs::write(
+        dir.join("index.ts"),
+        format!(
+            r#"import {{ Plugin }} from "@statico/plugin-sdk";
+
+const plugin = Plugin.create("{name}", {{
+  hooks: {{ analyze_file: "add" }},
+  languages: ["typescript"],
+  rules: [
+    {{ id: "{name}", severity: "warning", description: "TODO: describe your rule" }},
+  ],
+}});
+
+plugin.onAnalyzeFile((params) => {{
+  const issues = [];
+  // TODO: implement your detection logic
+  // Example: detect console.log
+  // if (params.source.includes("console.log")) {{
+  //   issues.push({{
+  //     ruleId: "{name}",
+  //     severity: "warning",
+  //     message: "Found console.log",
+  //     file: params.path,
+  //     line: 1,
+  //     confidence: 0.9,
+  //   }});
+  // }}
+  return {{ issues }};
+}});
+
+plugin.start();
+"#
+        ),
+    ).unwrap();
+
+    std::fs::write(
+        dir.join("fixtures").join("sample.ts"),
+        "// Test fixture for plugin development\nexport function hello() {\n  console.log('hello');\n}\n",
+    ).unwrap();
+
+    std::fs::write(
+        dir.join("README.md"),
+        format!(
+            "# {name}\n\nA statico plugin.\n\n## Development\n\n```bash\nstatico plugin run {name} --file fixtures/sample.ts\n```\n\n## Protocol\n\nRun `statico plugin docs` for the full protocol reference.\n"
+        ),
+    ).unwrap();
+
+    println!("Created TypeScript plugin: {}", dir.display());
+    println!("\nNext steps:");
+    println!("  cd {}", dir.display());
+    println!("  # edit index.ts to implement your rule");
+    println!("  statico plugin run {} --file fixtures/sample.ts", name);
+}
+
+fn scaffold_rust_plugin(name: &str, dir: &std::path::Path) {
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    std::fs::create_dir_all(dir.join("fixtures")).unwrap();
+
+    std::fs::write(
+        dir.join("Cargo.toml"),
+        format!(
+            r#"[package]\nname = "{name}"\nversion = "0.1.0"\nedition = "2024"\n\n[dependencies]\nstatico-plugin-sdk = {{ path = "../../sdks/rust" }}\nserde_json = "1"\n"#
+        ),
+    ).unwrap();
+
+    std::fs::write(
+        dir.join("src").join("main.rs"),
+        format!(
+            r#"use statico_plugin_sdk::{{Plugin, PluginManifest, HookName, HookMode}};
+use std::collections::HashMap;
+
+fn main() {{
+    let mut plugin = Plugin::create("{name}", PluginManifest {{
+        version: Some("0.1.0".to_string()),
+        hooks: HashMap::from([(HookName::AnalyzeFile, HookMode::Add)]),
+        languages: vec!["rust".to_string()],
+        rules: vec![],
+    }});
+
+    plugin.on_analyze_file(|params| {{
+        // TODO: implement your detection logic
+        statico_plugin_sdk::AnalyzeFileResult::default()
+    }});
+
+    plugin.start();
+}}
+"#
+        ),
+    ).unwrap();
+
+    std::fs::write(
+        dir.join("fixtures").join("sample.rs"),
+        "// Test fixture for plugin development\nfn main() {\n    println!(\"hello\");\n}\n",
+    ).unwrap();
+
+    std::fs::write(
+        dir.join("README.md"),
+        format!(
+            "# {name}\n\nA statico Rust plugin.\n\n## Development\n\n```bash\ncargo build --release\nstatico plugin run {name} --file fixtures/sample.rs\n```\n\n## Protocol\n\nRun `statico plugin docs` for the full protocol reference.\n"
+        ),
+    ).unwrap();
+
+    println!("Created Rust plugin: {}", dir.display());
+    println!("\nNext steps:");
+    println!("  cd {}", dir.display());
+    println!("  cargo build --release");
+    println!("  statico plugin run {} --file fixtures/sample.rs", name);
+}
+
+fn run_plugin_build(name: Option<&str>, path: &str) {
+    let root = std::path::Path::new(path);
+    let root = match std::fs::canonicalize(root) {
+        Ok(c) => c,
+        Err(_) => root.to_path_buf(),
+    };
+
+    let plugins = statico::plugin::discovery::discover_plugins(&root);
+    let targets: Vec<_> = match name {
+        Some(n) => plugins.into_iter().filter(|p| &p.name == n).collect(),
+        None => plugins,
+    };
+
+    if targets.is_empty() {
+        if name.is_some() {
+            eprintln!("Plugin '{}' not found.", name.unwrap());
+            std::process::exit(1);
+        } else {
+            println!("No plugins found to build.");
+            return;
+        }
+    }
+
+    for plugin in &targets {
+        match plugin.kind {
+            statico::plugin::discovery::PluginKind::Rust => {
+                print!("Building Rust plugin '{}'... ", plugin.name);
+                let output = std::process::Command::new("cargo")
+                    .args(["build", "--release"])
+                    .current_dir(&plugin.path)
+                    .output()
+                    .expect("failed to run cargo");
+                if output.status.success() {
+                    println!("ok");
+                } else {
+                    println!("FAILED");
+                    eprintln!("{}", String::from_utf8_lossy(&output.stderr));
+                    std::process::exit(1);
+                }
+            }
+            statico::plugin::discovery::PluginKind::TypeScript => {
+                print!("TypeScript plugin '{}' (no build needed with Bun)... ", plugin.name);
+                println!("ok");
+            }
+            statico::plugin::discovery::PluginKind::Executable => {
+                println!("Skipping executable plugin '{}' (no build step)", plugin.name);
+            }
+        }
+    }
+}
+
+fn run_plugin_run(name: &str, file: &str, path: &str) {
+    let root = std::path::Path::new(path);
+    let root = match std::fs::canonicalize(root) {
+        Ok(c) => c,
+        Err(_) => root.to_path_buf(),
+    };
+
+    let source_path = root.join(file);
+    let source = match std::fs::read_to_string(&source_path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("Error reading '{}': {}", source_path.display(), e);
+            std::process::exit(1);
+        }
+    };
+
+    let plugins = statico::plugin::discovery::discover_plugins(&root);
+    let plugin = match plugins.into_iter().find(|p| p.name == name) {
+        Some(p) => p,
+        None => {
+            eprintln!("Plugin '{}' not found.", name);
+            std::process::exit(1);
+        }
+    };
+
+    print!("Starting plugin '{}'... ", name);
+    let mut active = match statico::plugin::manager::ActivePlugin::spawn(&plugin, &root) {
+        Ok(a) => {
+            println!("ok");
+            a
+        }
+        Err(e) => {
+            println!("FAILED");
+            eprintln!("Error: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    let lang = std::path::Path::new(file)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("unknown")
+        .to_string();
+
+    let params = statico::plugin::protocol::AnalyzeFileParams {
+        path: file.to_string(),
+        source,
+        language: lang,
+        existing_issues: vec![],
+    };
+
+    let result: statico::plugin::protocol::AnalyzeFileResult =
+        match active.send_request("analyze_file", &params) {
+            Ok(r) => r,
+            Err(e) => {
+                eprintln!("Error calling analyze_file: {}", e);
+                active.shutdown().ok();
+                std::process::exit(1);
+            }
+        };
+
+    println!("\nResults:");
+    println!("  Issues: {}", result.issues.len());
+    for issue in &result.issues {
+        println!("    [{}] {} ({}:{})", issue.severity.as_ref(), issue.message, issue.file, issue.line);
+    }
+    println!("  Exports: {}", result.exports.len());
+    for exp in &result.exports {
+        println!("    {}", exp);
+    }
+    println!("  Dependencies: {}", result.dependencies.len());
+    for dep in &result.dependencies {
+        println!("    {}", dep);
+    }
+
+    active.shutdown().ok();
+}
+
+fn run_plugin_doctor(path: &str) {
+    let root = std::path::Path::new(path);
+    let root = match std::fs::canonicalize(root) {
+        Ok(c) => c,
+        Err(_) => root.to_path_buf(),
+    };
+
+    println!("statico Plugin Doctor");
+    println!("====================\n");
+
+    // Check main binary.
+    let bin_ok = which_exists("statico");
+    print_status("statico binary", bin_ok);
+
+    // Check runtimes.
+    let bun_ok = which_exists("bun");
+    print_status("bun (TypeScript plugins)", bun_ok);
+
+    let cargo_ok = which_exists("cargo");
+    print_status("cargo (Rust plugins)", cargo_ok);
+
+    // Check for plugins.
+    let plugins = statico::plugin::discovery::discover_plugins(&root);
+    println!("\nPlugins in {}:", root.display());
+    if plugins.is_empty() {
+        println!("  (none)");
+    } else {
+        for p in &plugins {
+            let status = if p.enabled { "enabled" } else { "disabled" };
+            println!("  {} [{}] ({})", p.name, status, p.kind);
+        }
+    }
+
+    // Runtime recommendation.
+    let has_ts = plugins.iter().any(|p| matches!(p.kind, statico::plugin::discovery::PluginKind::TypeScript));
+    let has_rust = plugins.iter().any(|p| matches!(p.kind, statico::plugin::discovery::PluginKind::Rust));
+
+    if has_ts && !bun_ok {
+        println!("\nWARNING: TypeScript plugins detected but 'bun' not found.");
+        println!("  Install: curl -fsSL https://bun.sh/install | bash");
+    }
+    if has_rust && !cargo_ok {
+        println!("\nWARNING: Rust plugins detected but 'cargo' not found.");
+        println!("  Install: https://rustup.rs");
+    }
+
+    if (has_ts && bun_ok) || (has_rust && cargo_ok) || (!has_ts && !has_rust) {
+        println!("\nAll good!");
+    }
+}
+
+fn which_exists(cmd: &str) -> bool {
+    std::process::Command::new("which")
+        .arg(cmd)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
+}
+
+fn print_status(label: &str, ok: bool) {
+    let mark = if ok { "\u{2713}" } else { "\u{2717}" };
+    println!("  {} {}", mark, label);
 }

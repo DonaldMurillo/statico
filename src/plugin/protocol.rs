@@ -36,6 +36,26 @@ pub enum Severity {
     Info,
 }
 
+impl std::fmt::Display for Severity {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Severity::Error => write!(f, "error"),
+            Severity::Warning => write!(f, "warning"),
+            Severity::Info => write!(f, "info"),
+        }
+    }
+}
+
+impl AsRef<str> for Severity {
+    fn as_ref(&self) -> &str {
+        match self {
+            Severity::Error => "error",
+            Severity::Warning => "warning",
+            Severity::Info => "info",
+        }
+    }
+}
+
 /// A rule declared by a plugin in its capabilities.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Rule {
