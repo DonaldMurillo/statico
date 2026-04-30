@@ -366,6 +366,12 @@ fn run_analyze(
         eprintln!("info: include patterns: {:?}", config.include);
     }
 
+    // Initialize plugin pipeline.
+    let mut plugin_pipeline = statico::plugin::PluginPipeline::new(&root);
+    if !config.quiet && !plugin_pipeline.is_empty() {
+        eprintln!("info: {} plugin(s) active", plugin_pipeline.len());
+    }
+
     let output = match statico::analyzer::analyze_with_excludes(&root, &config.exclude) {
         Ok(o) => o,
         Err(msg) => {
@@ -374,6 +380,14 @@ fn run_analyze(
         }
     };
 
+    // Plugin post_analysis hook.
+    if !plugin_pipeline.is_empty() {
+        let plugin_results = plugin_pipeline.post_analysis(&output);
+        if !config.quiet && !plugin_results.is_empty() {
+            eprintln!("info: plugins contributed {} post-analysis results", plugin_results.len());
+        }
+    }
+
     // Apply confidence filter if threshold > 0.
     let filtered = if config.min_confidence > 0.0 {
         statico::output::filter_by_confidence(&output, config.min_confidence)
@@ -381,27 +395,32 @@ fn run_analyze(
         output
     };
 
-    let result = match config.format.as_str() {
-        "json" => statico::output::json_enriched::EnrichedJsonFormatter.format(&filtered),
-        "sarif" => statico::output::sarif::SarifFormatter.format(&filtered),
-        "markdown" | "md" => statico::output::markdown::MarkdownFormatter.format(&filtered),
-        "html" => statico::output::html::HtmlFormatter.format(&filtered),
-        "ai" => statico::output::ai::AiFormatter.format(&filtered),
-        "context" => statico::output::context::ContextFormatter.format(&filtered),
-        "mermaid" => statico::output::mermaid::MermaidFormatter.format(&filtered),
-        "pr-comment" | "pr_comment" => statico::output::pr_comment::PrCommentFormatter.format(&filtered),
-        "fix" => statico::output::fix::FixFormatter.format(&filtered),
-        other => Err(format!(
-            "unknown format: '{}'. Use json, sarif, markdown, html, ai, context, mermaid, pr-comment, or fix.",
-            other
-        )),
-    };
+    // Plugin format_output hook — if any plugin handles it, skip built-in formatting.
+    if let Some(plugin_output) = plugin_pipeline.format_output(&filtered, &config.format) {
+        println!("{}", plugin_output);
+    } else {
+        let result = match config.format.as_str() {
+            "json" => statico::output::json_enriched::EnrichedJsonFormatter.format(&filtered),
+            "sarif" => statico::output::sarif::SarifFormatter.format(&filtered),
+            "markdown" | "md" => statico::output::markdown::MarkdownFormatter.format(&filtered),
+            "html" => statico::output::html::HtmlFormatter.format(&filtered),
+            "ai" => statico::output::ai::AiFormatter.format(&filtered),
+            "context" => statico::output::context::ContextFormatter.format(&filtered),
+            "mermaid" => statico::output::mermaid::MermaidFormatter.format(&filtered),
+            "pr-comment" | "pr_comment" => statico::output::pr_comment::PrCommentFormatter.format(&filtered),
+            "fix" => statico::output::fix::FixFormatter.format(&filtered),
+            other => Err(format!(
+                "unknown format: '{}'. Use json, sarif, markdown, html, ai, context, mermaid, pr-comment, or fix.",
+                other
+            )),
+        };
 
-    match result {
-        Ok(text) => println!("{}", text),
-        Err(e) => {
-            eprintln!("error: {}", e);
-            process::exit(1);
+        match result {
+            Ok(text) => println!("{}", text),
+            Err(e) => {
+                eprintln!("error: {}", e);
+                process::exit(1);
+            }
         }
     }
 
