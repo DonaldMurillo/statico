@@ -125,7 +125,10 @@ impl PluginPipeline {
             match result {
                 Ok(result) => results.push(serde_json::to_value(result).unwrap_or(serde_json::Value::Null)),
                 Err(e) => {
-                    eprintln!("warning: plugin error in post_analysis: {}", e);
+                    // Method not found is fine — plugin doesn't implement this hook.
+                    if !e.contains("Method not found") {
+                        eprintln!("warning: plugin error in post_analysis: {}", e);
+                    }
                 }
             }
         }

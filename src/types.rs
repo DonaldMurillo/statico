@@ -44,6 +44,7 @@ pub struct IssueCounts {
     pub duplicate_exports: usize,
     pub unresolved_imports: usize,
     pub unlisted_dependencies: usize,
+    pub plugin_issues: usize,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -134,6 +135,8 @@ pub struct Issues {
     pub unresolved_imports: Vec<UnresolvedImportIssue>,
     /// External imports not listed in package.json.
     pub unlisted_dependencies: Vec<UnlistedDepIssue>,
+    /// Issues contributed by plugins.
+    pub plugin_issues: Vec<crate::plugin::protocol::PluginIssue>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

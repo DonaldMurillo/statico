@@ -72,6 +72,7 @@ pub fn detect_issues(ctx: &IssueContext) -> Issues {
         unused_dependencies: unused_deps::detect(ctx.root, ctx.external_imports),
         unresolved_imports: unresolved_imports::detect(ctx.dep_graph),
         unlisted_dependencies: unlisted_deps::detect(ctx.root, &build_external_import_pairs(ctx.file_sources)),
+        plugin_issues: vec![],
     }
 }
 

@@ -220,7 +220,7 @@ enum PluginAction {
         /// Plugin name (used as directory name).
         name: String,
 
-        /// Plugin language: typescript or rust.
+        /// Plugin language: typescript, rust, or python.
         #[arg(long, default_value = "typescript", value_name = "LANG")]
         lang: String,
 
@@ -372,13 +372,35 @@ fn run_analyze(
         eprintln!("info: {} plugin(s) active", plugin_pipeline.len());
     }
 
-    let output = match statico::analyzer::analyze_with_excludes(&root, &config.exclude) {
+    let mut output = match statico::analyzer::analyze_with_excludes(&root, &config.exclude) {
         Ok(o) => o,
         Err(msg) => {
             eprintln!("error: {}", msg);
             process::exit(1);
         }
     };
+
+    // Plugin per-file analysis: analyze_file hook.
+    // This is the primary hook for plugins that detect per-file issues.
+    if !plugin_pipeline.is_empty() {
+        let source_files = &output.structure.source_files;
+        let root_path = std::path::Path::new(&root);
+        for file_entry in source_files {
+            let rel_path = &file_entry.path;
+            let abs_path = root_path.join(rel_path);
+            let source = match std::fs::read_to_string(&abs_path) {
+                Ok(s) => s,
+                Err(_) => continue,
+            };
+            let language = &file_entry.language;
+            let results = plugin_pipeline.analyze_file(rel_path, &source, language);
+            for result in results {
+                if !result.issues.is_empty() {
+                    output.issues.plugin_issues.extend(result.issues);
+                }
+            }
+        }
+    }
 
     // Plugin post_analysis hook.
     if !plugin_pipeline.is_empty() {
@@ -1307,8 +1329,9 @@ fn run_plugin_init(name: &str, lang: &str, path: &str) {
     match lang {
         "typescript" | "ts" => scaffold_typescript_plugin(name, &plugin_dir),
         "rust" | "rs" => scaffold_rust_plugin(name, &plugin_dir),
+        "python" | "py" => scaffold_python_plugin(name, &plugin_dir),
         other => {
-            eprintln!("Error: unsupported language '{}'. Use 'typescript' or 'rust'.", other);
+            eprintln!("Error: unsupported language '{}'. Use 'typescript', 'rust', or 'python'.", other);
             std::process::exit(1);
         }
     }
@@ -1451,6 +1474,114 @@ fn main() {{
     println!("  cd {}", dir.display());
     println!("  cargo build --release");
     println!("  statico plugin run {} --file fixtures/sample.rs", name);
+}
+
+fn scaffold_python_plugin(name: &str, dir: &std::path::Path) {
+    std::fs::create_dir_all(dir).unwrap();
+    std::fs::create_dir_all(dir.join("fixtures")).unwrap();
+
+    std::fs::write(
+        dir.join("package.json"),
+        serde_json::to_string_pretty(&serde_json::json!({
+            "name": name,
+            "version": "0.1.0",
+            "statico": {
+                "runtime": "python3",
+                "entry": "plugin.py"
+            }
+        }))
+        .unwrap(),
+    ).unwrap();
+
+    std::fs::write(
+        dir.join("plugin.py"),
+        format!(
+            r#"#!/usr/bin/env python3
+\"\"\"Statico plugin: {name}\"\"\"
+
+import sys
+import json
+
+def send_response(result, req_id):
+    msg = json.dumps({{"jsonrpc": "2.0", "id": req_id, "result": result}})
+    sys.stdout.write(msg + "\n")
+    sys.stdout.flush()
+
+def send_error(code, message, req_id):
+    msg = json.dumps({{"jsonrpc": "2.0", "id": req_id, "error": {{"code": code, "message": message}}}})
+    sys.stdout.write(msg + "\n")
+    sys.stdout.flush()
+
+def analyze_file(params):
+    source = params.get("source", "")
+    path = params.get("path", "")
+    issues = []
+
+    # TODO: implement your detection logic
+    # Example: detect bare except clauses
+    # for i, line in enumerate(source.splitlines(), 1):
+    #     if line.strip() == "except:":
+    #         issues.append({{
+    #             "ruleId": "{name}",
+    #             "severity": "warning",
+    #             "message": "Bare except clause",
+    #             "file": path,
+    #             "line": i,
+    #             "confidence": 0.9,
+    #         }})
+
+    return {{"issues": issues}}
+
+def main():
+    for line in sys.stdin:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            req = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+
+        method = req.get("method", "")
+        req_id = req.get("id")
+        params = req.get("params", {{}})
+
+        if method == "init":
+            send_response({{
+                "name": "{name}",
+                "version": "0.1.0",
+                "hooks": {{"analyze_file": "add"}},
+                "languages": ["python"],
+                "rules": [],
+            }}, req_id)
+        elif method == "analyze_file":
+            send_response(analyze_file(params), req_id)
+        else:
+            send_error(-32601, f"Method not found: {{method}}", req_id)
+
+if __name__ == "__main__":
+    main()
+"#
+        ),
+    ).unwrap();
+
+    std::fs::write(
+        dir.join("fixtures").join("sample.py"),
+        "# Test fixture for plugin development\ndef hello():\n    pass\n",
+    ).unwrap();
+
+    std::fs::write(
+        dir.join("README.md"),
+        format!(
+            "# {name}\n\nA statico Python plugin.\n\n## Development\n\n```bash\nstatico plugin run {name} --file fixtures/sample.py\n```\n\n## Protocol\n\nRun `statico plugin docs` for the full protocol reference.\n"
+        ),
+    ).unwrap();
+
+    println!("Created Python plugin: {}", dir.display());
+    println!("\nNext steps:");
+    println!("  cd {}", dir.display());
+    println!("  # edit plugin.py to implement your rule");
+    println!("  statico plugin run {} --file fixtures/sample.py", name);
 }
 
 fn run_plugin_build(name: Option<&str>, path: &str) {

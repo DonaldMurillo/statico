@@ -147,6 +147,7 @@ mod tests {
                 unused_dependencies: vec![],
                 unresolved_imports: vec![],
                 unlisted_dependencies: vec![],
+                plugin_issues: vec![],
             },
             duplication: DuplicationSection {
                 stats: DuplicationStats {

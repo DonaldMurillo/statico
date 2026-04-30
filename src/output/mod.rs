@@ -41,6 +41,7 @@ pub fn compute_summary(output: &AnalysisOutput) -> crate::types::Summary {
         duplicate_exports: output.issues.duplicate_exports.len(),
         unresolved_imports: output.issues.unresolved_imports.len(),
         unlisted_dependencies: output.issues.unlisted_dependencies.len(),
+        plugin_issues: output.issues.plugin_issues.len(),
     };
 
     let dup_pct = output.duplication.stats.duplication_percentage;
@@ -50,7 +51,8 @@ pub fn compute_summary(output: &AnalysisOutput) -> crate::types::Summary {
         + issue_counts.unused_exports
         + issue_counts.unused_types
         + issue_counts.gotchas
-        + issue_counts.circular_dependencies;
+        + issue_counts.circular_dependencies
+        + issue_counts.plugin_issues;
     let density = if total_files > 0 { total_issues as f64 / total_files as f64 } else { 0.0 };
     let health_score = (100.0 - density * 10.0 - dup_pct * 0.3).clamp(0.0, 100.0);
 

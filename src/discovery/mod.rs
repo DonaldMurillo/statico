@@ -11,7 +11,7 @@ use std::path::Path;
 
 pub use entry_points::{EntryPoints, discover_entry_points};
 
-const SOURCE_EXTENSIONS: &[&str] = &["ts", "tsx", "js", "jsx", "rs"];
+const SOURCE_EXTENSIONS: &[&str] = &["ts", "tsx", "js", "jsx", "rs", "py"];
 
 /// Discover all source files in the project, returning (relative_path, language).
 /// If `exclude` is provided, files matching those glob patterns are skipped.
@@ -49,6 +49,7 @@ pub fn discover_source_files(root: &Path) -> Result<Vec<(String, String)>, Strin
             "js" => "javascript",
             "jsx" => "jsx",
             "rs" => "rust",
+            "py" => "python",
             _ => continue,
         };
 

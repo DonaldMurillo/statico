@@ -16,3 +16,4 @@ benchmarks/rust-results/
 benchmarks/results/
 
 .claude/
+tmp-plugin-test/

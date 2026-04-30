@@ -41,6 +41,7 @@ statico performs whole-project static analysis by parsing your source files, res
 - 🎨 **HTML interactive report** — self-contained dark/light theme HTML dashboard
 - 💬 **PR comment format** — GitHub-flavored Markdown ready for PR review comments
 - ⚡ **Parallel analysis** — multi-threaded parsing via Rayon
+- 🧩 **Plugin system** — extend analysis with custom rules in any language (TypeScript, Python, Rust, or any executable)
 
 ## Installation
 
@@ -100,6 +101,7 @@ Commands:
   analyze  Analyze a TypeScript project
   tui      Show interactive terminal dashboard
   diff     Compare two analysis outputs
+  plugin   Plugin management (init, build, run, list, doctor, schema, docs)
 
 Options:
   --quiet   Suppress progress output
@@ -257,6 +259,30 @@ threads = 0
 ```
 
 When no `.statico.toml` is present, statico uses sensible defaults (format: `json`, all source files included, auto-threading).
+
+## Plugins
+
+statico supports plugins that extend analysis with custom rules. Plugins run as subprocesses communicating via JSON-RPC 2.0 over stdin/stdout — **any language** works.
+
+```bash
+# Scaffold a new plugin
+statico plugin init my-rule --lang typescript
+statico plugin init my-rule --lang rust
+
+# Build a Rust plugin
+statico plugin build --name my-rule
+
+# Run a plugin against a file
+statico plugin run my-rule --file src/index.ts
+
+# List discovered plugins
+statico plugin list
+
+# Check runtime health
+statico plugin doctor
+```
+
+Plugins are auto-discovered from `.statico/plugins/` in your project root. See [docs/plugins.md](docs/plugins.md) for the full guide including TypeScript SDK, Python (no SDK), Rust SDK, protocol reference, and AI-assisted development.
 
 ## Framework Profiles
 

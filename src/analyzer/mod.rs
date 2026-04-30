@@ -141,19 +141,6 @@ fn parse_all_files_plugin(
         .par_iter()
         .map(|(rel_path, lang)| {
             let ext = rel_path.rsplit('.').next().unwrap_or("");
-            // Use the static plugin registry (compile-time known, no allocation)
-            let plugin = plugin_for_extension(ext)
-                .or_else(|| {
-                    // Try matching by language name
-                    static PLUGINS: std::sync::OnceLock<Vec<Box<dyn LanguagePlugin>>> = std::sync::OnceLock::new();
-                    let plugins = PLUGINS.get_or_init(all_plugins);
-                    plugins.iter().find(|p| p.name() == lang).map(|p| p.as_ref())
-                })
-                .unwrap_or_else(|| {
-                    // Last resort: use TypeScript plugin
-                    plugin_for_extension("ts").unwrap()
-                });
-
             let abs_path = root.join(rel_path);
             let source = match std::fs::read_to_string(&abs_path) {
                 Ok(s) => s,
@@ -163,7 +150,38 @@ fn parse_all_files_plugin(
                 }
             };
 
-            let result = plugin.analyze_file(&root, rel_path, &source);
+            // Use the static plugin registry (compile-time known, no allocation)
+            let plugin = plugin_for_extension(ext)
+                .or_else(|| {
+                    // Try matching by language name
+                    static PLUGINS: std::sync::OnceLock<Vec<Box<dyn LanguagePlugin>>> = std::sync::OnceLock::new();
+                    let plugins = PLUGINS.get_or_init(all_plugins);
+                    plugins.iter().find(|p| p.name() == lang).map(|p| p.as_ref())
+                });
+
+            let result = if let Some(plugin) = plugin {
+                plugin.analyze_file(&root, rel_path, &source)
+            } else {
+                // No native parser for this language (e.g. Python) —
+                // return minimal FileAnalysis so the file is tracked
+                // for plugins to process via analyze_file hook.
+                Some(FileAnalysis {
+                    rel_path: rel_path.clone(),
+                    dep_targets: vec![],
+                    external_specs: vec![],
+                    imported_names: vec![],
+                    exports: vec![],
+                    loc: source.lines().count(),
+                    total_lines: source.lines().count(),
+                    functions: 0,
+                    classes: 0,
+                    complexity: 0,
+                    max_nesting_depth: 0,
+                    parse_errors: vec![],
+                    blocks: vec![],
+                    source,
+                })
+            };
             progress.inc();
             result
         })
