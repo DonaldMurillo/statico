@@ -28,6 +28,12 @@ pub struct StaticoConfig {
     /// Number of threads (0 = auto)
     #[serde(default)]
     pub threads: usize,
+    /// Disable auto-discovery of plugins in .statico/plugins/
+    #[serde(default = "default_true")]
+    pub plugin_auto_discover: bool,
+    /// Plugin declarations (merged with auto-discovery).
+    #[serde(default)]
+    pub plugin: Vec<PluginEntry>,
 }
 
 fn default_format() -> String {
@@ -35,6 +41,30 @@ fn default_format() -> String {
 }
 fn default_max_file_size() -> u64 {
     1_000_000
+}
+fn default_true() -> bool {
+    true
+}
+
+/// A plugin entry in .statico.toml.
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct PluginEntry {
+    pub name: String,
+    #[serde(default)]
+    pub path: Option<String>,
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    /// If true, override ALL hooks this plugin registers.
+    #[serde(default, rename = "override")]
+    pub r#override: bool,
+    #[serde(default)]
+    pub languages: Vec<String>,
+    #[serde(default = "default_toml_table")]
+    pub settings: toml::Value,
+}
+
+fn default_toml_table() -> toml::Value {
+    toml::Value::Table(toml::map::Map::new())
 }
 
 impl Default for StaticoConfig {
@@ -48,6 +78,8 @@ impl Default for StaticoConfig {
             include: Vec::new(),
             max_file_size: default_max_file_size(),
             threads: 0,
+            plugin_auto_discover: true,
+            plugin: Vec::new(),
         }
     }
 }
@@ -221,6 +253,8 @@ exclude = ["vendor"]
             include: vec!["src/**/*.tsx".into()],
             max_file_size: 2_000_000,
             threads: 8,
+            plugin_auto_discover: true,
+            plugin: vec![],
         };
         let toml_str = toml::to_string(&c).unwrap();
         let parsed: StaticoConfig = toml::from_str(&toml_str).unwrap();
@@ -230,5 +264,32 @@ exclude = ["vendor"]
         assert_eq!(parsed.exclude, c.exclude);
         assert_eq!(parsed.max_file_size, c.max_file_size);
         assert_eq!(parsed.threads, c.threads);
+    }
+
+    #[test]
+    fn test_parse_plugin_config() {
+        let c: StaticoConfig = toml::from_str(
+            r#"
+format = "json"
+plugin_auto_discover = false
+
+[[plugin]]
+name = "my-rule"
+path = "./plugins/my-rule"
+enabled = true
+languages = ["typescript"]
+
+[[plugin]]
+name = "acme-fork"
+override = true
+"#,
+        )
+        .unwrap();
+        assert!(!c.plugin_auto_discover);
+        assert_eq!(c.plugin.len(), 2);
+        assert_eq!(c.plugin[0].name, "my-rule");
+        assert_eq!(c.plugin[0].path, Some("./plugins/my-rule".to_string()));
+        assert!(c.plugin[0].enabled);
+        assert!(c.plugin[1].r#override);
     }
 }
