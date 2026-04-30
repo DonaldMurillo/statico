@@ -8,6 +8,7 @@ pub mod issues;
 pub mod languages;
 pub mod monorepo;
 pub mod output;
+pub mod plugin;
 pub mod parse;
 pub mod progress;
 pub mod resolution;
