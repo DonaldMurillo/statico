@@ -277,6 +277,11 @@ pub fn find_crate_src_root(root: &Path, rel_path: &str) -> String {
 /// - `<crate_name>::foo` → same as `crate::foo` (for binary→library references)
 ///
 /// Returns `None` for external crates (std, serde, etc.) and unresolvable paths.
+/// Public wrapper for Rust use-path resolution, used by the RustPlugin.
+pub fn resolve_rust_use_path_public(root: &Path, current_rel: &str, use_path: &str) -> Option<String> {
+    resolve_rust_use_path(root, current_rel, use_path)
+}
+
 fn resolve_rust_use_path(root: &Path, current_rel: &str, use_path: &str) -> Option<String> {
     let crate_src = find_crate_src_root(root, current_rel);
     let parts: Vec<&str> = use_path.split("::").collect();

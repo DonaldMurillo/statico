@@ -4,6 +4,7 @@ mod parse_rust;
 mod parse_typescript;
 
 pub use parse_rust::parse_rust_file_standalone;
+pub use parse_rust::resolve_rust_use_path_public;
 
 use std::path::Path;
 

@@ -176,6 +176,17 @@ pub trait LanguagePlugin: Send + Sync {
     fn should_skip_file(&self, _rel_path: &str) -> bool {
         false
     }
+
+    /// Resolve an import specifier to a file path relative to the project root.
+    ///
+    /// Each language has its own resolution strategy:
+    /// - TypeScript: tsconfig path aliases, relative imports, extension probing
+    /// - Rust: mod.rs resolution, Cargo.toml crate discovery
+    ///
+    /// Returns the resolved file path relative to `root`, or `None` if unresolvable.
+    fn resolve_import(&self, _root: &Path, _from_file: &str, _spec: &str) -> Option<String> {
+        None
+    }
 }
 
 // ---------------------------------------------------------------------------

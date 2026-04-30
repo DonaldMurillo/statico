@@ -142,6 +142,13 @@ impl LanguagePlugin for TypeScriptPlugin {
     fn should_skip_file(&self, rel_path: &str) -> bool {
         rel_path.ends_with(".d.ts")
     }
+
+    fn resolve_import(&self, root: &Path, from_file: &str, spec: &str) -> Option<String> {
+        let resolver = self.get_resolver(root);
+        let abs_path = root.join(from_file);
+        let file_dir = abs_path.parent().unwrap_or(root);
+        resolver.resolve(file_dir, spec).map(|p| crate::resolution::path_relative_to(root, &p))
+    }
 }
 
 /// Build a resolver with tsconfig path aliases and workspace packages loaded.

@@ -32,4 +32,8 @@ impl LanguagePlugin for RustPlugin {
     fn skip_dirs(&self) -> &[&str] {
         &["target"]
     }
+
+    fn resolve_import(&self, root: &Path, from_file: &str, spec: &str) -> Option<String> {
+        crate::analyzer::resolve_rust_use_path_public(root, from_file, spec)
+    }
 }
