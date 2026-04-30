@@ -1,4 +1,4 @@
-//! statico CLI — Static code analyzer for TypeScript projects.
+//! statico CLI — Static code analyzer for TypeScript and Rust projects.
 
 use clap::{CommandFactory, Parser};
 use clap_complete::{generate, Shell};
@@ -19,21 +19,38 @@ fn version_with_git() -> &'static str {
     }
 }
 
-/// Static code analyzer for TypeScript projects.
+/// Static code analyzer for TypeScript and Rust projects.
 ///
 /// Detects dead code, unused exports, circular dependencies, and other
 /// issues in TypeScript codebases. Supports multiple output formats
 /// including JSON, SARIF, Markdown, HTML, and AI-friendly formats.
+use clap::builder::styling::{AnsiColor, Styles};
+
+const STYLES: Styles = Styles::styled()
+    .header(AnsiColor::Green.on_default().bold())
+    .usage(AnsiColor::Green.on_default().bold())
+    .literal(AnsiColor::Cyan.on_default())
+    .placeholder(AnsiColor::Cyan.on_default())
+    .valid(AnsiColor::Green.on_default())
+    .invalid(AnsiColor::Yellow.on_default());
+
 #[derive(Parser)]
 #[command(
     name = "statico",
     version = version_with_git(),
-    about = "Static code analyzer for TypeScript projects",
-    long_about = "Static code analyzer for TypeScript projects.\n\n\
+    about = "Static code analyzer for TypeScript and Rust projects",
+    long_about = "Static code analyzer for TypeScript and Rust projects.\n\n\
         Detects dead code, unused exports, circular dependencies, and other \
         quality issues. Supports multiple output formats for CI integration, \
-        code review, and AI-assisted workflows.",
+        code review, and AI-assisted workflows.\n\n\
+        Quick start:\n\
+          statico analyze .           # Analyze current directory\n\
+          statico analyze . --format markdown  # Markdown output\n\
+          statico update              # Self-update to latest version\n\
+          statico init                # Set up shell alias & completions",
     arg_required_else_help = true,
+    styles = STYLES,
+    help_template = "{name} {version}\n\n{about-with-newline}{usage-heading} {usage}\n\n{all-args}{after-help}",
 )]
 struct Cli {
     /// Suppress non-essential output (progress bars, info messages).
@@ -48,9 +65,10 @@ struct Cli {
 
 #[derive(clap::Subcommand)]
 enum Commands {
-    /// Analyze a TypeScript project for code quality issues.
+    /// Analyze a project for code quality issues.
     Analyze {
-        /// Path to the TypeScript project directory.
+        /// Path to the project directory.
+        #[arg(default_value = ".")]
         path: String,
 
         /// Output format for analysis results.
@@ -76,7 +94,8 @@ enum Commands {
 
     /// Show an interactive terminal dashboard for exploring analysis results.
     Tui {
-        /// Path to the TypeScript project directory.
+        /// Path to the project directory.
+        #[arg(default_value = ".")]
         path: String,
 
         /// Minimum confidence threshold (0.0–1.0) for filtering displayed issues.
@@ -110,11 +129,64 @@ enum Commands {
         #[arg(value_name = "SHELL")]
         shell: Shell,
     },
+
+    /// Update statico to the latest version.
+    ///
+    /// Checks GitHub releases for a newer version and performs an in-place
+    /// binary update. No sudo required.
+    Update {
+        /// Only check for updates, don't install.
+        #[arg(long)]
+        check: bool,
+    },
+
+    /// Set up shell integration (alias, completions, PATH).
+    ///
+    /// Installs the `st` alias, shell completions, and ensures statico
+    /// is on your PATH. Run this once after installing.
+    Init {
+        /// Shell to configure (auto-detected if not specified).
+        #[arg(long, value_name = "SHELL")]
+        shell: Option<String>,
+    },
+
+    /// Diagnose common installation issues.
+    ///
+    /// Checks PATH, shell integration, binary location, and version.
+    Doctor,
+
+    /// Set up AI integration for the current project.
+    ///
+    /// Generates skills for Claude Code, pi, and Cursor so AI assistants
+    /// can run statico analysis and understand the results.
+    Setup {
+        /// What to generate.
+        ///
+        /// - claude: .claude/ directory with skills + CLAUDE.md
+        /// - pi: .pi/skills/ with SKILL.md files
+        /// - cursor: .cursor/rules with statico context
+        /// - all: everything (default)
+        #[arg(long, default_value = "all", value_name = "TARGET")]
+        target: String,
+
+        /// Project path (defaults to current directory).
+        #[arg(long, default_value = ".")]
+        path: String,
+
+        /// Overwrite existing files without prompting.
+        #[arg(long)]
+        force: bool,
+    },
 }
 
 fn main() {
     let cli = Cli::parse();
     let quiet = cli.quiet;
+
+    // Non-blocking version check (rate-limited to once per day).
+    if !quiet {
+        statico::update::check_and_notify();
+    }
 
     match cli.command {
         Commands::Analyze {
@@ -148,6 +220,22 @@ fn main() {
         }
         Commands::Completions { shell } => {
             generate(shell, &mut Cli::command(), "statico", &mut std::io::stdout());
+        }
+        Commands::Update { check } => {
+            run_update(check);
+        }
+        Commands::Init { shell } => {
+            run_init(shell.as_deref());
+        }
+        Commands::Doctor => {
+            run_doctor();
+        }
+        Commands::Setup {
+            target,
+            path,
+            force,
+        } => {
+            run_setup(&target, &path, force);
         }
     }
 }
@@ -270,4 +358,523 @@ fn has_issues_above_confidence(output: &statico::types::AnalysisOutput, _min_con
         || !issues.gotchas.is_empty()
         || !issues.unresolved_imports.is_empty()
         || !issues.duplicate_exports.is_empty()
+}
+
+// ---------------------------------------------------------------------------
+// Self-update
+// ---------------------------------------------------------------------------
+
+fn run_update(check_only: bool) {
+    match statico::update::run_update(check_only) {
+        Ok(msg) => println!("{}", msg),
+        Err(e) => {
+            eprintln!("error: {}", e);
+            process::exit(1);
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Shell init (alias + completions + PATH)
+// ---------------------------------------------------------------------------
+
+fn run_init(shell: Option<&str>) {
+    use std::io::Write;
+
+    let shell = shell
+        .map(|s| s.to_string())
+        .or_else(|| std::env::var("SHELL").ok())
+        .unwrap_or_else(|| "bash".to_string());
+
+    let is_zsh = shell.contains("zsh");
+    let _is_bash = shell.contains("bash");
+    let is_fish = shell.contains("fish");
+
+    let rc_file = if is_zsh {
+        dirs::home_dir().map(|h| h.join(".zshrc"))
+    } else if is_fish {
+        dirs::home_dir().map(|h| h.join(".config/fish/config.fish"))
+    } else {
+        dirs::home_dir().map(|h| h.join(".bashrc"))
+    };
+
+    let Some(rc_file) = rc_file else {
+        eprintln!("error: cannot determine home directory");
+        process::exit(1);
+    };
+
+    // Ensure data dir exists.
+    let data_dir = statico::update::data_dir();
+    let completions_dir = data_dir.join("completions");
+    std::fs::create_dir_all(&completions_dir).ok();
+
+    // Generate completion file.
+    let completion_file = if is_fish {
+        completions_dir.join("statico.fish")
+    } else {
+        completions_dir.join("statico.bash")
+    };
+
+    let shell_type = if is_fish {
+        Shell::Fish
+    } else if is_zsh {
+        Shell::Zsh
+    } else {
+        Shell::Bash
+    };
+
+    {
+        let mut file = std::fs::File::create(&completion_file)
+            .expect("failed to create completion file");
+        generate(shell_type, &mut Cli::command(), "statico", &mut file);
+    }
+
+    // Build the rc snippet — PATH + alias + completions.
+    let exe = std::env::current_exe().expect("cannot determine current executable");
+    let bin_dir = exe.parent().unwrap_or_else(|| std::path::Path::new("/usr/local/bin"));
+    let bin_dir_str = bin_dir.display();
+
+    let snippet = if is_fish {
+        format!(
+            "\n# statico\nset -gx PATH {bin_dir_str} $PATH\nalias st statico\nsource {}\n",
+            completion_file.display()
+        )
+    } else if is_zsh {
+        format!(
+            "\n# statico\nexport PATH=\"{bin_dir_str}:$PATH\"\nalias st='statico'\nsource {}\n",
+            completion_file.display()
+        )
+    } else {
+        format!(
+            "\n# statico\nexport PATH=\"{bin_dir_str}:$PATH\"\nalias st='statico'\nsource {}\n",
+            completion_file.display()
+        )
+    };
+
+    // Check if already configured.
+    let rc_content = std::fs::read_to_string(&rc_file).unwrap_or_default();
+    if rc_content.contains("# statico") {
+        println!("Shell integration already configured in {}", rc_file.display());
+        println!("  alias: st='statico'");
+        println!("  completions: {}", completion_file.display());
+        return;
+    }
+
+    // Append to rc file.
+    let mut file = std::fs::OpenOptions::new()
+        .append(true)
+        .open(&rc_file)
+        .expect("failed to open rc file");
+    file.write_all(snippet.as_bytes()).expect("failed to write rc file");
+
+    println!("\x1b[32m✓ Shell integration configured!\x1b[0m");
+    println!("  Shell:    {}", if is_zsh { "zsh" } else if is_fish { "fish" } else { "bash" });
+    println!("  Config:   {}", rc_file.display());
+    println!("  Alias:    st → statico");
+    println!("  Complete: {}", completion_file.display());
+    println!();
+    println!("Restart your shell or run:");
+    if is_fish {
+        println!("  source {}", rc_file.display());
+    } else {
+        println!("  source {}", rc_file.display());
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Doctor — diagnose installation
+// ---------------------------------------------------------------------------
+// AI setup — generate skills and context for AI assistants
+// ---------------------------------------------------------------------------
+
+fn run_setup(target: &str, path: &str, force: bool) {
+    use std::io::Write;
+
+    let root = std::path::Path::new(path);
+    if !root.exists() {
+        eprintln!("error: path {} does not exist", path);
+        process::exit(1);
+    }
+
+    let generate_all = target == "all";
+    let generate_claude = generate_all || target == "claude";
+    let generate_cursor = generate_all || target == "cursor";
+    let generate_pi = generate_all || target == "pi";
+
+    if !generate_claude && !generate_cursor && !generate_pi {
+        eprintln!("error: unknown target '{}'. Use: claude, cursor, pi, or all", target);
+        process::exit(1);
+    }
+
+    let mut files_written = 0usize;
+
+    // Update .gitignore for user-specific AI config dirs.
+    let gitignore = root.join(".gitignore");
+    if gitignore.exists() {
+        let content = std::fs::read_to_string(&gitignore).unwrap_or_default();
+        let mut additions = Vec::new();
+        if generate_claude && !content.lines().any(|l| l == ".claude/") {
+            additions.push(".claude/");
+        }
+        if generate_pi && !content.lines().any(|l| l == ".pi/") {
+            additions.push(".pi/");
+        }
+        if !additions.is_empty() {
+            let mut f = std::fs::OpenOptions::new().append(true).open(&gitignore).expect("open .gitignore");
+            for a in &additions {
+                let _ = f.write_all(format!("\n{}\n", a).as_bytes());
+            }
+        }
+    }
+
+    // --- Claude Code setup ---
+    if generate_claude {
+        let claude_dir = root.join(".claude");
+
+        // CLAUDE.md — project-level context
+        let claude_md = claude_dir.join("CLAUDE.md");
+        if claude_md.exists() && !force {
+            println!("  skipping {} (already exists, use --force to overwrite)", claude_md.display());
+        } else {
+            std::fs::create_dir_all(&claude_dir).expect("create .claude dir");
+            std::fs::write(&claude_md, generate_claude_md()).expect("write CLAUDE.md");
+            println!("  wrote {}", claude_md.display());
+            files_written += 1;
+        }
+
+        // Skill: .claude/skills/statico-analyze/SKILL.md
+        files_written += write_skill(&claude_dir.join("skills").join("statico-analyze"), "statico-analyze", generate_skill_analyze(), force);
+
+        // Skill: .claude/skills/statico-fix/SKILL.md
+        files_written += write_skill(&claude_dir.join("skills").join("statico-fix"), "statico-fix", generate_skill_fix(), force);
+    }
+
+    // --- Pi setup ---
+    if generate_pi {
+        let pi_dir = root.join(".pi");
+
+        // Skill: .pi/skills/statico-analyze/SKILL.md
+        files_written += write_skill(&pi_dir.join("skills").join("statico-analyze"), "statico-analyze", generate_skill_analyze(), force);
+
+        // Skill: .pi/skills/statico-fix/SKILL.md
+        files_written += write_skill(&pi_dir.join("skills").join("statico-fix"), "statico-fix", generate_skill_fix(), force);
+    }
+
+    // --- Cursor setup ---
+    if generate_cursor {
+        let rules_file = root.join(".cursor").join("rules").join("statico.mdc");
+
+        if rules_file.exists() && !force {
+            println!("  skipping {} (already exists)", rules_file.display());
+        } else {
+            std::fs::create_dir_all(rules_file.parent().unwrap()).expect("create cursor rules dir");
+            std::fs::write(&rules_file, generate_cursor_rules()).expect("write cursor rules");
+            println!("  wrote {}", rules_file.display());
+            files_written += 1;
+        }
+    }
+
+    if files_written > 0 {
+        println!("\n\x1b[32m✓ AI integration set up!\x1b[0m {} file(s) generated.", files_written);
+    } else {
+        println!("All files already exist. Use --force to overwrite.");
+    }
+}
+
+/// Write a skill directory with SKILL.md. Returns 1 if written, 0 if skipped.
+fn write_skill(dir: &std::path::Path, _name: &str, content: String, force: bool) -> usize {
+    let skill_file = dir.join("SKILL.md");
+    if skill_file.exists() && !force {
+        println!("  skipping {} (already exists)", skill_file.display());
+        return 0;
+    }
+    std::fs::create_dir_all(dir).unwrap_or_else(|_| panic!("create {} dir", dir.display()));
+    std::fs::write(&skill_file, &content).unwrap_or_else(|_| panic!("write {}", skill_file.display()));
+    println!("  wrote {}", skill_file.display());
+    1
+}
+
+fn generate_claude_md() -> String {
+    format!(r#"# statico
+
+## Project Overview
+
+statico is a static code analyzer for TypeScript and Rust projects. It detects dead code,
+unused exports, circular dependencies, code duplication, and framework-specific issues.
+
+## Architecture
+
+- `src/analyzer/` — Core analysis engine with language plugin system
+- `src/languages/` — Language plugins (TypeScript, Rust) implementing `LanguagePlugin` trait
+- `src/issues/` — Issue detectors (dead code, unused exports, circular deps, gotchas)
+- `src/resolution/` — Import resolution (TypeScript paths, tsconfig, Rust mod/crate)
+- `src/output/` — Output formatters (JSON, SARIF, Markdown, AI, context, mermaid)
+- `src/discovery/` — Entry point discovery (Next.js, Payload CMS, Angular)
+- `src/tui/` — Terminal UI dashboard
+
+## Key Commands
+
+```bash
+statico analyze .                    # Analyze project
+statico analyze . --format markdown  # Markdown output
+statico analyze . --format ai        # AI-optimized output
+statico analyze . --exit-code        # Exit 1 on issues (CI)
+statico diff before.json after.json  # Compare analyses
+statico tui .                        # Interactive dashboard
+statico doctor                       # Diagnose installation
+```
+
+## Output Formats
+
+- `json` — Full structured analysis
+- `sarif` — SARIF 2.1.0 for GitHub Code Scanning
+- `markdown` — Human-readable report
+- `ai` — Compressed format optimized for LLM context windows
+- `context` — File-by-file summary with issue locations
+- `mermaid` — Dependency graph visualization
+- `pr-comment` — GitHub PR review comment
+- `fix` — Machine-readable fix suggestions
+
+## Development
+
+```bash
+cargo build                           # Build
+cargo test                            # Run all tests
+cargo test --test integration         # Integration tests
+cargo bench                           # Benchmarks
+cargo run -- analyze . --format json  # Dev run
+```
+
+## Language Plugin System
+
+Adding a new language:
+1. Create `src/languages/<lang>.rs` implementing `LanguagePlugin` trait
+2. Register extensions in `from_path()` (patterns.rs)
+3. Optionally add language-specific rules
+
+No existing code needs modification.
+"#)
+}
+
+fn generate_skill_analyze() -> String {
+    r#"---
+name: statico-analyze
+description: Run statico code analysis on the current project. Use when asked to check code health, find dead code, review code quality, or analyze dependencies.
+---
+
+# statico-analyze
+
+## When to Use
+
+- User asks to check code health or code quality
+- User wants to find dead code, unused exports, or circular dependencies
+- User wants to understand the dependency graph
+- Before/after refactoring to measure impact
+- CI pipeline code quality gates
+
+## Instructions
+
+1. Run the analysis:
+   ```bash
+   statico analyze . --format ai
+   ```
+   The `--format ai` output is compressed for LLM context windows.
+
+2. For detailed issue locations, use:
+   ```bash
+   statico analyze . --format context
+   ```
+
+3. For dependency visualization:
+   ```bash
+   statico analyze . --format mermaid
+   ```
+
+4. Interpret the results:
+   - **Health score** (0–100): Overall code health. 80+ is good, 60–80 needs attention, <60 is critical.
+   - **Dead code**: Files/exports that nothing references. Safe to remove.
+   - **Unused exports**: Exports not imported anywhere. Consider making internal.
+   - **Circular dependencies**: Files that import each other. Break with dependency injection or events.
+   - **Duplication**: Code blocks duplicated across files. Extract shared utilities.
+   - **Confidence** (0.0–1.0): How certain the detector is. Filter with `--min-confidence 0.7`.
+
+5. To compare before/after changes:
+   ```bash
+   statico analyze . --format json > before.json
+   # ... make changes ...
+   statico analyze . --format json > after.json
+   statico diff before.json after.json
+   ```
+"#.to_string()
+}
+
+fn generate_skill_fix() -> String {
+    r#"---
+name: statico-fix
+description: Fix code quality issues found by statico. Use after running statico analyze to address dead code, unused exports, and other detected issues.
+---
+
+# statico-fix
+
+## When to Use
+
+- After running statico analyze and getting issues
+- User asks to fix, clean up, or resolve detected code quality problems
+- User wants to remove dead code or unused exports
+
+## Instructions
+
+1. First, get the list of issues:
+   ```bash
+   statico analyze . --format fix
+   ```
+   This outputs machine-readable fix suggestions.
+
+2. For each issue type:
+
+   ### Dead Code (unreachable files)
+   - Verify the file is truly unused (check dynamic imports, config references)
+   - Delete the file
+   - Remove any related test files
+
+   ### Unused Exports
+   - If the export is only used internally, remove the `export` keyword
+   - If nothing uses it, remove the entire function/class/constant
+   - For TypeScript, also check if the type is used in `.d.ts` files
+
+   ### Circular Dependencies
+   - Identify the cycle from the mermaid graph: `statico analyze . --format mermaid`
+   - Break the cycle by extracting shared logic to a third file
+   - Or use dependency injection / event patterns
+
+   ### Code Duplication
+   - Extract duplicated code into a shared utility
+   - If the duplication is in tests, consider test helpers
+
+3. After fixing, re-run to verify:
+   ```bash
+   statico analyze . --format ai
+   ```
+   Health score should improve.
+"#.to_string()
+}
+
+fn generate_cursor_rules() -> String {
+    format!(r#"---
+description: statico code analysis rules and patterns for the AI assistant
+---
+
+# statico Code Quality
+
+## Commands
+
+- `statico analyze . --format ai` — Analyze project (AI-optimized output)
+- `statico analyze . --format fix` — Get fix suggestions
+- `statico analyze . --format mermaid` — Dependency graph
+- `statico diff before.json after.json` — Compare analyses
+
+## Issue Types
+
+1. **Dead code**: Files nothing imports. Safe to delete after verification.
+2. **Unused exports**: Exports never imported. Make internal or remove.
+3. **Circular dependencies**: Files importing each other. Break with extraction.
+4. **Code duplication**: Duplicated blocks. Extract shared utilities.
+5. **Framework gotchas**: Next.js, Payload, Angular anti-patterns.
+
+## Workflow
+
+When the user asks about code quality:
+1. Run `statico analyze . --format ai`
+2. Summarize the health score and top issues
+3. For each issue category, explain what to fix and why
+4. After fixes, re-run to verify improvement
+
+## Health Score Guide
+
+- 80–100: Good shape
+- 60–79: Needs attention (plan cleanup)
+- 0–59: Critical (prioritize fixes)
+"#)
+}
+
+// ---------------------------------------------------------------------------
+
+fn run_doctor() {
+    let mut ok = true;
+
+    println!("statico doctor — checking installation...\n");
+
+    // 1. Binary location.
+    let exe = std::env::current_exe().unwrap_or_default();
+    println!("  Binary:   {}", exe.display());
+
+    // 2. Version.
+    let version = env!("CARGO_PKG_VERSION");
+    let git = git_version::git_version!(fallback = "unknown");
+    println!("  Version:  v{} ({})", version, git);
+
+    // 3. PATH check.
+    let in_path = which_statico();
+    match in_path {
+        Some(p) => println!("  PATH:     {} \x1b[32m✓\x1b[0m", p.display()),
+        None => {
+            println!("  PATH:     \x1b[31m✗ statico not found on PATH\x1b[0m");
+            ok = false;
+        }
+    }
+
+    // 4. Shell alias.
+    let alias_check = std::process::Command::new("alias")
+        .arg("st")
+        .output();
+    let alias_ok = alias_check
+        .map(|o| String::from_utf8_lossy(&o.stdout).contains("statico") || String::from_utf8_lossy(&o.stdout).contains("st"))
+        .unwrap_or(false);
+    if alias_ok {
+        println!("  Alias:    st='statico' \x1b[32m✓\x1b[0m");
+    } else {
+        println!("  Alias:    \x1b[33mst alias not set (run `statico init`)\x1b[0m");
+    }
+
+    // 5. Completions.
+    let data_dir = statico::update::data_dir();
+    let completions = data_dir.join("completions");
+    if completions.exists() {
+        println!("  Complete: {} \x1b[32m✓\x1b[0m", completions.display());
+    } else {
+        println!("  Complete: \x1b[33mnot installed (run `statico init`)\x1b[0m");
+    }
+
+    // 6. Update check.
+    let last_version = data_dir.join("last-version");
+    if last_version.exists() {
+        let cached = std::fs::read_to_string(&last_version).unwrap_or_default();
+        let status = if statico::update::is_newer(version, &cached) {
+            format!("\x1b[33mv{} available\x1b[0m", cached.trim())
+        } else {
+            "\x1b[32mup to date\x1b[0m".to_string()
+        };
+        println!("  Updates:  {}", status);
+    } else {
+        println!("  Updates:  \x1b[33mnever checked (run `statico update --check`)\x1b[0m");
+    }
+
+    println!();
+    if ok {
+        println!("\x1b[32mAll checks passed.\x1b[0m");
+    } else {
+        println!("\x1b[33mSome issues found. Run `statico init` to set up shell integration.\x1b[0m");
+    }
+}
+
+/// Find statico on PATH.
+fn which_statico() -> Option<std::path::PathBuf> {
+    let path_env = std::env::var("PATH").unwrap_or_default();
+    for dir in path_env.split(':') {
+        let candidate = std::path::Path::new(dir).join("statico");
+        if candidate.exists() {
+            return Some(candidate);
+        }
+    }
+    None
 }

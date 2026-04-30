@@ -15,9 +15,11 @@ path = "src/main.rs"
 [dev-dependencies]
 proptest = "1"
 criterion = { version = "0.5", features = ["html_reports"] }
+tempfile = "3"
+tiny_http = "0.2"
 
 [dependencies]
-clap = { version = "4", features = ["derive"] }
+clap = { version = "4", features = ["derive", "color", "unstable-styles"] }
 clap_complete = "4"
 git-version = "0.3"
 serde = { version = "1", features = ["derive"] }
@@ -33,6 +35,11 @@ colored = "3"
 atty = "0.2"
 oxc_resolver = { version = "11", optional = true }
 tree-sitter-rust = "0.24"
+ureq = { version = "3", features = ["json"] }
+flate2 = "1"
+tar = "0.4"
+sha2 = "0.10"
+dirs = "6"
 
 [[bench]]
 name = "analysis_benchmarks"

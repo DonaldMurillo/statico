@@ -3,14 +3,16 @@
 mod parse_rust;
 mod parse_typescript;
 
+pub use parse_rust::parse_rust_file_standalone;
+pub use parse_rust::resolve_rust_use_path_public;
+
 use std::path::Path;
 
-use crate::parse::AstParser;
 use crate::types::*;
 
 use crate::discovery::{discover_config_files, discover_entry_points, discover_source_files};
 use crate::issues::{detect_issues, IssueContext};
-use crate::resolution::Resolver;
+use crate::languages::{FileAnalysis, LanguagePlugin, PipelineResults, all_plugins, plugin_for_extension};
 
 /// Run the full analysis on a project directory.
 pub fn analyze(root: &Path) -> Result<AnalysisOutput, String> {
@@ -25,8 +27,6 @@ pub fn analyze_with_excludes(root: &Path, exclude: &[String]) -> Result<Analysis
     if !root.is_dir() {
         return Err(format!("not a directory: {}", root.display()));
     }
-
-    let parser = AstParser::new().map_err(|e| format!("failed to init parser: {}", e))?;
 
     let source_files = discover_source_files(root)?;
     let source_files = crate::discovery::filter_excluded(source_files, exclude);
@@ -53,24 +53,6 @@ pub fn analyze_with_excludes(root: &Path, exclude: &[String]) -> Result<Analysis
         }
     }
 
-    // Build resolver with tsconfig path aliases and workspace package mappings.
-    let mut resolver = Resolver::new(root);
-    let tsconfig_path = root.join("tsconfig.json");
-    if tsconfig_path.exists() {
-        resolver.load_tsconfig_paths(&tsconfig_path);
-    }
-    // Also try tsconfig.app.json (Next.js 15+ splits these).
-    let tsconfig_app = root.join("tsconfig.app.json");
-    if tsconfig_app.exists() {
-        resolver.load_tsconfig_paths(&tsconfig_app);
-    }
-    // Load workspace package name → directory mappings for monorepo support.
-    resolver.load_workspace_packages();
-    // Load tsconfig path aliases from all sub-project tsconfig.json files.
-    // This ensures @/ aliases in workspace packages (apps/api/tsconfig.json etc.)
-    // are resolved correctly, not just the root tsconfig.
-    resolver.load_all_tsconfig_paths();
-
     let structure = Structure {
         root: root.to_path_buf(),
         entry_points,
@@ -85,7 +67,12 @@ pub fn analyze_with_excludes(root: &Path, exclude: &[String]) -> Result<Analysis
     let progress = crate::progress::shared_progress(source_files.len());
     progress.set_quiet(true); // TODO: wire to --quiet flag
 
-    let (
+    // ── Plugin-dispatched parsing ──────────────────────────────────────
+    // Route each file to its language plugin and collect results.
+    let pipeline_results = parse_all_files_plugin(root, &source_files, &progress);
+    progress.finish();
+
+    let PipelineResults {
         dependencies,
         quality,
         dep_graph,
@@ -95,8 +82,7 @@ pub fn analyze_with_excludes(root: &Path, exclude: &[String]) -> Result<Analysis
         file_blocks,
         file_sources,
         imported_names,
-    ) = parse_typescript::parse_all_files_parallel(root, &source_files, &parser, &resolver, &progress);
-    progress.finish();
+    } = pipeline_results;
 
     let fw_profiles = crate::frameworks::detect_profiles(root);
 
@@ -137,6 +123,60 @@ pub fn analyze_with_excludes(root: &Path, exclude: &[String]) -> Result<Analysis
         issues,
         duplication,
     })
+}
+
+/// Parse all source files by dispatching to language plugins in parallel.
+fn parse_all_files_plugin(
+    root: &Path,
+    source_files: &[(String, String)],
+    progress: &crate::progress::SharedProgress,
+) -> PipelineResults {
+    use rayon::prelude::*;
+    use std::sync::Arc;
+
+    let root = Arc::new(root.to_path_buf());
+    progress.set_phase("Parsing");
+
+    let results: Vec<Option<FileAnalysis>> = source_files
+        .par_iter()
+        .map(|(rel_path, lang)| {
+            let ext = rel_path.rsplit('.').next().unwrap_or("");
+            // Use the static plugin registry (compile-time known, no allocation)
+            let plugin = plugin_for_extension(ext)
+                .or_else(|| {
+                    // Try matching by language name
+                    static PLUGINS: std::sync::OnceLock<Vec<Box<dyn LanguagePlugin>>> = std::sync::OnceLock::new();
+                    let plugins = PLUGINS.get_or_init(all_plugins);
+                    plugins.iter().find(|p| p.name() == lang).map(|p| p.as_ref())
+                })
+                .unwrap_or_else(|| {
+                    // Last resort: use TypeScript plugin
+                    plugin_for_extension("ts").unwrap()
+                });
+
+            let abs_path = root.join(rel_path);
+            let source = match std::fs::read_to_string(&abs_path) {
+                Ok(s) => s,
+                Err(_) => {
+                    progress.inc();
+                    return None;
+                }
+            };
+
+            let result = plugin.analyze_file(&root, rel_path, &source);
+            progress.inc();
+            result
+        })
+        .collect();
+
+    let mut pipeline = PipelineResults::new();
+    for res in results {
+        if let Some(fa) = res {
+            pipeline.merge(fa);
+        }
+    }
+    pipeline.sort();
+    pipeline
 }
 
 // ---------------------------------------------------------------------------

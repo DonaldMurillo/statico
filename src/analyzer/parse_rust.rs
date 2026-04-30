@@ -4,19 +4,25 @@ use std::path::Path;
 
 use crate::parse::blocks::extract_blocks;
 use crate::parse::metrics::count_loc;
-use crate::resolution::Resolver;
-use crate::types::*;
+use crate::languages::FileAnalysis;
 
-use super::parse_typescript::FileResult;
-
-/// Parse a Rust file and return its result.
-pub fn parse_rust_file(
+/// Parse a Rust file and return its result as a `FileAnalysis` (plugin interface).
+///
+/// This is the standalone version used by the `RustPlugin` language plugin.
+/// It does not need a `Resolver` because Rust has its own module resolution.
+pub fn parse_rust_file_standalone(
     root: &Path,
     rel_path: &str,
-    _abs_path: &Path,
     source: &str,
-    _resolver: &Resolver,
-) -> Option<FileResult> {
+) -> Option<FileAnalysis> {
+    parse_rust_file_inner(root, rel_path, source)
+}
+
+fn parse_rust_file_inner(
+    root: &Path,
+    rel_path: &str,
+    source: &str,
+) -> Option<FileAnalysis> {
     use crate::parse::rust::{
         RustAstParser, extract_exports as rust_extract_exports, extract_imports as rust_extract_imports,
         extract_mod_decls as rust_extract_mod_decls,
@@ -175,30 +181,21 @@ pub fn parse_rust_file(
     let cx_metrics = crate::parse::complexity::compute_metrics(root_node, source.as_bytes());
     let blocks = extract_blocks(root_node, source.as_bytes());
 
-    Some(FileResult {
+    Some(FileAnalysis {
         rel_path: rel_path.to_string(),
-        file_imports: FileImports { source: rel_path.to_string(), targets: dep_targets.clone() },
+        dep_targets,
         external_specs: vec![],
-        quality: FileQuality {
-            path: rel_path.to_string(),
-            metrics: Some(Metrics {
-                lines_of_code: loc,
-                total_lines: total,
-                functions: funcs,
-                classes,
-                complexity: cx_metrics.complexity,
-                max_nesting_depth: cx_metrics.max_nesting_depth,
-            }),
-            exports: exports.clone(),
-            parse_errors: vec![],
-        },
+        imported_names,
+        exports,
         loc,
         total_lines: total,
+        functions: funcs,
+        classes,
+        complexity: cx_metrics.complexity,
+        max_nesting_depth: cx_metrics.max_nesting_depth,
+        parse_errors: vec![],
         blocks,
         source: source.to_string(),
-        dep_targets,
-        exports,
-        imported_names,
     })
 }
 
@@ -249,6 +246,11 @@ pub fn find_crate_src_root(root: &Path, rel_path: &str) -> String {
 /// - `<crate_name>::foo` → same as `crate::foo` (for binary→library references)
 ///
 /// Returns `None` for external crates (std, serde, etc.) and unresolvable paths.
+/// Public wrapper for Rust use-path resolution, used by the RustPlugin.
+pub fn resolve_rust_use_path_public(root: &Path, current_rel: &str, use_path: &str) -> Option<String> {
+    resolve_rust_use_path(root, current_rel, use_path)
+}
+
 fn resolve_rust_use_path(root: &Path, current_rel: &str, use_path: &str) -> Option<String> {
     let crate_src = find_crate_src_root(root, current_rel);
     let parts: Vec<&str> = use_path.split("::").collect();

@@ -7,9 +7,16 @@ use crate::parse::blocks::CodeBlock;
 use crate::types::GotchaIssue;
 
 use super::{is_comment_line, is_test_file, truncate_line};
+use super::patterns::FileLanguage;
 
 /// Run all AST-based gotcha checks on a single file.
+/// Only runs for JS/TS files — Rust files use a different parser.
 pub fn detect_ast_gotchas(rel_path: &str, source: &str, issues: &mut Vec<GotchaIssue>) {
+    let lang = FileLanguage::from_path(rel_path);
+    if !lang.is_js_family() {
+        return;
+    }
+
     let parser = match AstParser::new() {
         Ok(p) => p,
         Err(_) => return,
@@ -148,7 +155,12 @@ fn compute_metrics_for_block(block: &CodeBlock) -> crate::parse::complexity::Com
 }
 
 /// Detect callback hell (deeply nested callback functions).
+/// JS/TS-only — Rust has different control flow patterns.
 pub fn detect_callback_hell(rel_path: &str, source: &str, issues: &mut Vec<GotchaIssue>) {
+    let lang = super::patterns::FileLanguage::from_path(rel_path);
+    if !lang.is_js_family() {
+        return;
+    }
     let mut depth: usize = 0;
     for (i, line) in source.lines().enumerate() {
         let before = depth;

@@ -14,3 +14,5 @@ benchmarks/repos/
 benchmarks/rust-repos/
 benchmarks/rust-results/
 benchmarks/results/
+
+.claude/
