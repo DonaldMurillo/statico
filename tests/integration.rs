@@ -469,3 +469,124 @@ fn cli_quiet_suppresses_update_notification() {
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
     assert!(!stderr.contains("panic"), "should not panic with --quiet");
 }
+
+// ---------------------------------------------------------------------------
+// Mock server test for self-update
+// ---------------------------------------------------------------------------
+
+/// Spin up a tiny HTTP server, serve a mock release + tarball, and verify
+/// the full download-extract-swap flow.
+#[test]
+fn cli_update_downloads_and_extracts_from_mock_server() {
+    use std::io::Write as IoWrite;
+
+    let tmp = tempfile::tempdir().expect("temp dir");
+    let tmp_path = tmp.path().to_path_buf();
+
+    // 1. Build the mock tarball with a fake "statico" binary inside.
+    let fake_binary_content = "#!/bin/sh\necho 'statico 99.0.0'\n";
+    let tarball_path = tmp_path.join("archive.tar.gz");
+    {
+        let mut tar_builder = tar::Builder::new(Vec::new());
+        let mut header = tar::Header::new_gnu();
+        header.set_path("statico").expect("set path");
+        header.set_size(fake_binary_content.len() as u64);
+        header.set_mode(0o755);
+        header.set_cksum();
+        tar_builder.append(&header, fake_binary_content.as_bytes()).expect("append");
+        let tar_data = tar_builder.into_inner().expect("tar data");
+        let mut gz = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::fast());
+        gz.write_all(&tar_data).expect("gzip");
+        let gz_data = gz.finish().expect("finish gzip");
+        std::fs::write(&tarball_path, &gz_data).expect("write tarball");
+    }
+    let tarball_bytes = std::fs::read(&tarball_path).expect("read tarball");
+
+    // 2. Build the mock release JSON.
+    let platform = if cfg!(target_os = "macos") && cfg!(target_arch = "aarch64") {
+        "macos-aarch64"
+    } else if cfg!(target_os = "macos") && cfg!(target_arch = "x86_64") {
+        "macos-x86_64"
+    } else if cfg!(target_os = "linux") && cfg!(target_arch = "aarch64") {
+        "linux-aarch64"
+    } else {
+        "linux-x86_64"
+    };
+    let release_json = format!(r#"{{"tag_name":"v99.0.0","assets":[{{"name":"statico-{}.tar.gz","browser_download_url":"http://MOCK/releases/download/v99.0.0/statico-{}.tar.gz"}}]}}"#, platform, platform);
+
+    // 3. Start a tiny HTTP server in a background thread.
+    let server = tiny_http::ServerBuilder::new().with_random_port().build().expect("start mock server");
+    let port = server.server_addr().port();
+    let base_url = format!("http://127.0.0.1:{}", port);
+
+    let tarball_bytes_clone = tarball_bytes.clone();
+    let release_json_clone = release_json.clone();
+    let server_handle = std::thread::spawn(move || {
+        // Handle exactly 2 requests from the update command:
+        // 1. version check: GET /releases/latest
+        // 2. download:      GET /releases/download/v99.0.0/...
+        //
+        // NOTE: We pass --quiet to suppress the startup check_and_notify()
+        //       which would otherwise make a 3rd request.
+        for _ in 0..2 {
+            if let Ok(req) = server.recv() {
+                let path = req.url();
+                if path.contains("/releases/latest") && !path.contains("download") {
+                    let resp = tiny_http::Response::from_string(&release_json_clone)
+                        .with_header(tiny_http::Header::from_bytes(&b"Content-Type"[..], &b"application/json"[..]).expect("header"));
+                    let _ = req.respond(resp);
+                } else {
+                    let resp = tiny_http::Response::from_data(tarball_bytes_clone.clone())
+                        .with_header(tiny_http::Header::from_bytes(&b"Content-Type"[..], &b"application/gzip"[..]).expect("header"));
+                    let _ = req.respond(resp);
+                }
+            }
+        }
+    });
+
+    // 4. Create a fake current binary (copy the real one to temp location).
+    let fake_exe_dir = tmp_path.join("bin");
+    std::fs::create_dir_all(&fake_exe_dir).expect("create bin dir");
+    let fake_exe = fake_exe_dir.join("statico");
+    std::fs::copy(statico_bin(), &fake_exe).expect("copy real binary");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&fake_exe, std::fs::Permissions::from_mode(0o755)).expect("chmod");
+    }
+
+    // 5. Run the fake binary with `--quiet update`, pointing at our mock server.
+    //    --quiet suppresses check_and_notify() which would otherwise hit the mock server.
+    let output = std::process::Command::new(&fake_exe)
+        .args(["--quiet", "update"])
+        .env("STATICO_UPDATE_API_URL", &base_url)
+        .env("STATICO_UPDATE_DL_URL", &base_url
+        )
+        .output()
+        .expect("run fake binary");
+
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+    // Wait for server to finish.
+    let _ = server_handle.join();
+
+    // The update should succeed — binary swapped.
+    if !output.status.success() {
+        panic!("update command failed.\nstdout: {stdout}\nstderr: {stderr}");
+    }
+
+    assert!(stdout.contains("Updated statico"), "expected update success message, got: {stdout}");
+    assert!(stdout.contains("99.0.0"), "expected new version in output, got: {stdout}");
+
+    // 6. Verify the binary was replaced — it should now print our fake version.
+    let verify = std::process::Command::new(&fake_exe)
+        .arg("--version")
+        .output()
+        .expect("verify replaced binary");
+    let verify_stdout = String::from_utf8_lossy(&verify.stdout).to_string();
+    assert!(
+        verify_stdout.contains("99.0.0"),
+        "binary should have been replaced with mock, got: {verify_stdout}"
+    );
+}

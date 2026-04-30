@@ -25,9 +25,21 @@ struct Asset {
     browser_download_url: String,
 }
 
+/// Base URL for the update API. Defaults to GitHub; overridden in tests.
+pub fn api_base_url() -> String {
+    std::env::var("STATICO_UPDATE_API_URL")
+        .unwrap_or_else(|_| format!("https://api.github.com/repos/{}", GITHUB_REPO))
+}
+
+/// Base URL for download. Defaults to GitHub; overridden in tests.
+pub fn download_base_url() -> String {
+    std::env::var("STATICO_UPDATE_DL_URL")
+        .unwrap_or_else(|_| format!("https://github.com/{}", GITHUB_REPO))
+}
+
 /// Check GitHub for the latest release version.
 pub fn latest_version() -> Result<String, String> {
-    let url = format!("https://api.github.com/repos/{}/releases/latest", GITHUB_REPO);
+    let url = format!("{}/releases/latest", api_base_url());
     let agent = ureq::Agent::new_with_defaults();
     let resp = agent
         .get(&url)
@@ -104,8 +116,8 @@ pub fn run_update(dry_run: bool) -> Result<String, String> {
     let platform = platform_triple()?;
     let archive_name = format!("statico-{}.tar.gz", platform);
     let url = format!(
-        "https://github.com/{}/releases/download/v{}/{}",
-        GITHUB_REPO, latest, archive_name
+        "{}/releases/download/v{}/{}",
+        download_base_url(), latest, archive_name
     );
 
     eprintln!("Downloading statico v{} for {}...", latest, platform);
