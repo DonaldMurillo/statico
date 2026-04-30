@@ -5,7 +5,7 @@
 
 use crate::output::{OutputFormatter, compute_summary};
 use crate::types::AnalysisOutput;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 /// Compact LLM-optimized JSON formatter (`--format ai`).
 pub struct AiFormatter;
@@ -62,11 +62,7 @@ fn build_top_issues(output: &AnalysisOutput) -> Vec<Value> {
             line: None,
             impact: dc.lines_of_code as f64,
             confidence: dc.confidence,
-            suggested_action: if dc.confidence >= 0.9 {
-                "safe-to-delete"
-            } else {
-                "investigate"
-            },
+            suggested_action: if dc.confidence >= 0.9 { "safe-to-delete" } else { "investigate" },
             reason: dc.reason.clone(),
         });
     }
@@ -158,10 +154,7 @@ fn build_top_issues(output: &AnalysisOutput) -> Vec<Value> {
                 "reason": i.reason,
             });
             if let Some(line) = i.line {
-                obj.as_object_mut().unwrap().insert(
-                    "line".to_string(),
-                    Value::Number(line.into()),
-                );
+                obj.as_object_mut().unwrap().insert("line".to_string(), Value::Number(line.into()));
             }
             obj
         })
@@ -197,10 +190,7 @@ fn build_files_at_risk(output: &AnalysisOutput) -> Vec<Value> {
         file_stats.entry(g.file.clone()).or_default().gotchas += 1;
     }
     for dup in &output.issues.duplicate_code {
-        file_stats
-            .entry(dup.location_a.file.clone())
-            .or_default()
-            .duplicate_code += 1;
+        file_stats.entry(dup.location_a.file.clone()).or_default().duplicate_code += 1;
     }
     for cd in &output.issues.circular_dependencies {
         for f in &cd.files {

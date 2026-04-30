@@ -24,13 +24,14 @@ impl OutputFormatter for FixFormatter {
         let mut out = String::new();
 
         // Collect high-confidence dead code issues, sorted by confidence descending.
-        let mut dead_files: Vec<_> = output
-            .issues
-            .dead_code
-            .iter()
-            .filter(|dc| dc.confidence >= DEFAULT_MIN_CONFIDENCE)
-            .collect();
-        dead_files.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap_or(std::cmp::Ordering::Equal).then_with(|| b.lines_of_code.cmp(&a.lines_of_code)));
+        let mut dead_files: Vec<_> =
+            output.issues.dead_code.iter().filter(|dc| dc.confidence >= DEFAULT_MIN_CONFIDENCE).collect();
+        dead_files.sort_by(|a, b| {
+            b.confidence
+                .partial_cmp(&a.confidence)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| b.lines_of_code.cmp(&a.lines_of_code))
+        });
 
         let total_dead_loc: usize = dead_files.iter().map(|dc| dc.lines_of_code).sum();
 
@@ -50,7 +51,9 @@ impl OutputFormatter for FixFormatter {
             "# Confidence filter: >= {:.1} (use --min-confidence to adjust)\n",
             DEFAULT_MIN_CONFIDENCE,
         ));
-        out.push_str("# \u{26A0}\u{FE0F}  Review each change before applying. This is a suggestion, not a guarantee.\n");
+        out.push_str(
+            "# \u{26A0}\u{FE0F}  Review each change before applying. This is a suggestion, not a guarantee.\n",
+        );
 
         // --- Dead file removal hints ---
         if !dead_files.is_empty() {
@@ -61,7 +64,9 @@ impl OutputFormatter for FixFormatter {
             for dc in &dead_files {
                 out.push_str(&format!(
                     "# SAFE TO DELETE: {} ({} LOC, confidence: {:.0}%)\n",
-                    dc.path, dc.lines_of_code, dc.confidence * 100.0,
+                    dc.path,
+                    dc.lines_of_code,
+                    dc.confidence * 100.0,
                 ));
                 out.push_str(&format!("# Reason: {}\n", dc.reason));
                 out.push_str(&format!("# Review: git show HEAD -- {}\n", dc.path));
@@ -98,14 +103,10 @@ impl OutputFormatter for FixFormatter {
 
 /// Group unused export issues by their file path, sorting exports alphabetically
 /// within each file for deterministic output.
-fn group_unused_exports_by_file(
-    exports: &[crate::types::UnusedExportIssue],
-) -> BTreeMap<String, Vec<String>> {
+fn group_unused_exports_by_file(exports: &[crate::types::UnusedExportIssue]) -> BTreeMap<String, Vec<String>> {
     let mut map: BTreeMap<String, Vec<String>> = BTreeMap::new();
     for exp in exports {
-        map.entry(exp.path.clone())
-            .or_default()
-            .push(exp.name.clone());
+        map.entry(exp.path.clone()).or_default().push(exp.name.clone());
     }
     // Sort export names within each file for deterministic ordering.
     for names in map.values_mut() {
@@ -133,10 +134,7 @@ mod tests {
                 source_files: vec![],
                 config_files: vec![],
             },
-            dependencies: Dependencies {
-                imports: vec![],
-                external: vec![],
-            },
+            dependencies: Dependencies { imports: vec![], external: vec![] },
             quality: Quality { files: vec![] },
             issues: Issues {
                 dead_code,
@@ -235,7 +233,12 @@ mod tests {
         let output = make_output(
             vec![
                 DeadCodeIssue { path: "src/low.ts".into(), lines_of_code: 100, confidence: 0.85, reason: "Low".into() },
-                DeadCodeIssue { path: "src/high.ts".into(), lines_of_code: 50, confidence: 0.99, reason: "High".into() },
+                DeadCodeIssue {
+                    path: "src/high.ts".into(),
+                    lines_of_code: 50,
+                    confidence: 0.99,
+                    reason: "High".into(),
+                },
             ],
             vec![],
         );

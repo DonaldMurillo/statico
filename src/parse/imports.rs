@@ -32,18 +32,16 @@ pub fn extract_imports(root: Node, source: &str) -> (Vec<String>, Vec<String>) {
     for call in collect_nodes(root, &["call_expression"]) {
         if let Some(func) = call.child(0)
             && func.kind() == "import"
-        {
-            if let Some(spec) = extract_dynamic_import_specifier(call, source) {
+            && let Some(spec) = extract_dynamic_import_specifier(call, source) {
                 classify_import(&spec, &mut internal, &mut external);
             }
-        }
     }
 
     // require() calls.
     for call in collect_nodes(root, &["call_expression"]) {
         if let Some(func) = call.child(0)
             && func.kind() == "identifier"
-                && func.utf8_text(source.as_bytes()).unwrap_or("") == "require"
+            && func.utf8_text(source.as_bytes()).unwrap_or("") == "require"
             && let Some(spec) = extract_module_specifier(call, source)
         {
             classify_import(&spec, &mut internal, &mut external);
@@ -52,16 +50,12 @@ pub fn extract_imports(root: Node, source: &str) -> (Vec<String>, Vec<String>) {
 
     // Web Worker pattern: new Worker(new URL('./path', import.meta.url))
     for node in collect_nodes(root, &["new_expression"]) {
-        let ctor_id = node
-            .children(&mut node.walk())
-            .find(|c| c.kind() == "identifier");
-        if let Some(ctor) = ctor_id {
-            if ctor.utf8_text(source.as_bytes()).unwrap_or("") == "Worker" {
-                if let Some(url_spec) = extract_worker_url_arg(node, source) {
+        let ctor_id = node.children(&mut node.walk()).find(|c| c.kind() == "identifier");
+        if let Some(ctor) = ctor_id
+            && ctor.utf8_text(source.as_bytes()).unwrap_or("") == "Worker"
+                && let Some(url_spec) = extract_worker_url_arg(node, source) {
                     classify_import(&url_spec, &mut internal, &mut external);
                 }
-            }
-        }
     }
 
     internal.sort();
@@ -87,12 +81,11 @@ pub fn extract_named_imports(root: Node, source: &str) -> BTreeMap<String, Vec<S
     // Export-from: export { a, b } from 'module'
     for node in collect_nodes(root, &["export_statement"]) {
         let has_from = node.children(&mut node.walk()).any(|c| c.kind() == "from");
-        if has_from {
-            if let Some(spec) = extract_module_specifier(node, source) {
+        if has_from
+            && let Some(spec) = extract_module_specifier(node, source) {
                 let names = collect_export_specifier_names(node, source);
                 map.entry(spec).or_default().extend(names);
             }
-        }
     }
 
     map
@@ -126,23 +119,16 @@ fn extract_names_from_import_clause(clause: Node, source: &str) -> Vec<String> {
                     let spec = child.child(j).unwrap();
                     if spec.kind() == "import_specifier" {
                         // The imported name is the first identifier.
-                        if let Some(name) = spec.child(0) {
-                            if name.kind() == "identifier" {
-                                names.push(
-                                    name.utf8_text(source.as_bytes())
-                                        .unwrap_or("")
-                                        .to_string(),
-                                );
+                        if let Some(name) = spec.child(0)
+                            && name.kind() == "identifier" {
+                                names.push(name.utf8_text(source.as_bytes()).unwrap_or("").to_string());
                             }
-                        }
                     }
                 }
             }
             // Default import: identifier
             "identifier" => {
-                names.push(
-                    child.utf8_text(source.as_bytes()).unwrap_or("").to_string(),
-                );
+                names.push(child.utf8_text(source.as_bytes()).unwrap_or("").to_string());
             }
             // Namespace import: * as identifier
             "namespace_import" => {
@@ -169,15 +155,10 @@ fn collect_export_specifier_names(node: Node, source: &str) -> Vec<String> {
                 let spec = child.child(j).unwrap();
                 if spec.kind() == "export_specifier" {
                     // The first identifier is the original name being re-exported.
-                    if let Some(name) = spec.child(0) {
-                        if name.kind() == "identifier" {
-                            names.push(
-                                name.utf8_text(source.as_bytes())
-                                    .unwrap_or("")
-                                    .to_string(),
-                            );
+                    if let Some(name) = spec.child(0)
+                        && name.kind() == "identifier" {
+                            names.push(name.utf8_text(source.as_bytes()).unwrap_or("").to_string());
                         }
-                    }
                 }
             }
         }
@@ -228,19 +209,13 @@ fn extract_dynamic_import_specifier(call: Node, source: &str) -> Option<String> 
 
 /// Extract the URL path from a `new Worker(new URL('./path', import.meta.url))` pattern.
 fn extract_worker_url_arg(new_expr: Node, source: &str) -> Option<String> {
-    let args_node = new_expr
-        .children(&mut new_expr.walk())
-        .find(|c| c.kind() == "arguments")?;
+    let args_node = new_expr.children(&mut new_expr.walk()).find(|c| c.kind() == "arguments")?;
 
     for child in args_node.children(&mut args_node.walk()) {
         if child.kind() == "new_expression" {
-            let ctor = child
-                .children(&mut child.walk())
-                .find(|c| c.kind() == "identifier")?;
+            let ctor = child.children(&mut child.walk()).find(|c| c.kind() == "identifier")?;
             if ctor.utf8_text(source.as_bytes()).unwrap_or("") == "URL" {
-                let url_args = child
-                    .children(&mut child.walk())
-                    .find(|c| c.kind() == "arguments")?;
+                let url_args = child.children(&mut child.walk()).find(|c| c.kind() == "arguments")?;
                 for arg in url_args.children(&mut url_args.walk()) {
                     if arg.kind() == "string" {
                         let text = arg.utf8_text(source.as_bytes()).unwrap_or("");
@@ -280,11 +255,7 @@ fn classify_import(spec: &str, internal: &mut Vec<String>, external: &mut Vec<St
 pub fn extract_package_name(spec: &str) -> String {
     if spec.starts_with('@') {
         let parts: Vec<&str> = spec.splitn(3, '/').collect();
-        if parts.len() >= 2 {
-            format!("{}/{}", parts[0], parts[1])
-        } else {
-            spec.to_string()
-        }
+        if parts.len() >= 2 { format!("{}/{}", parts[0], parts[1]) } else { spec.to_string() }
     } else {
         spec.split('/').next().unwrap_or(spec).to_string()
     }
@@ -331,10 +302,7 @@ import * as mod from './module';
         let code = r#"export { foo, bar } from './utils';"#;
         let result = parser.parse(code, false).expect("parse");
         let named = extract_named_imports(result.tree.root_node(), code);
-        assert_eq!(
-            named.get("./utils").map(|v| v.as_slice()),
-            Some(&["foo".to_string(), "bar".to_string()][..])
-        );
+        assert_eq!(named.get("./utils").map(|v| v.as_slice()), Some(&["foo".to_string(), "bar".to_string()][..]));
     }
 
     #[test]

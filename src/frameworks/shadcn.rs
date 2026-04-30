@@ -49,17 +49,11 @@ mod tests {
 
     #[test]
     fn registry_is_entry() {
-        assert!(PROFILE
-            .entry_matchers
-            .iter()
-            .any(|m| m.matches("registry/new-york-v4/ui/button.tsx")));
+        assert!(PROFILE.entry_matchers.iter().any(|m| m.matches("registry/new-york-v4/ui/button.tsx")));
     }
 
     #[test]
     fn styles_are_implicit() {
-        assert!(PROFILE
-            .implicit_matchers
-            .iter()
-            .any(|m| m.matches("apps/v4/styles/radix-lyra/ui/button.tsx")));
+        assert!(PROFILE.implicit_matchers.iter().any(|m| m.matches("apps/v4/styles/radix-lyra/ui/button.tsx")));
     }
 }

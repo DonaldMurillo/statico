@@ -33,10 +33,7 @@ pub fn detect(dep_graph: &BTreeMap<String, Vec<String>>) -> Vec<CircularDepIssue
         }
     }
 
-    cycles
-        .into_iter()
-        .map(|files| CircularDepIssue { files })
-        .collect()
+    cycles.into_iter().map(|files| CircularDepIssue { files }).collect()
 }
 
 fn dfs(
@@ -84,12 +81,7 @@ fn normalize_cycle(mut cycle: Vec<String>) -> Vec<String> {
     if cycle.is_empty() {
         return cycle;
     }
-    let min_pos = cycle
-        .iter()
-        .enumerate()
-        .min_by_key(|(_, v)| *v)
-        .map(|(i, _)| i)
-        .unwrap_or(0);
+    let min_pos = cycle.iter().enumerate().min_by_key(|(_, v)| *v).map(|(i, _)| i).unwrap_or(0);
     cycle.rotate_left(min_pos);
     cycle
 }
@@ -115,10 +107,7 @@ mod tests {
 
     #[test]
     fn simple_cycle() {
-        let graph = BTreeMap::from([
-            ("a.ts".into(), vec!["b.ts".into()]),
-            ("b.ts".into(), vec!["a.ts".into()]),
-        ]);
+        let graph = BTreeMap::from([("a.ts".into(), vec!["b.ts".into()]), ("b.ts".into(), vec!["a.ts".into()])]);
         let cycles = detect(&graph);
         assert_eq!(cycles.len(), 1);
         // Cycle should contain both files.
@@ -141,9 +130,7 @@ mod tests {
 
     #[test]
     fn self_loop_skipped() {
-        let graph = BTreeMap::from([
-            ("a.ts".into(), vec!["a.ts".into()]),
-        ]);
+        let graph = BTreeMap::from([("a.ts".into(), vec!["a.ts".into()])]);
         let cycles = detect(&graph);
         assert!(cycles.is_empty());
     }

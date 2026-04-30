@@ -37,35 +37,19 @@ impl IncrementalCache {
     /// Create or load a cache for the given project root.
     pub fn new(project_root: &Path) -> Self {
         let cache_dir = project_root.join(".statico").join("cache");
-        let mut cache = Self {
-            cache_dir,
-            entries: BTreeMap::new(),
-            dirty: false,
-        };
+        let mut cache = Self { cache_dir, entries: BTreeMap::new(), dirty: false };
         cache.load();
         cache
     }
 
     /// Look up a cached result by file path and content hash.
     pub fn get(&self, file_path: &str, content_hash: &str) -> Option<&CachedFileData> {
-        self.entries.get(file_path).and_then(|e| {
-            if e.hash == content_hash {
-                Some(&e.data)
-            } else {
-                None
-            }
-        })
+        self.entries.get(file_path).and_then(|e| if e.hash == content_hash { Some(&e.data) } else { None })
     }
 
     /// Store a parse result in the cache.
     pub fn set(&mut self, file_path: &str, content_hash: &str, data: CachedFileData) {
-        self.entries.insert(
-            file_path.to_string(),
-            CacheEntry {
-                hash: content_hash.to_string(),
-                data,
-            },
-        );
+        self.entries.insert(file_path.to_string(), CacheEntry { hash: content_hash.to_string(), data });
         self.dirty = true;
     }
 
@@ -145,15 +129,10 @@ pub fn content_hash(content: &str) -> String {
 pub fn ensure_gitignore(project_root: &Path) {
     let gitignore_path = project_root.join(".gitignore");
     let existing = fs::read_to_string(&gitignore_path).unwrap_or_default();
-    if !existing.contains(".statico") {
-        if let Ok(mut f) = fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&gitignore_path)
-        {
+    if !existing.contains(".statico")
+        && let Ok(mut f) = fs::OpenOptions::new().create(true).append(true).open(&gitignore_path) {
             let _ = writeln!(f, "\n# statico cache\n.statico/");
         }
-    }
 }
 
 #[cfg(test)]

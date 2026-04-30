@@ -24,8 +24,11 @@ fn find_named_decl_child(node: Node, source: &str) -> Option<String> {
     for i in 0..node.child_count() {
         let child = node.child(i).unwrap();
         match child.kind() {
-            "function_declaration" | "generator_function_declaration" | "class_declaration"
-            | "type_alias_declaration" | "interface_declaration" => {
+            "function_declaration"
+            | "generator_function_declaration"
+            | "class_declaration"
+            | "type_alias_declaration"
+            | "interface_declaration" => {
                 return first_identifier_name(child, source);
             }
             "lexical_declaration" | "variable_declaration" => {
@@ -74,8 +77,11 @@ fn extract_all_from_export(node: Node, source: &str) -> Vec<String> {
     for i in 0..node.child_count() {
         let child = node.child(i).unwrap();
         match child.kind() {
-            "function_declaration" | "generator_function_declaration" | "class_declaration"
-            | "type_alias_declaration" | "interface_declaration" => {
+            "function_declaration"
+            | "generator_function_declaration"
+            | "class_declaration"
+            | "type_alias_declaration"
+            | "interface_declaration" => {
                 if let Some(name) = first_identifier_name(child, source) {
                     names.push(name);
                 }
@@ -113,13 +119,11 @@ fn all_declarator_names(node: Node, source: &str) -> Vec<String> {
     let mut names = Vec::new();
     for i in 0..node.child_count() {
         let child = node.child(i).unwrap();
-        if child.kind() == "variable_declarator" {
-            if let Some(id) = child.child(0) {
-                if id.kind() == "identifier" {
+        if child.kind() == "variable_declarator"
+            && let Some(id) = child.child(0)
+                && id.kind() == "identifier" {
                     names.push(id.utf8_text(source.as_bytes()).unwrap_or("").to_string());
                 }
-            }
-        }
     }
     names
 }
@@ -214,15 +218,14 @@ pub fn extract_reexport_types(root: Node, source: &str) -> Vec<(String, String)>
 
         for i in 0..clause.child_count() {
             let child = clause.child(i).unwrap();
-            if child.kind() == "export_specifier" {
-                if let Some(name) = get_last_identifier(child, source) {
+            if child.kind() == "export_specifier"
+                && let Some(name) = get_last_identifier(child, source) {
                     if is_type_only {
                         types.push((name, "type".to_string()));
                     } else if is_pascal_case(&name) {
                         types.push((name, "reexport".to_string()));
                     }
                 }
-            }
         }
     }
 
@@ -251,11 +254,10 @@ pub fn extract_star_reexport_specs(root: Node, source: &str) -> Vec<String> {
             }
         }
 
-        if has_star && has_from {
-            if let Some(spec) = module_spec {
+        if has_star && has_from
+            && let Some(spec) = module_spec {
                 specs.push(spec);
             }
-        }
     }
 
     specs

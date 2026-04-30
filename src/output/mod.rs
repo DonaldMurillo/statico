@@ -25,13 +25,9 @@ pub trait OutputFormatter {
 /// Compute the summary from an AnalysisOutput.
 pub fn compute_summary(output: &AnalysisOutput) -> crate::types::Summary {
     let total_files = output.structure.source_files.len();
-    let total_lines: usize = output.quality.files.iter()
-        .filter_map(|f| f.metrics.as_ref())
-        .map(|m| m.lines_of_code)
-        .sum();
-    let total_exports: usize = output.quality.files.iter()
-        .map(|f| f.exports.len())
-        .sum();
+    let total_lines: usize =
+        output.quality.files.iter().filter_map(|f| f.metrics.as_ref()).map(|m| m.lines_of_code).sum();
+    let total_exports: usize = output.quality.files.iter().map(|f| f.exports.len()).sum();
     let total_types: usize = output.issues.unused_types.len();
 
     let issue_counts = crate::types::IssueCounts {
@@ -55,12 +51,8 @@ pub fn compute_summary(output: &AnalysisOutput) -> crate::types::Summary {
         + issue_counts.unused_types
         + issue_counts.gotchas
         + issue_counts.circular_dependencies;
-    let density = if total_files > 0 {
-        total_issues as f64 / total_files as f64
-    } else {
-        0.0
-    };
-    let health_score = (100.0 - density * 10.0 - dup_pct * 0.3).max(0.0).min(100.0);
+    let density = if total_files > 0 { total_issues as f64 / total_files as f64 } else { 0.0 };
+    let health_score = (100.0 - density * 10.0 - dup_pct * 0.3).clamp(0.0, 100.0);
 
     crate::types::Summary {
         total_files,
@@ -77,10 +69,7 @@ pub fn compute_summary(output: &AnalysisOutput) -> crate::types::Summary {
 pub fn detect_framework_names(output: &AnalysisOutput) -> Vec<String> {
     let root = &output.structure.root;
     let profiles = crate::frameworks::detect_profiles(root);
-    profiles.iter()
-        .filter(|p| p.name != "generic")
-        .map(|p| p.name.to_string())
-        .collect()
+    profiles.iter().filter(|p| p.name != "generic").map(|p| p.name.to_string()).collect()
 }
 
 /// Filter issues by minimum confidence threshold.

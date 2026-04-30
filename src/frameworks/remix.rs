@@ -40,31 +40,16 @@ mod tests {
 
     #[test]
     fn entry_route_files() {
-        assert!(PROFILE
-            .entry_matchers
-            .iter()
-            .any(|m| m.matches("app/routes/_index.tsx")));
-        assert!(PROFILE
-            .entry_matchers
-            .iter()
-            .any(|m| m.matches("app/routes/about.tsx")));
-        assert!(PROFILE
-            .entry_matchers
-            .iter()
-            .any(|m| m.matches("app/routes/blog.$slug.tsx")));
+        assert!(PROFILE.entry_matchers.iter().any(|m| m.matches("app/routes/_index.tsx")));
+        assert!(PROFILE.entry_matchers.iter().any(|m| m.matches("app/routes/about.tsx")));
+        assert!(PROFILE.entry_matchers.iter().any(|m| m.matches("app/routes/blog.$slug.tsx")));
     }
 
     #[test]
     fn entry_root_and_entries() {
         assert!(PROFILE.entry_matchers.iter().any(|m| m.matches("app/root.tsx")));
-        assert!(PROFILE
-            .entry_matchers
-            .iter()
-            .any(|m| m.matches("app/entry.server.tsx")));
-        assert!(PROFILE
-            .entry_matchers
-            .iter()
-            .any(|m| m.matches("app/entry.client.tsx")));
+        assert!(PROFILE.entry_matchers.iter().any(|m| m.matches("app/entry.server.tsx")));
+        assert!(PROFILE.entry_matchers.iter().any(|m| m.matches("app/entry.client.tsx")));
     }
 
     #[test]
@@ -75,17 +60,11 @@ mod tests {
 
     #[test]
     fn lib_file_is_not_entry() {
-        assert!(!PROFILE
-            .entry_matchers
-            .iter()
-            .any(|m| m.matches("app/lib/posts.ts")));
+        assert!(!PROFILE.entry_matchers.iter().any(|m| m.matches("app/lib/posts.ts")));
     }
 
     #[test]
     fn component_is_not_entry() {
-        assert!(!PROFILE
-            .entry_matchers
-            .iter()
-            .any(|m| m.matches("app/components/Layout.tsx")));
+        assert!(!PROFILE.entry_matchers.iter().any(|m| m.matches("app/components/Layout.tsx")));
     }
 }

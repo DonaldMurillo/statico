@@ -20,19 +20,13 @@ pub fn detect(root: &Path, external_imports: &[String]) -> Vec<UnusedDepIssue> {
 
     for pkg in &deps {
         if !imported.contains(pkg.as_str()) {
-            issues.push(UnusedDepIssue {
-                package_name: pkg.clone(),
-                location: "dependencies".to_string(),
-            });
+            issues.push(UnusedDepIssue { package_name: pkg.clone(), location: "dependencies".to_string() });
         }
     }
 
     for pkg in &dev_deps {
         if !imported.contains(pkg.as_str()) {
-            issues.push(UnusedDepIssue {
-                package_name: pkg.clone(),
-                location: "devDependencies".to_string(),
-            });
+            issues.push(UnusedDepIssue { package_name: pkg.clone(), location: "devDependencies".to_string() });
         }
     }
 
@@ -88,11 +82,7 @@ mod tests {
     fn all_deps_used() {
         let tmp = std::env::temp_dir().join("statico-test-used-deps");
         let _ = fs::create_dir_all(&tmp);
-        fs::write(
-            tmp.join("package.json"),
-            r#"{"dependencies": {"react": "^18.0.0", "lodash": "^4.0.0"}}"#,
-        )
-        .unwrap();
+        fs::write(tmp.join("package.json"), r#"{"dependencies": {"react": "^18.0.0", "lodash": "^4.0.0"}}"#).unwrap();
         let issues = detect(&tmp, &["react".to_string(), "lodash".to_string()]);
         assert!(issues.is_empty());
         let _ = fs::remove_dir_all(&tmp);

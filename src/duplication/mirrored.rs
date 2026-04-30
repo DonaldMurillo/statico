@@ -28,10 +28,7 @@ pub fn detect_mirrored_directories(groups: &[CloneGroup]) -> Vec<MirroredDirecto
         for inst in &group.instances {
             let dir = parent_dir(&inst.file);
             let filename = filename_only(&inst.file);
-            dir_instances
-                .entry(dir)
-                .or_default()
-                .push(filename);
+            dir_instances.entry(dir).or_default().push(filename);
         }
 
         // For each unique pair of directories, record shared files.
@@ -47,10 +44,7 @@ pub fn detect_mirrored_directories(groups: &[CloneGroup]) -> Vec<MirroredDirecto
                 let files_j = &dir_instances[&pair.1];
 
                 // Add files from both sides that appear in instances.
-                let shared = files_i
-                    .iter()
-                    .chain(files_j.iter())
-                    .map(|s| s.to_string());
+                let shared = files_i.iter().chain(files_j.iter()).map(|s| s.to_string());
 
                 let entry = pair_files.entry(pair.clone()).or_default();
                 for f in shared {
@@ -71,12 +65,7 @@ pub fn detect_mirrored_directories(groups: &[CloneGroup]) -> Vec<MirroredDirecto
                 return None;
             }
             let total_lines = *pair_lines.get(&(dir_a.clone(), dir_b.clone())).unwrap_or(&0);
-            Some(MirroredDirectory {
-                dir_a,
-                dir_b,
-                shared_files,
-                total_lines,
-            })
+            Some(MirroredDirectory { dir_a, dir_b, shared_files, total_lines })
         })
         .collect();
 
@@ -87,20 +76,12 @@ pub fn detect_mirrored_directories(groups: &[CloneGroup]) -> Vec<MirroredDirecto
 
 /// Extract the parent directory from a file path (using `/` separators).
 fn parent_dir(path: &str) -> String {
-    if let Some(idx) = path.rfind('/') {
-        path[..idx].to_string()
-    } else {
-        ".".to_string()
-    }
+    if let Some(idx) = path.rfind('/') { path[..idx].to_string() } else { ".".to_string() }
 }
 
 /// Extract just the filename (last component) from a path.
 fn filename_only(path: &str) -> &str {
-    if let Some(idx) = path.rfind('/') {
-        &path[idx + 1..]
-    } else {
-        path
-    }
+    if let Some(idx) = path.rfind('/') { &path[idx + 1..] } else { path }
 }
 
 #[cfg(test)]
@@ -109,12 +90,7 @@ mod tests {
     use crate::types::CloneInstance;
 
     fn instance(file: &str, start: usize, end: usize) -> CloneInstance {
-        CloneInstance {
-            file: file.to_string(),
-            start_line: start,
-            end_line: end,
-            snippet: String::new(),
-        }
+        CloneInstance { file: file.to_string(), start_line: start, end_line: end, snippet: String::new() }
     }
 
     #[test]
@@ -126,10 +102,7 @@ mod tests {
     fn below_threshold_not_reported() {
         // Only 2 shared files, below threshold of 3.
         let groups = vec![CloneGroup {
-            instances: vec![
-                instance("src/a.ts", 1, 10),
-                instance("lib/a.ts", 1, 10),
-            ],
+            instances: vec![instance("src/a.ts", 1, 10), instance("lib/a.ts", 1, 10)],
             token_count: 60,
             line_count: 10,
         }];
@@ -141,26 +114,17 @@ mod tests {
     fn above_threshold_reported() {
         let groups = vec![
             CloneGroup {
-                instances: vec![
-                    instance("src/a.ts", 1, 10),
-                    instance("lib/a.ts", 1, 10),
-                ],
+                instances: vec![instance("src/a.ts", 1, 10), instance("lib/a.ts", 1, 10)],
                 token_count: 60,
                 line_count: 10,
             },
             CloneGroup {
-                instances: vec![
-                    instance("src/b.ts", 1, 10),
-                    instance("lib/b.ts", 1, 10),
-                ],
+                instances: vec![instance("src/b.ts", 1, 10), instance("lib/b.ts", 1, 10)],
                 token_count: 60,
                 line_count: 10,
             },
             CloneGroup {
-                instances: vec![
-                    instance("src/c.ts", 1, 10),
-                    instance("lib/c.ts", 1, 10),
-                ],
+                instances: vec![instance("src/c.ts", 1, 10), instance("lib/c.ts", 1, 10)],
                 token_count: 60,
                 line_count: 10,
             },

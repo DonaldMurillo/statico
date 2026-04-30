@@ -27,27 +27,18 @@ pub fn compute_diff(before: &AnalysisOutput, after: &AnalysisOutput) -> DiffResu
     let before_keys = collect_issue_keys(before);
     let after_keys = collect_issue_keys(after);
 
-    let before_set: HashSet<(String, String)> = before_keys.iter()
-        .map(|e| (e.category.clone(), e.key.clone()))
-        .collect();
-    let after_set: HashSet<(String, String)> = after_keys.iter()
-        .map(|e| (e.category.clone(), e.key.clone()))
-        .collect();
+    let before_set: HashSet<(String, String)> =
+        before_keys.iter().map(|e| (e.category.clone(), e.key.clone())).collect();
+    let after_set: HashSet<(String, String)> = after_keys.iter().map(|e| (e.category.clone(), e.key.clone())).collect();
 
-    let new_issues: Vec<DiffEntry> = after_keys.iter()
-        .filter(|e| !before_set.contains(&(e.category.clone(), e.key.clone())))
-        .cloned()
-        .collect();
+    let new_issues: Vec<DiffEntry> =
+        after_keys.iter().filter(|e| !before_set.contains(&(e.category.clone(), e.key.clone()))).cloned().collect();
 
-    let fixed_issues: Vec<DiffEntry> = before_keys.iter()
-        .filter(|e| !after_set.contains(&(e.category.clone(), e.key.clone())))
-        .cloned()
-        .collect();
+    let fixed_issues: Vec<DiffEntry> =
+        before_keys.iter().filter(|e| !after_set.contains(&(e.category.clone(), e.key.clone()))).cloned().collect();
 
-    let persisting: Vec<DiffEntry> = after_keys.iter()
-        .filter(|e| before_set.contains(&(e.category.clone(), e.key.clone())))
-        .cloned()
-        .collect();
+    let persisting: Vec<DiffEntry> =
+        after_keys.iter().filter(|e| before_set.contains(&(e.category.clone(), e.key.clone()))).cloned().collect();
 
     DiffResult { new_issues, fixed_issues, persisting }
 }
@@ -83,15 +74,17 @@ fn collect_issue_keys(output: &AnalysisOutput) -> Vec<DiffEntry> {
     for dc in &output.issues.duplicate_code {
         let key = format!(
             "{}:L{}-{}::{}:L{}-{}",
-            dc.location_a.file, dc.location_a.start_line, dc.location_a.end_line,
-            dc.location_b.file, dc.location_b.start_line, dc.location_b.end_line,
+            dc.location_a.file,
+            dc.location_a.start_line,
+            dc.location_a.end_line,
+            dc.location_b.file,
+            dc.location_b.start_line,
+            dc.location_b.end_line,
         );
         entries.push(DiffEntry {
             category: "duplicate_code".into(),
             key,
-            detail: format!(
-                "{} vs {}", dc.location_a.file, dc.location_b.file
-            ),
+            detail: format!("{} vs {}", dc.location_a.file, dc.location_b.file),
         });
     }
 
@@ -150,8 +143,7 @@ fn collect_issue_keys(output: &AnalysisOutput) -> Vec<DiffEntry> {
 
 /// Format diff result as JSON.
 pub fn format_diff_json(diff: &DiffResult) -> Result<String, String> {
-    serde_json::to_string_pretty(diff)
-        .map_err(|e| format!("failed to serialize diff: {}", e))
+    serde_json::to_string_pretty(diff).map_err(|e| format!("failed to serialize diff: {}", e))
 }
 
 /// Format diff result as Markdown.
@@ -169,7 +161,7 @@ pub fn format_diff_markdown(diff: &DiffResult) -> Result<String, String> {
         for e in &diff.new_issues {
             md.push_str(&format!("| {} | {} |\n", e.category, e.detail));
         }
-        md.push_str("\n");
+        md.push('\n');
     }
 
     if !diff.fixed_issues.is_empty() {
@@ -178,7 +170,7 @@ pub fn format_diff_markdown(diff: &DiffResult) -> Result<String, String> {
         for e in &diff.fixed_issues {
             md.push_str(&format!("| {} | {} |\n", e.category, e.detail));
         }
-        md.push_str("\n");
+        md.push('\n');
     }
 
     if !diff.persisting.is_empty() {
@@ -189,19 +181,22 @@ pub fn format_diff_markdown(diff: &DiffResult) -> Result<String, String> {
                 md.push_str(&format!("| {} | {} |\n", e.category, e.detail));
             }
         }
-        md.push_str("\n");
+        md.push('\n');
     }
 
     // Summary by category
     let mut new_by_cat: HashMap<String, usize> = HashMap::new();
     let mut fixed_by_cat: HashMap<String, usize> = HashMap::new();
-    for e in &diff.new_issues { *new_by_cat.entry(e.category.clone()).or_insert(0) += 1; }
-    for e in &diff.fixed_issues { *fixed_by_cat.entry(e.category.clone()).or_insert(0) += 1; }
+    for e in &diff.new_issues {
+        *new_by_cat.entry(e.category.clone()).or_insert(0) += 1;
+    }
+    for e in &diff.fixed_issues {
+        *fixed_by_cat.entry(e.category.clone()).or_insert(0) += 1;
+    }
 
     md.push_str("## Summary by Category\n\n");
     md.push_str("| Category | New | Fixed | Net |\n|---|---|---|---|\n");
-    let all_cats: HashSet<&str> = new_by_cat.keys().chain(fixed_by_cat.keys())
-        .map(|s| s.as_str()).collect();
+    let all_cats: HashSet<&str> = new_by_cat.keys().chain(fixed_by_cat.keys()).map(|s| s.as_str()).collect();
     let mut cats: Vec<&str> = all_cats.into_iter().collect();
     cats.sort();
     for cat in cats {

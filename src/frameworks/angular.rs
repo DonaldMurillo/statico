@@ -4,9 +4,8 @@
 //! Entry points: bootstrap files, Angular modules, environment configs, polyfills
 //! Implicit: test files, Storybook, e2e, generated code, tool configs
 
-use super::{FrameworkGotchaRule, FrameworkProfile, PathMatcher};
+use super::{FrameworkProfile, PathMatcher};
 
-const ANGULAR_GOTCHAS: &[FrameworkGotchaRule] = &[];
 
 pub const PROFILE: FrameworkProfile = FrameworkProfile {
     name: "angular",
@@ -59,14 +58,8 @@ mod tests {
 
     #[test]
     fn entry_module_files() {
-        assert!(PROFILE
-            .entry_matchers
-            .iter()
-            .any(|m| m.matches("src/app/app.module.ts")));
-        assert!(PROFILE
-            .entry_matchers
-            .iter()
-            .any(|m| m.matches("src/app/app-routing.module.ts")));
+        assert!(PROFILE.entry_matchers.iter().any(|m| m.matches("src/app/app.module.ts")));
+        assert!(PROFILE.entry_matchers.iter().any(|m| m.matches("src/app/app-routing.module.ts")));
     }
 
     #[test]
@@ -91,18 +84,12 @@ mod tests {
     #[test]
     fn component_is_not_entry() {
         // Components are loaded reflectively via decorators, not as entry points.
-        assert!(!PROFILE
-            .entry_matchers
-            .iter()
-            .any(|m| m.matches("src/app/header.component.ts")));
+        assert!(!PROFILE.entry_matchers.iter().any(|m| m.matches("src/app/header.component.ts")));
     }
 
     #[test]
     fn service_is_not_entry() {
         // Services are provided via DI, not entry points.
-        assert!(!PROFILE
-            .entry_matchers
-            .iter()
-            .any(|m| m.matches("src/app/data.service.ts")));
+        assert!(!PROFILE.entry_matchers.iter().any(|m| m.matches("src/app/data.service.ts")));
     }
 }

@@ -1,6 +1,6 @@
 //! Compute duplication statistics from clone groups.
 
-use crate::types::{CloneGroup, CloneFamily, DuplicationStats};
+use crate::types::{CloneFamily, CloneGroup, DuplicationStats};
 
 /// Compute duplication stats.
 ///
@@ -14,8 +14,7 @@ pub fn compute_duplication_stats(
     total_source_lines: usize,
 ) -> DuplicationStats {
     // Track unique (file, line) pairs to avoid double-counting.
-    let mut seen_lines: std::collections::HashSet<(String, usize)> =
-        std::collections::HashSet::new();
+    let mut seen_lines: std::collections::HashSet<(String, usize)> = std::collections::HashSet::new();
     let mut total_instances: usize = 0;
 
     let mut estimated_dup_lines: usize = 0;
@@ -32,12 +31,7 @@ pub fn compute_duplication_stats(
         // This handles the case where one instance is much larger than others
         // (e.g., a 1429-line migration file matched against a 5-line fragment).
         // The min span represents the actual duplicated code size.
-        let min_span = g
-            .instances
-            .iter()
-            .map(|i| i.end_line - i.start_line + 1)
-            .min()
-            .unwrap_or(0);
+        let min_span = g.instances.iter().map(|i| i.end_line - i.start_line + 1).min().unwrap_or(0);
         estimated_dup_lines += min_span * g.instances.len();
     }
 
@@ -46,11 +40,8 @@ pub fn compute_duplication_stats(
     // Estimated dup lines under-counts when instances overlap on the same file.
     let duplicated_lines = seen_lines.len().min(estimated_dup_lines);
 
-    let duplication_percentage = if total_source_lines > 0 {
-        (duplicated_lines as f64 / total_source_lines as f64) * 100.0
-    } else {
-        0.0
-    };
+    let duplication_percentage =
+        if total_source_lines > 0 { (duplicated_lines as f64 / total_source_lines as f64) * 100.0 } else { 0.0 };
 
     DuplicationStats {
         total_lines: total_source_lines,

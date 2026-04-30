@@ -55,11 +55,7 @@ pub fn detect_framework_dead(
         .iter()
         .filter(|ep| !framework_reachable.contains(*ep))
         .filter(|ep| dep_graph.contains_key(*ep))
-        .filter(|ep| {
-            ep.starts_with("src/")
-                || ep.starts_with("__mocks__/")
-                || ep.starts_with("scripts/")
-        })
+        .filter(|ep| ep.starts_with("src/") || ep.starts_with("__mocks__/") || ep.starts_with("scripts/"))
         // Exclude test files — they're tooling, not dead code.
         .filter(|ep| !ep.contains(".test.") && !ep.contains(".spec."))
         .map(|path| DeadCodeIssue {
@@ -80,11 +76,10 @@ fn bfs_reachable<'a>(starts: &'a [String], dep_graph: &'a BTreeMap<String, Vec<S
     let mut stack: Vec<&str> = Vec::new();
 
     for ep in starts {
-        if dep_graph.contains_key(ep) {
-            if reachable.insert(ep) {
+        if dep_graph.contains_key(ep)
+            && reachable.insert(ep) {
                 stack.push(ep);
             }
-        }
     }
 
     while let Some(current) = stack.pop() {
@@ -111,10 +106,8 @@ mod tests {
     #[test]
     fn no_dead_code_when_all_reachable() {
         let ep = vec!["src/index.ts".into()];
-        let graph = BTreeMap::from([
-            ("src/index.ts".into(), vec!["src/utils.ts".into()]),
-            ("src/utils.ts".into(), vec![]),
-        ]);
+        let graph =
+            BTreeMap::from([("src/index.ts".into(), vec!["src/utils.ts".into()]), ("src/utils.ts".into(), vec![])]);
         let loc = BTreeMap::new();
         assert!(detect(&ep, &graph, &loc).is_empty());
     }
@@ -122,10 +115,7 @@ mod tests {
     #[test]
     fn orphan_file_is_dead() {
         let ep = vec!["src/index.ts".into()];
-        let graph = BTreeMap::from([
-            ("src/index.ts".into(), vec![]),
-            ("src/orphan.ts".into(), vec![]),
-        ]);
+        let graph = BTreeMap::from([("src/index.ts".into(), vec![]), ("src/orphan.ts".into(), vec![])]);
         let loc = BTreeMap::from([("src/orphan.ts".into(), 45)]);
         let dead = detect(&ep, &graph, &loc);
         assert_eq!(dead.len(), 1);
@@ -149,10 +139,7 @@ mod tests {
 
     #[test]
     fn no_entry_points_means_all_dead() {
-        let graph = BTreeMap::from([
-            ("src/a.ts".into(), vec!["src/b.ts".into()]),
-            ("src/b.ts".into(), vec![]),
-        ]);
+        let graph = BTreeMap::from([("src/a.ts".into(), vec!["src/b.ts".into()]), ("src/b.ts".into(), vec![])]);
         let dead = detect(&[], &graph, &BTreeMap::new());
         assert_eq!(dead.len(), 2);
     }
@@ -174,14 +161,8 @@ mod tests {
             ("src/index.ts".into(), vec!["src/utils.ts".into()]),
             ("src/utils.ts".into(), vec![]),
             // Migration barrel (implicit EP) → individual migrations
-            (
-                "src/migrations/index.ts".into(),
-                vec!["src/migrations/001_create_users.ts".into()],
-            ),
-            (
-                "src/migrations/001_create_users.ts".into(),
-                vec![],
-            ),
+            ("src/migrations/index.ts".into(), vec!["src/migrations/001_create_users.ts".into()]),
+            ("src/migrations/001_create_users.ts".into(), vec![]),
         ]);
         let dead = detect(&framework_eps, &graph, &BTreeMap::new());
         // Both migration barrel and individual migration are dead from app perspective
@@ -198,10 +179,7 @@ mod tests {
         let graph = BTreeMap::from([
             ("src/index.ts".into(), vec!["src/utils.ts".into()]),
             ("src/utils.ts".into(), vec![]),
-            (
-                "src/migrations/index.ts".into(),
-                vec!["src/utils.ts".into()],
-            ),
+            ("src/migrations/index.ts".into(), vec!["src/utils.ts".into()]),
         ]);
         let dead = detect(&framework_eps, &graph, &BTreeMap::new());
         // utils.ts is reachable from framework EP, so it's alive
@@ -227,10 +205,7 @@ mod tests {
         let framework_eps = vec!["src/index.ts".into()];
         let graph = BTreeMap::from([
             ("src/index.ts".into(), vec![]),
-            (
-                "scripts/backfill-metadata-search-text.ts".into(),
-                vec!["src/db.ts".into()],
-            ),
+            ("scripts/backfill-metadata-search-text.ts".into(), vec!["src/db.ts".into()]),
             ("src/db.ts".into(), vec![]),
         ]);
         // If src/db.ts is NOT reachable from framework EPs, both script and db are dead

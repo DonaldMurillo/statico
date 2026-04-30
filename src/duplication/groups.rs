@@ -59,7 +59,7 @@ pub fn build_clone_groups(issues: &[DuplicateCodeIssue]) -> Vec<CloneGroup> {
         parent[i]
     }
 
-    for (_, issue_indices) in &location_to_issues {
+    for issue_indices in location_to_issues.values() {
         if issue_indices.len() < 2 {
             continue;
         }
@@ -72,11 +72,8 @@ pub fn build_clone_groups(issues: &[DuplicateCodeIssue]) -> Vec<CloneGroup> {
                 // huge block-level matches that happen to share a location.
                 let root_min = issue_min_span[root];
                 let other_min = issue_min_span[other_root];
-                let ratio = if root_min < other_min {
-                    other_min / root_min.max(1)
-                } else {
-                    root_min / other_min.max(1)
-                };
+                let ratio =
+                    if root_min < other_min { other_min / root_min.max(1) } else { root_min / other_min.max(1) };
                 if ratio <= 10 {
                     parent[other_root] = root;
                 }
@@ -102,17 +99,9 @@ pub fn build_clone_groups(issues: &[DuplicateCodeIssue]) -> Vec<CloneGroup> {
                 return None;
             }
 
-            let line_count = instances
-                .iter()
-                .map(|i| i.end_line - i.start_line + 1)
-                .min()
-                .unwrap_or(0);
+            let line_count = instances.iter().map(|i| i.end_line - i.start_line + 1).min().unwrap_or(0);
 
-            Some(CloneGroup {
-                token_count: line_count * TOKENS_PER_LINE,
-                line_count,
-                instances,
-            })
+            Some(CloneGroup { token_count: line_count * TOKENS_PER_LINE, line_count, instances })
         })
         .collect();
 
@@ -123,9 +112,8 @@ pub fn build_clone_groups(issues: &[DuplicateCodeIssue]) -> Vec<CloneGroup> {
 
 /// Add an instance to the list only if it's not already there (same file/lines).
 fn maybe_add_instance(instances: &mut Vec<CloneInstance>, loc: &CodeBlockLocation) {
-    let already_present = instances.iter().any(|i| {
-        i.file == loc.file && i.start_line == loc.start_line && i.end_line == loc.end_line
-    });
+    let already_present =
+        instances.iter().any(|i| i.file == loc.file && i.start_line == loc.start_line && i.end_line == loc.end_line);
     if !already_present {
         instances.push(CloneInstance {
             file: loc.file.clone(),
@@ -152,11 +140,7 @@ mod tests {
     }
 
     fn issue(a: CodeBlockLocation, b: CodeBlockLocation) -> DuplicateCodeIssue {
-        DuplicateCodeIssue {
-            confidence: 0.95,
-            location_a: a,
-            location_b: b,
-        }
+        DuplicateCodeIssue { confidence: 0.95, location_a: a, location_b: b }
     }
 
     #[test]
@@ -178,10 +162,7 @@ mod tests {
     #[test]
     fn three_way_merge() {
         // A-B pair and A-C pair with same range in A → merge into 3-instance group.
-        let issues = vec![
-            issue(loc("a.ts", 1, 5), loc("b.ts", 10, 14)),
-            issue(loc("a.ts", 1, 5), loc("c.ts", 20, 24)),
-        ];
+        let issues = vec![issue(loc("a.ts", 1, 5), loc("b.ts", 10, 14)), issue(loc("a.ts", 1, 5), loc("c.ts", 20, 24))];
         let groups = build_clone_groups(&issues);
         assert_eq!(groups.len(), 1);
         assert_eq!(groups[0].instances.len(), 3);
@@ -189,20 +170,14 @@ mod tests {
 
     #[test]
     fn separate_issues_remain_separate() {
-        let issues = vec![
-            issue(loc("a.ts", 1, 10), loc("b.ts", 1, 10)),
-            issue(loc("c.ts", 1, 5), loc("d.ts", 1, 5)),
-        ];
+        let issues = vec![issue(loc("a.ts", 1, 10), loc("b.ts", 1, 10)), issue(loc("c.ts", 1, 5), loc("d.ts", 1, 5))];
         let groups = build_clone_groups(&issues);
         assert_eq!(groups.len(), 2);
     }
 
     #[test]
     fn sorted_by_line_count_descending() {
-        let issues = vec![
-            issue(loc("a.ts", 1, 5), loc("b.ts", 1, 5)),
-            issue(loc("c.ts", 1, 20), loc("d.ts", 1, 20)),
-        ];
+        let issues = vec![issue(loc("a.ts", 1, 5), loc("b.ts", 1, 5)), issue(loc("c.ts", 1, 20), loc("d.ts", 1, 20))];
         let groups = build_clone_groups(&issues);
         assert!(groups[0].line_count >= groups[1].line_count);
     }
@@ -210,10 +185,7 @@ mod tests {
     #[test]
     fn transitive_merge() {
         // A-B and B-C with shared B location → all merge.
-        let issues = vec![
-            issue(loc("a.ts", 1, 5), loc("b.ts", 1, 5)),
-            issue(loc("b.ts", 1, 5), loc("c.ts", 1, 5)),
-        ];
+        let issues = vec![issue(loc("a.ts", 1, 5), loc("b.ts", 1, 5)), issue(loc("b.ts", 1, 5), loc("c.ts", 1, 5))];
         let groups = build_clone_groups(&issues);
         assert_eq!(groups.len(), 1);
         assert_eq!(groups[0].instances.len(), 3);

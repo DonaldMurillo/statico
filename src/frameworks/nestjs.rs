@@ -66,34 +66,19 @@ mod tests {
 
     #[test]
     fn entry_module_files() {
-        assert!(PROFILE
-            .entry_matchers
-            .iter()
-            .any(|m| m.matches("src/app.module.ts")));
-        assert!(PROFILE
-            .entry_matchers
-            .iter()
-            .any(|m| m.matches("src/users/users.module.ts")));
+        assert!(PROFILE.entry_matchers.iter().any(|m| m.matches("src/app.module.ts")));
+        assert!(PROFILE.entry_matchers.iter().any(|m| m.matches("src/users/users.module.ts")));
     }
 
     #[test]
     fn entry_environments() {
-        assert!(PROFILE
-            .entry_matchers
-            .iter()
-            .any(|m| m.matches("environments/environment.ts")));
+        assert!(PROFILE.entry_matchers.iter().any(|m| m.matches("environments/environment.ts")));
     }
 
     #[test]
     fn implicit_test_files() {
-        assert!(PROFILE
-            .implicit_matchers
-            .iter()
-            .any(|m| m.matches("src/users/users.service.spec.ts")));
-        assert!(PROFILE
-            .implicit_matchers
-            .iter()
-            .any(|m| m.matches("test/app.e2e-spec.ts")));
+        assert!(PROFILE.implicit_matchers.iter().any(|m| m.matches("src/users/users.service.spec.ts")));
+        assert!(PROFILE.implicit_matchers.iter().any(|m| m.matches("test/app.e2e-spec.ts")));
     }
 
     #[test]
@@ -105,18 +90,12 @@ mod tests {
     #[test]
     fn controller_is_not_entry() {
         // Controllers are registered in modules, not entry points themselves.
-        assert!(!PROFILE
-            .entry_matchers
-            .iter()
-            .any(|m| m.matches("src/users/users.controller.ts")));
+        assert!(!PROFILE.entry_matchers.iter().any(|m| m.matches("src/users/users.controller.ts")));
     }
 
     #[test]
     fn service_is_not_entry() {
         // Services are injected via DI; orphaned ones should be dead code.
-        assert!(!PROFILE
-            .entry_matchers
-            .iter()
-            .any(|m| m.matches("src/users/users.service.ts")));
+        assert!(!PROFILE.entry_matchers.iter().any(|m| m.matches("src/users/users.service.ts")));
     }
 }

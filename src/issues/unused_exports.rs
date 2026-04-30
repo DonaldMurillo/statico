@@ -63,10 +63,7 @@ pub fn detect(
         for name in exports {
             let is_used = names_imported.is_some_and(|set| set.contains(name));
             if !is_used {
-                unused.push(UnusedExportIssue {
-                    name: name.clone(),
-                    path: path.clone(),
-                });
+                unused.push(UnusedExportIssue { name: name.clone(), path: path.clone() });
             }
         }
     }
@@ -136,8 +133,8 @@ fn detect_barrel_files(file_sources: &[(String, String)]) -> HashSet<String> {
     let mut barrels = HashSet::new();
     for (path, source) in file_sources {
         let filename = path.rsplit('/').next().unwrap_or(path);
-        let is_index = filename == "index.ts" || filename == "index.tsx"
-            || filename == "index.js" || filename == "index.jsx";
+        let is_index =
+            filename == "index.ts" || filename == "index.tsx" || filename == "index.js" || filename == "index.jsx";
 
         let mut total_stmts = 0usize;
         let mut reexport_stmts = 0usize;
@@ -147,7 +144,8 @@ fn detect_barrel_files(file_sources: &[(String, String)]) -> HashSet<String> {
 
         for line in source.lines() {
             let trimmed = line.trim();
-            if trimmed.is_empty() || trimmed.starts_with("//") || trimmed.starts_with("/*") || trimmed.starts_with("*") {
+            if trimmed.is_empty() || trimmed.starts_with("//") || trimmed.starts_with("/*") || trimmed.starts_with("*")
+            {
                 continue;
             }
 
@@ -158,9 +156,7 @@ fn detect_barrel_files(file_sources: &[(String, String)]) -> HashSet<String> {
                         export_block_has_from = true;
                     }
                     // Block closed if: has semicolon, ends with }, or is a "} from '...'" re-export
-                    let block_closed = trimmed.contains(';')
-                        || trimmed.ends_with('}')
-                        || trimmed.contains("} from ");
+                    let block_closed = trimmed.contains(';') || trimmed.ends_with('}') || trimmed.contains("} from ");
                     if block_closed {
                         total_stmts += 1;
                         if export_block_has_from {
@@ -211,7 +207,7 @@ fn detect_barrel_files(file_sources: &[(String, String)]) -> HashSet<String> {
                 continue;
             }
             // export { ... } spanning multiple lines without opening on first line
-            if (trimmed.starts_with("export") && trimmed.contains(" from ")) {
+            if trimmed.starts_with("export") && trimmed.contains(" from ") {
                 reexport_stmts += 1;
                 continue;
             }
@@ -225,15 +221,8 @@ fn detect_barrel_files(file_sources: &[(String, String)]) -> HashSet<String> {
         //   - It's 100% re-exports with at least 1 re-export (catches icon wrappers), OR
         //   - It's an index file with >60% re-exports, OR
         //   - It's a non-index file with >30% re-exports AND ≥3 re-export stmts
-        let is_barrel = if ratio >= 1.0 && reexport_stmts >= 1 {
-            true
-        } else if is_index && ratio > 0.6 {
-            true
-        } else if !is_index && ratio > 0.3 && reexport_stmts >= 3 {
-            true
-        } else {
-            false
-        };
+        let is_barrel =
+            (ratio >= 1.0 && reexport_stmts >= 1) || (is_index && ratio > 0.6) || (!is_index && ratio > 0.3 && reexport_stmts >= 3);
         if is_barrel {
             barrels.insert(path.clone());
         }
@@ -300,30 +289,22 @@ fn build_reexport_map(
         let barrel_dir_abs = root.join(barrel_dir_str);
 
         // Extract named re-exports: export { Foo, Bar } from './baz'
-        let reexports = crate::parse::exports::extract_reexport_sources(
-            parsed.tree.root_node(), source,
-        );
+        let reexports = crate::parse::exports::extract_reexport_sources(parsed.tree.root_node(), source);
         for (name, rel_spec) in &reexports {
             let resolved = crate::resolution::resolve_import(&barrel_dir_abs, rel_spec);
             if let Some(target_abs) = resolved {
                 let target_rel = crate::resolution::path_relative_to(root, &target_abs);
-                map.entry((target_rel, name.clone()))
-                    .or_default()
-                    .push(path.clone());
+                map.entry((target_rel, name.clone())).or_default().push(path.clone());
             }
         }
 
         // Also handle star re-exports: export * from './foo'
-        let star_specs = crate::parse::exports::extract_star_reexport_specs(
-            parsed.tree.root_node(), source,
-        );
+        let star_specs = crate::parse::exports::extract_star_reexport_specs(parsed.tree.root_node(), source);
         for rel_spec in &star_specs {
             let resolved = crate::resolution::resolve_import(&barrel_dir_abs, rel_spec);
             if let Some(target_abs) = resolved {
                 let target_rel = crate::resolution::path_relative_to(root, &target_abs);
-                map.entry((target_rel, "*".to_string()))
-                    .or_default()
-                    .push(path.clone());
+                map.entry((target_rel, "*".to_string())).or_default().push(path.clone());
             }
         }
     }
@@ -388,9 +369,7 @@ mod tests {
             ("src/utils.ts".into(), vec!["helper".into()]),
             ("src/dead.ts".into(), vec!["oldThing".into()]),
         ]);
-        let imported = BTreeMap::from([
-            ("src/utils.ts".into(), HashSet::from(["helper".into()])),
-        ]);
+        let imported = BTreeMap::from([("src/utils.ts".into(), HashSet::from(["helper".into()]))]);
         let eps = vec!["src/app.ts".into()];
         let sources = vec![];
         let unused = detect(&exports, &imported, &eps, &sources, &[], std::path::Path::new("."));
@@ -401,12 +380,8 @@ mod tests {
 
     #[test]
     fn all_used_when_every_name_is_imported() {
-        let exports = BTreeMap::from([
-            ("src/utils.ts".into(), vec!["helper".into()]),
-        ]);
-        let imported = BTreeMap::from([
-            ("src/utils.ts".into(), HashSet::from(["helper".into()])),
-        ]);
+        let exports = BTreeMap::from([("src/utils.ts".into(), vec!["helper".into()])]);
+        let imported = BTreeMap::from([("src/utils.ts".into(), HashSet::from(["helper".into()]))]);
         let sources = vec![];
         let unused = detect(&exports, &imported, &[], &sources, &[], std::path::Path::new("."));
         assert!(unused.is_empty());
@@ -415,12 +390,8 @@ mod tests {
     #[test]
     fn detects_partial_unused() {
         // File exports foo, bar, baz. Only foo is imported → bar and baz are unused.
-        let exports = BTreeMap::from([
-            ("src/utils.ts".into(), vec!["foo".into(), "bar".into(), "baz".into()]),
-        ]);
-        let imported = BTreeMap::from([
-            ("src/utils.ts".into(), HashSet::from(["foo".into()])),
-        ]);
+        let exports = BTreeMap::from([("src/utils.ts".into(), vec!["foo".into(), "bar".into(), "baz".into()])]);
+        let imported = BTreeMap::from([("src/utils.ts".into(), HashSet::from(["foo".into()]))]);
         let sources = vec![];
         let unused = detect(&exports, &imported, &[], &sources, &[], std::path::Path::new("."));
         assert_eq!(unused.len(), 2);
@@ -448,10 +419,9 @@ mod tests {
     #[test]
     fn barrel_reexport_file_excluded() {
         // A barrel index.ts that re-exports everything — should be treated as public API.
-        let barrel_source = "export { Button } from './button'\nexport { Input } from './input'\nexport { Select } from './select'\n";
-        let exports = BTreeMap::from([
-            ("src/index.ts".into(), vec!["Button".into(), "Input".into(), "Select".into()]),
-        ]);
+        let barrel_source =
+            "export { Button } from './button'\nexport { Input } from './input'\nexport { Select } from './select'\n";
+        let exports = BTreeMap::from([("src/index.ts".into(), vec!["Button".into(), "Input".into(), "Select".into()])]);
         let imported = BTreeMap::new(); // nobody imports these internally
         let eps = vec![]; // not an explicit entry point
         let sources = vec![("src/index.ts".to_string(), barrel_source.to_string())];
@@ -464,12 +434,8 @@ mod tests {
     fn non_barrel_index_still_flagged() {
         // An index.ts that has actual code, not just re-exports.
         let index_source = "export function helper() { return 42; }\nexport function unusedHelper() { return 0; }\n";
-        let exports = BTreeMap::from([
-            ("src/index.ts".into(), vec!["helper".into(), "unusedHelper".into()]),
-        ]);
-        let imported = BTreeMap::from([
-            ("src/index.ts".into(), HashSet::from(["helper".into()])),
-        ]);
+        let exports = BTreeMap::from([("src/index.ts".into(), vec!["helper".into(), "unusedHelper".into()])]);
+        let imported = BTreeMap::from([("src/index.ts".into(), HashSet::from(["helper".into()]))]);
         let eps = vec![];
         let sources = vec![("src/index.ts".to_string(), index_source.to_string())];
         let unused = detect(&exports, &imported, &eps, &sources, &[], std::path::Path::new("."));
@@ -482,9 +448,10 @@ mod tests {
     fn non_index_barrel_file_excluded() {
         // A non-index file (charts.tsx) that is primarily re-exports.
         let barrel_source = "export { ChartArea } from './chart-area'\nexport { ChartBar } from './chart-bar'\nexport { ChartLine } from './chart-line'\nexport { ChartPie } from './chart-pie'\n";
-        let exports = BTreeMap::from([
-            ("app/charts/charts.tsx".into(), vec!["ChartArea".into(), "ChartBar".into(), "ChartLine".into(), "ChartPie".into()]),
-        ]);
+        let exports = BTreeMap::from([(
+            "app/charts/charts.tsx".into(),
+            vec!["ChartArea".into(), "ChartBar".into(), "ChartLine".into(), "ChartPie".into()],
+        )]);
         let imported = BTreeMap::new();
         let eps = vec![];
         let sources = vec![("app/charts/charts.tsx".to_string(), barrel_source.to_string())];
@@ -496,9 +463,10 @@ mod tests {
     #[test]
     fn public_api_file_excluded() {
         // A file that's declared as a package's public API via package.json.
-        let exports = BTreeMap::from([
-            ("packages/ui/src/icons.tsx".into(), vec!["IconA".into(), "IconB".into(), "IconC".into()]),
-        ]);
+        let exports = BTreeMap::from([(
+            "packages/ui/src/icons.tsx".into(),
+            vec!["IconA".into(), "IconB".into(), "IconC".into()],
+        )]);
         let imported = BTreeMap::new(); // nobody imports these internally
         let eps = vec![];
         let sources = vec![];

@@ -8,8 +8,8 @@
 use std::collections::{HashMap, HashSet};
 
 use super::{
-    normalize, tokenize, winnow, jaccard_similarity, round2, DuplicateCodeIssue, CodeBlockLocation,
-    MIN_FRAGMENT_LINES, FRAGMENT_CONFIDENCE_THRESHOLD,
+    CodeBlockLocation, DuplicateCodeIssue, FRAGMENT_CONFIDENCE_THRESHOLD, MIN_FRAGMENT_LINES, jaccard_similarity,
+    normalize, round2, tokenize, winnow,
 };
 
 // ---------------------------------------------------------------------------
@@ -76,10 +76,8 @@ pub fn detect_fragments(file_sources: &[(String, String)]) -> Vec<DuplicateCodeI
     let mut all_matches: Vec<RawMatch> = Vec::new();
 
     // Pre-compute lines per file (avoids re-splitting for each window size).
-    let file_lines: Vec<(String, Vec<&str>)> = file_sources
-        .iter()
-        .map(|(p, s)| (p.clone(), s.lines().collect()))
-        .collect();
+    let file_lines: Vec<(String, Vec<&str>)> =
+        file_sources.iter().map(|(p, s)| (p.clone(), s.lines().collect())).collect();
 
     for &window_size in WINDOW_SIZES {
         if window_size < MIN_FRAGMENT_LINES {
@@ -112,8 +110,8 @@ pub fn detect_fragments(file_sources: &[(String, String)]) -> Vec<DuplicateCodeI
 // Fragment extraction
 // ---------------------------------------------------------------------------
 
-fn extract_fragments<'a>(
-    file_lines: &[(String, Vec<&'a str>)],
+fn extract_fragments(
+    file_lines: &[(String, Vec<&str>)],
     window_size: usize,
     step: usize,
     covered: &HashSet<(String, usize, usize)>,
@@ -152,12 +150,7 @@ fn extract_fragments<'a>(
                 continue;
             }
 
-            fragments.push(Fragment {
-                path: path.clone(),
-                start_line: start_1,
-                end_line: end,
-                fingerprints,
-            });
+            fragments.push(Fragment { path: path.clone(), start_line: start_1, end_line: end, fingerprints });
 
             start += step;
         }
@@ -212,11 +205,9 @@ fn find_fragment_matches(fragments: &[Fragment]) -> Vec<RawMatch> {
         let fa = &fragments[a];
         let fb = &fragments[b];
         let (path_a, start_a, end_a, path_b, start_b, end_b) = if fa.path < fb.path {
-            (fa.path.clone(), fa.start_line, fa.end_line,
-             fb.path.clone(), fb.start_line, fb.end_line)
+            (fa.path.clone(), fa.start_line, fa.end_line, fb.path.clone(), fb.start_line, fb.end_line)
         } else {
-            (fb.path.clone(), fb.start_line, fb.end_line,
-             fa.path.clone(), fa.start_line, fa.end_line)
+            (fb.path.clone(), fb.start_line, fb.end_line, fa.path.clone(), fa.start_line, fa.end_line)
         };
         matches.push(RawMatch { path_a, start_a, end_a, path_b, start_b, end_b, confidence: conf });
     }

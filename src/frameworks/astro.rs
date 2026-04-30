@@ -38,26 +38,14 @@ mod tests {
 
     #[test]
     fn entry_pages() {
-        assert!(PROFILE
-            .entry_matchers
-            .iter()
-            .any(|m| m.matches("src/pages/index.astro")));
-        assert!(PROFILE
-            .entry_matchers
-            .iter()
-            .any(|m| m.matches("src/pages/about.astro")));
-        assert!(PROFILE
-            .entry_matchers
-            .iter()
-            .any(|m| m.matches("src/pages/blog/[...slug].astro")));
+        assert!(PROFILE.entry_matchers.iter().any(|m| m.matches("src/pages/index.astro")));
+        assert!(PROFILE.entry_matchers.iter().any(|m| m.matches("src/pages/about.astro")));
+        assert!(PROFILE.entry_matchers.iter().any(|m| m.matches("src/pages/blog/[...slug].astro")));
     }
 
     #[test]
     fn entry_content() {
-        assert!(PROFILE
-            .entry_matchers
-            .iter()
-            .any(|m| m.matches("src/content/config.ts")));
+        assert!(PROFILE.entry_matchers.iter().any(|m| m.matches("src/content/config.ts")));
     }
 
     #[test]
@@ -68,17 +56,11 @@ mod tests {
 
     #[test]
     fn implicit_generated() {
-        assert!(PROFILE
-            .implicit_matchers
-            .iter()
-            .any(|m| m.matches("src/generated/graphql.ts")));
+        assert!(PROFILE.implicit_matchers.iter().any(|m| m.matches("src/generated/graphql.ts")));
     }
 
     #[test]
     fn component_is_not_entry() {
-        assert!(!PROFILE
-            .entry_matchers
-            .iter()
-            .any(|m| m.matches("src/components/Header.ts")));
+        assert!(!PROFILE.entry_matchers.iter().any(|m| m.matches("src/components/Header.ts")));
     }
 }

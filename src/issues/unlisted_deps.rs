@@ -19,10 +19,7 @@ pub fn detect(root: &Path, external_imports: &[(String, String)]) -> Vec<Unliste
     let mut issues = Vec::new();
     for (importing_file, package_name) in external_imports {
         if !all_deps.contains(package_name.as_str()) {
-            issues.push(UnlistedDepIssue {
-                package_name: package_name.clone(),
-                imported_by: importing_file.clone(),
-            });
+            issues.push(UnlistedDepIssue { package_name: package_name.clone(), imported_by: importing_file.clone() });
         }
     }
 
@@ -76,15 +73,8 @@ mod tests {
     fn all_imports_listed() {
         let tmp = std::env::temp_dir().join("statico-test-listed");
         let _ = fs::create_dir_all(&tmp);
-        fs::write(
-            tmp.join("package.json"),
-            r#"{"dependencies": {"react": "^18.0.0", "lodash": "^4.0.0"}}"#,
-        )
-        .unwrap();
-        let imports = vec![
-            ("src/app.ts".into(), "react".into()),
-            ("src/utils.ts".into(), "lodash".into()),
-        ];
+        fs::write(tmp.join("package.json"), r#"{"dependencies": {"react": "^18.0.0", "lodash": "^4.0.0"}}"#).unwrap();
+        let imports = vec![("src/app.ts".into(), "react".into()), ("src/utils.ts".into(), "lodash".into())];
         let issues = detect(&tmp, &imports);
         assert!(issues.is_empty());
         let _ = fs::remove_dir_all(&tmp);
@@ -94,15 +84,8 @@ mod tests {
     fn unlisted_import_reported() {
         let tmp = std::env::temp_dir().join("statico-test-unlisted");
         let _ = fs::create_dir_all(&tmp);
-        fs::write(
-            tmp.join("package.json"),
-            r#"{"dependencies": {"react": "^18.0.0"}}"#,
-        )
-        .unwrap();
-        let imports = vec![
-            ("src/app.ts".into(), "react".into()),
-            ("src/app.ts".into(), "lodash".into()),
-        ];
+        fs::write(tmp.join("package.json"), r#"{"dependencies": {"react": "^18.0.0"}}"#).unwrap();
+        let imports = vec![("src/app.ts".into(), "react".into()), ("src/app.ts".into(), "lodash".into())];
         let issues = detect(&tmp, &imports);
         assert_eq!(issues.len(), 1);
         assert_eq!(issues[0].package_name, "lodash");
@@ -114,11 +97,7 @@ mod tests {
     fn dev_deps_also_counted() {
         let tmp = std::env::temp_dir().join("statico-test-devdeps");
         let _ = fs::create_dir_all(&tmp);
-        fs::write(
-            tmp.join("package.json"),
-            r#"{"devDependencies": {"jest": "^29.0.0"}}"#,
-        )
-        .unwrap();
+        fs::write(tmp.join("package.json"), r#"{"devDependencies": {"jest": "^29.0.0"}}"#).unwrap();
         let imports = vec![("src/app.test.ts".into(), "jest".into())];
         let issues = detect(&tmp, &imports);
         assert!(issues.is_empty(), "devDependencies should be counted as listed");

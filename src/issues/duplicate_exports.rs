@@ -38,10 +38,7 @@ fn is_framework_convention(name: &str) -> bool {
 /// (migrations, route handlers, etc.).
 fn all_in_convention_dirs(files: &[String]) -> bool {
     files.iter().all(|f| {
-        f.contains("/migrations/")
-            || f.contains("/route.ts")
-            || f.contains("/route.tsx")
-            || f.contains("/route.js")
+        f.contains("/migrations/") || f.contains("/route.ts") || f.contains("/route.tsx") || f.contains("/route.js")
     })
 }
 
@@ -51,10 +48,7 @@ pub fn detect(file_exports: &BTreeMap<String, Vec<String>>) -> Vec<DuplicateExpo
     let mut name_to_files: BTreeMap<String, Vec<String>> = BTreeMap::new();
     for (path, exports) in file_exports {
         for name in exports {
-            name_to_files
-                .entry(name.clone())
-                .or_default()
-                .push(path.clone());
+            name_to_files.entry(name.clone()).or_default().push(path.clone());
         }
     }
 
@@ -70,10 +64,7 @@ pub fn detect(file_exports: &BTreeMap<String, Vec<String>>) -> Vec<DuplicateExpo
         })
         .map(|(name, mut files)| {
             files.sort();
-            DuplicateExportIssue {
-                name,
-                locations: files,
-            }
+            DuplicateExportIssue { name, locations: files }
         })
         .collect();
 
@@ -105,19 +96,15 @@ mod tests {
 
     #[test]
     fn skips_default_exports() {
-        let exports = BTreeMap::from([
-            ("src/a.ts".into(), vec!["default".into()]),
-            ("src/b.ts".into(), vec!["default".into()]),
-        ]);
+        let exports =
+            BTreeMap::from([("src/a.ts".into(), vec!["default".into()]), ("src/b.ts".into(), vec!["default".into()])]);
         assert!(detect(&exports).is_empty());
     }
 
     #[test]
     fn no_duplicates() {
-        let exports = BTreeMap::from([
-            ("src/a.ts".into(), vec!["alpha".into()]),
-            ("src/b.ts".into(), vec!["beta".into()]),
-        ]);
+        let exports =
+            BTreeMap::from([("src/a.ts".into(), vec!["alpha".into()]), ("src/b.ts".into(), vec!["beta".into()])]);
         assert!(detect(&exports).is_empty());
     }
 }

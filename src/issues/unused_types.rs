@@ -34,11 +34,7 @@ pub fn detect(
         }
         for (name, kind) in types {
             if !imported_names.contains(name) {
-                issues.push(UnusedTypeIssue {
-                    name: name.clone(),
-                    path: path.clone(),
-                    kind: kind.clone(),
-                });
+                issues.push(UnusedTypeIssue { name: name.clone(), path: path.clone(), kind: kind.clone() });
             }
         }
     }
@@ -63,13 +59,7 @@ fn collect_imported_names(source: &str, out: &mut BTreeSet<String>) {
         // Try to extract names between { and }.
         if let Some(braces) = extract_braces(trimmed) {
             for part in braces.split(',') {
-                let name = part
-                    .trim()
-                    .trim_start_matches("type ")
-                    .trim()
-                    .split_whitespace()
-                    .next()
-                    .unwrap_or("");
+                let name = part.trim().trim_start_matches("type ").split_whitespace().next().unwrap_or("");
                 if !name.is_empty() && name != "type" {
                     out.insert(name.to_string());
                 }
@@ -81,11 +71,7 @@ fn collect_imported_names(source: &str, out: &mut BTreeSet<String>) {
             let without_type = without_import.strip_prefix("type ").unwrap_or(without_import);
             let first_word = without_type.split_whitespace().next().unwrap_or("");
             // Only add if it looks like an identifier (not a keyword/brace/star).
-            if !first_word.is_empty()
-                && !first_word.starts_with('{')
-                && first_word != "*"
-                && first_word != "from"
-            {
+            if !first_word.is_empty() && !first_word.starts_with('{') && first_word != "*" && first_word != "from" {
                 out.insert(first_word.to_string());
             }
         }
@@ -96,11 +82,7 @@ fn collect_imported_names(source: &str, out: &mut BTreeSet<String>) {
 fn extract_braces(s: &str) -> Option<&str> {
     let start = s.find('{')?;
     let end = s.rfind('}')?;
-    if end > start {
-        Some(&s[start + 1..end])
-    } else {
-        None
-    }
+    if end > start { Some(&s[start + 1..end]) } else { None }
 }
 
 // ---------------------------------------------------------------------------
@@ -113,11 +95,15 @@ mod tests {
 
     #[test]
     fn detect_unused_type() {
-        let type_exports = BTreeMap::from([
-            ("src/types.ts".into(), vec![("Config".into(), "interface".into()), ("Result".into(), "type".into())]),
-        ]);
+        let type_exports = BTreeMap::from([(
+            "src/types.ts".into(),
+            vec![("Config".into(), "interface".into()), ("Result".into(), "type".into())],
+        )]);
         let file_sources = vec![
-            ("src/types.ts".into(), "export interface Config { debug: boolean } export type Result<T> = T | null;".into()),
+            (
+                "src/types.ts".into(),
+                "export interface Config { debug: boolean } export type Result<T> = T | null;".into(),
+            ),
             ("src/app.ts".into(), "import type { Config } from './types';".into()),
         ];
         let issues = detect(&type_exports, &file_sources, &[]);
@@ -128,21 +114,15 @@ mod tests {
 
     #[test]
     fn skip_entry_points() {
-        let type_exports = BTreeMap::from([
-            ("src/index.ts".into(), vec![("Config".into(), "interface".into())]),
-        ]);
-        let file_sources = vec![
-            ("src/index.ts".into(), "export interface Config { debug: boolean }".into()),
-        ];
+        let type_exports = BTreeMap::from([("src/index.ts".into(), vec![("Config".into(), "interface".into())])]);
+        let file_sources = vec![("src/index.ts".into(), "export interface Config { debug: boolean }".into())];
         let issues = detect(&type_exports, &file_sources, &["src/index.ts".into()]);
         assert!(issues.is_empty());
     }
 
     #[test]
     fn all_types_used() {
-        let type_exports = BTreeMap::from([
-            ("src/types.ts".into(), vec![("Config".into(), "interface".into())]),
-        ]);
+        let type_exports = BTreeMap::from([("src/types.ts".into(), vec![("Config".into(), "interface".into())])]);
         let file_sources = vec![
             ("src/types.ts".into(), "export interface Config { debug: boolean }".into()),
             ("src/app.ts".into(), "import { Config } from './types';".into()),

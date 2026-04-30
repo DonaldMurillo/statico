@@ -67,11 +67,7 @@ pub fn detect(
     }
 
     // Sort by confidence descending.
-    issues.sort_by(|a, b| {
-        b.confidence
-            .partial_cmp(&a.confidence)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
+    issues.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap_or(std::cmp::Ordering::Equal));
     issues
 }
 
@@ -83,15 +79,12 @@ fn detect_blocks(file_blocks: &BTreeMap<String, Vec<CodeBlock>>) -> Vec<Duplicat
     let candidates: Vec<(&str, &CodeBlock, Vec<u64>)> = file_blocks
         .iter()
         .flat_map(|(path, blocks)| {
-            blocks
-                .iter()
-                .filter(|b| b.end_line - b.start_line + 1 >= MIN_BLOCK_LINES)
-                .map(|b| {
-                    let normalized = normalize(&b.source);
-                    let tokens = tokenize(&normalized);
-                    let fingerprints = winnow(&tokens);
-                    (path.as_str(), b, fingerprints)
-                })
+            blocks.iter().filter(|b| b.end_line - b.start_line + 1 >= MIN_BLOCK_LINES).map(|b| {
+                let normalized = normalize(&b.source);
+                let tokens = tokenize(&normalized);
+                let fingerprints = winnow(&tokens);
+                (path.as_str(), b, fingerprints)
+            })
         })
         .collect();
 
@@ -99,8 +92,7 @@ fn detect_blocks(file_blocks: &BTreeMap<String, Vec<CodeBlock>>) -> Vec<Duplicat
 }
 
 fn find_block_pairs(candidates: &[(&str, &CodeBlock, Vec<u64>)]) -> Vec<DuplicateCodeIssue> {
-    let mut fp_index: std::collections::HashMap<u64, Vec<usize>> =
-        std::collections::HashMap::new();
+    let mut fp_index: std::collections::HashMap<u64, Vec<usize>> = std::collections::HashMap::new();
     for (i, (_, _, fps)) in candidates.iter().enumerate() {
         for &fp in fps {
             fp_index.entry(fp).or_default().push(i);
@@ -146,33 +138,18 @@ fn find_block_pairs(candidates: &[(&str, &CodeBlock, Vec<u64>)]) -> Vec<Duplicat
 fn build_range_set(issues: &[DuplicateCodeIssue]) -> HashSet<(String, usize, usize)> {
     let mut set = HashSet::new();
     for issue in issues {
-        set.insert((
-            issue.location_a.file.clone(),
-            issue.location_a.start_line,
-            issue.location_a.end_line,
-        ));
-        set.insert((
-            issue.location_b.file.clone(),
-            issue.location_b.start_line,
-            issue.location_b.end_line,
-        ));
+        set.insert((issue.location_a.file.clone(), issue.location_a.start_line, issue.location_a.end_line));
+        set.insert((issue.location_b.file.clone(), issue.location_b.start_line, issue.location_b.end_line));
     }
     set
 }
 
-fn is_covered_by_block(
-    frag: &DuplicateCodeIssue,
-    block_ranges: &HashSet<(String, usize, usize)>,
-) -> bool {
+fn is_covered_by_block(frag: &DuplicateCodeIssue, block_ranges: &HashSet<(String, usize, usize)>) -> bool {
     let a_covered = block_ranges.iter().any(|(file, start, end)| {
-        *file == frag.location_a.file
-            && *start <= frag.location_a.start_line
-            && *end >= frag.location_a.end_line
+        *file == frag.location_a.file && *start <= frag.location_a.start_line && *end >= frag.location_a.end_line
     });
     let b_covered = block_ranges.iter().any(|(file, start, end)| {
-        *file == frag.location_b.file
-            && *start <= frag.location_b.start_line
-            && *end >= frag.location_b.end_line
+        *file == frag.location_b.file && *start <= frag.location_b.start_line && *end >= frag.location_b.end_line
     });
     a_covered && b_covered
 }
@@ -382,17 +359,19 @@ mod tests {
         let block_a = CodeBlock {
             name: "alpha".into(),
             source: "function alpha() {\n  const a = 1;\n  const b = 2;\n  const c = 3;\n  return a + b + c;\n}".into(),
-            start_line: 1, end_line: 6, kind: BlockKind::Function,
+            start_line: 1,
+            end_line: 6,
+            kind: BlockKind::Function,
         };
         let block_b = CodeBlock {
             name: "beta".into(),
-            source: "function beta() {\n  const x = 10;\n  const y = 20;\n  const z = 30;\n  return x * y * z;\n}".into(),
-            start_line: 1, end_line: 6, kind: BlockKind::Function,
+            source: "function beta() {\n  const x = 10;\n  const y = 20;\n  const z = 30;\n  return x * y * z;\n}"
+                .into(),
+            start_line: 1,
+            end_line: 6,
+            kind: BlockKind::Function,
         };
-        let file_blocks = BTreeMap::from([
-            ("src/a.ts".into(), vec![block_a]),
-            ("src/b.ts".into(), vec![block_b]),
-        ]);
+        let file_blocks = BTreeMap::from([("src/a.ts".into(), vec![block_a]), ("src/b.ts".into(), vec![block_b])]);
         for issue in detect(&file_blocks, &[]) {
             assert!(issue.confidence >= CONFIDENCE_THRESHOLD);
         }
@@ -408,15 +387,9 @@ mod tests {
             end_line: 7,
             kind: BlockKind::Function,
         };
-        let file_blocks = BTreeMap::from([
-            ("src/a.ts".into(), vec![block.clone()]),
-            ("src/b.ts".into(), vec![block]),
-        ]);
+        let file_blocks = BTreeMap::from([("src/a.ts".into(), vec![block.clone()]), ("src/b.ts".into(), vec![block])]);
         let issues = detect(&file_blocks, &[]);
-        assert!(
-            issues.iter().any(|i| i.confidence >= 0.9),
-            "expected high-confidence match"
-        );
+        assert!(issues.iter().any(|i| i.confidence >= 0.9), "expected high-confidence match");
     }
 
     #[test]
@@ -425,16 +398,9 @@ mod tests {
         let code = "const x = getData();\nconst y = transform(x);\nconst z = validate(y);\nconst w = format(z);\nconst v = output(w);\nconsole.log(v);\n";
         let file_a = format!("// file a\n{code}// end");
         let file_b = format!("// file b\n{code}// end");
-        let sources = vec![
-            ("src/a.ts".to_string(), file_a),
-            ("src/b.ts".to_string(), file_b),
-        ];
+        let sources = vec![("src/a.ts".to_string(), file_a), ("src/b.ts".to_string(), file_b)];
         let issues = detect(&BTreeMap::new(), &sources);
-        assert!(
-            !issues.is_empty(),
-            "expected fragment duplicate, got {} issues",
-            issues.len()
-        );
+        assert!(!issues.is_empty(), "expected fragment duplicate, got {} issues", issues.len());
     }
 
     #[test]
@@ -444,20 +410,18 @@ mod tests {
         // larger match.
         let line = "  const value = computeSomething(data, opts);\n";
         let code = line.repeat(12);
-        let sources = vec![
-            ("src/a.ts".to_string(), code.clone()),
-            ("src/b.ts".to_string(), code),
-        ];
+        let sources = vec![("src/a.ts".to_string(), code.clone()), ("src/b.ts".to_string(), code)];
         let issues = detect(&BTreeMap::new(), &sources);
         assert!(!issues.is_empty(), "expected fragment match");
         // The largest match should span more than 5 lines.
-        let max_span = issues.iter().map(|i| {
-            (i.location_a.end_line - i.location_a.start_line + 1)
-                .max(i.location_b.end_line - i.location_b.start_line + 1)
-        }).max().unwrap_or(0);
-        assert!(
-            max_span > 5,
-            "expected a match spanning >5 lines, got max span {max_span}"
-        );
+        let max_span = issues
+            .iter()
+            .map(|i| {
+                (i.location_a.end_line - i.location_a.start_line + 1)
+                    .max(i.location_b.end_line - i.location_b.start_line + 1)
+            })
+            .max()
+            .unwrap_or(0);
+        assert!(max_span > 5, "expected a match spanning >5 lines, got max span {max_span}");
     }
 }

@@ -19,12 +19,7 @@ pub fn count_loc(source: &str) -> (usize, usize) {
 
 /// Count function declarations, expressions, and arrow functions.
 pub fn count_functions(root: Node) -> usize {
-    let kinds = [
-        "function_declaration",
-        "generator_function_declaration",
-        "function_expression",
-        "arrow_function",
-    ];
+    let kinds = ["function_declaration", "generator_function_declaration", "function_expression", "arrow_function"];
     collect_nodes(root, &kinds).len()
 }
 

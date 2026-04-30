@@ -33,15 +33,21 @@ impl OutputFormatter for MarkdownFormatter {
         md.push_str(&format!("| Duplicate exports | {} |\n", summary.issue_counts.duplicate_exports));
         md.push_str(&format!("| Unresolved imports | {} |\n", summary.issue_counts.unresolved_imports));
         md.push_str(&format!("| Unlisted deps | {} |\n", summary.issue_counts.unlisted_dependencies));
-        md.push_str("\n");
+        md.push('\n');
 
         // Health Dashboard
         md.push_str("## Health Dashboard\n\n");
         let score = summary.health_score;
-        let emoji = if score >= 80.0 { "🟢" } else if score >= 50.0 { "🟡" } else { "🔴" };
+        let emoji = if score >= 80.0 {
+            "🟢"
+        } else if score >= 50.0 {
+            "🟡"
+        } else {
+            "🔴"
+        };
         md.push_str(&format!("**Overall Health Score: {} {:.1}/100**\n\n", emoji, score));
         md.push_str(&health_bar(score));
-        md.push_str("\n");
+        md.push('\n');
 
         // Dead Code
         if !output.issues.dead_code.is_empty() {
@@ -52,10 +58,13 @@ impl OutputFormatter for MarkdownFormatter {
             for dc in sorted.iter().take(50) {
                 md.push_str(&format!(
                     "| `{}` | {} | {:.0}% | {} |\n",
-                    dc.path, dc.lines_of_code, dc.confidence * 100.0, dc.reason
+                    dc.path,
+                    dc.lines_of_code,
+                    dc.confidence * 100.0,
+                    dc.reason
                 ));
             }
-            md.push_str("\n");
+            md.push('\n');
         }
 
         // Unused Exports
@@ -65,7 +74,7 @@ impl OutputFormatter for MarkdownFormatter {
             for ue in output.issues.unused_exports.iter().take(20) {
                 md.push_str(&format!("| `{}` | `{}` |\n", ue.name, ue.path));
             }
-            md.push_str("\n");
+            md.push('\n');
         }
 
         // Unused Types
@@ -75,7 +84,7 @@ impl OutputFormatter for MarkdownFormatter {
             for ut in output.issues.unused_types.iter().take(20) {
                 md.push_str(&format!("| `{}` | {} | `{}` |\n", ut.name, ut.kind, ut.path));
             }
-            md.push_str("\n");
+            md.push('\n');
         }
 
         // Duplication
@@ -92,22 +101,23 @@ impl OutputFormatter for MarkdownFormatter {
             let mut groups = output.duplication.clone_groups.clone();
             groups.sort_by(|a, b| b.line_count.cmp(&a.line_count));
             for (i, g) in groups.iter().take(10).enumerate() {
-                let files: Vec<String> = g.instances.iter()
-                    .map(|inst| format!("{}:L{}", inst.file, inst.start_line))
-                    .collect();
+                let files: Vec<String> =
+                    g.instances.iter().map(|inst| format!("{}:L{}", inst.file, inst.start_line)).collect();
                 md.push_str(&format!("| {} | {} | {} |\n", i + 1, files.join(", "), g.line_count));
             }
-            md.push_str("\n");
+            md.push('\n');
 
             if !output.duplication.clone_families.is_empty() {
                 md.push_str("### Clone Families\n\n");
                 for fam in &output.duplication.clone_families {
                     md.push_str(&format!(
                         "- **{} groups, {} lines**: {}\n",
-                        fam.group_count, fam.total_duplicated_lines, fam.files.join(", ")
+                        fam.group_count,
+                        fam.total_duplicated_lines,
+                        fam.files.join(", ")
                     ));
                 }
-                md.push_str("\n");
+                md.push('\n');
             }
         }
 
@@ -117,7 +127,7 @@ impl OutputFormatter for MarkdownFormatter {
             for cd in &output.issues.circular_dependencies {
                 md.push_str(&format!("- {} → {}\n", cd.files.join(" → "), cd.files[0]));
             }
-            md.push_str("\n");
+            md.push('\n');
         }
 
         // Framework Info

@@ -13,24 +13,12 @@ pub use stats::compute_duplication_stats;
 use crate::types::{DuplicateCodeIssue, DuplicationSection};
 
 /// Build the full duplication section from raw duplicate-code issues.
-pub fn build_duplication_section(
-    issues: &[DuplicateCodeIssue],
-    total_source_lines: usize,
-) -> DuplicationSection {
+pub fn build_duplication_section(issues: &[DuplicateCodeIssue], total_source_lines: usize) -> DuplicationSection {
     let clone_groups = build_clone_groups(issues);
     let clone_families = build_clone_families(&clone_groups);
     let mirrored_directories = detect_mirrored_directories(&clone_groups);
-    let stats = compute_duplication_stats(
-        &clone_groups,
-        &clone_families,
-        total_source_lines,
-    );
-    DuplicationSection {
-        stats,
-        clone_groups,
-        clone_families,
-        mirrored_directories,
-    }
+    let stats = compute_duplication_stats(&clone_groups, &clone_families, total_source_lines);
+    DuplicationSection { stats, clone_groups, clone_families, mirrored_directories }
 }
 
 #[cfg(test)]

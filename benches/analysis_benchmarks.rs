@@ -1,14 +1,14 @@
 //! Benchmark suite for statico analysis pipeline.
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use std::path::Path;
 
 use statico::analyzer;
 use statico::duplication::build_clone_groups;
+use statico::parse::AstParser;
 use statico::parse::exports::extract_exports;
 use statico::parse::imports::extract_imports;
 use statico::parse::metrics::count_loc;
-use statico::parse::AstParser;
 use statico::types::{CodeBlockLocation, DuplicateCodeIssue};
 
 // ---------------------------------------------------------------------------
@@ -58,23 +58,17 @@ class UserCache {
 
 fn bench_analyze_dead_code_project(c: &mut Criterion) {
     let root = Path::new("fixtures/dead-code-project");
-    c.bench_function("analyze_dead_code_project", |b| {
-        b.iter(|| analyzer::analyze(black_box(root)).unwrap())
-    });
+    c.bench_function("analyze_dead_code_project", |b| b.iter(|| analyzer::analyze(black_box(root)).unwrap()));
 }
 
 fn bench_analyze_nextjs_project(c: &mut Criterion) {
     let root = Path::new("fixtures/nextjs-project");
-    c.bench_function("analyze_nextjs_project", |b| {
-        b.iter(|| analyzer::analyze(black_box(root)).unwrap())
-    });
+    c.bench_function("analyze_nextjs_project", |b| b.iter(|| analyzer::analyze(black_box(root)).unwrap()));
 }
 
 fn bench_analyze_payload_project(c: &mut Criterion) {
     let root = Path::new("fixtures/payload-project");
-    c.bench_function("analyze_payload_project", |b| {
-        b.iter(|| analyzer::analyze(black_box(root)).unwrap())
-    });
+    c.bench_function("analyze_payload_project", |b| b.iter(|| analyzer::analyze(black_box(root)).unwrap()));
 }
 
 // ---------------------------------------------------------------------------
@@ -85,31 +79,23 @@ fn bench_extract_imports(c: &mut Criterion) {
     let mut parser = AstParser::new().expect("parser init");
     let result = parser.parse(SAMPLE_TS, false).expect("parse");
     let root_node = result.tree.root_node();
-    c.bench_function("extract_imports", |b| {
-        b.iter(|| extract_imports(black_box(root_node), black_box(SAMPLE_TS)))
-    });
+    c.bench_function("extract_imports", |b| b.iter(|| extract_imports(black_box(root_node), black_box(SAMPLE_TS))));
 }
 
 fn bench_extract_exports(c: &mut Criterion) {
     let mut parser = AstParser::new().expect("parser init");
     let result = parser.parse(SAMPLE_TS, false).expect("parse");
     let root_node = result.tree.root_node();
-    c.bench_function("extract_exports", |b| {
-        b.iter(|| extract_exports(black_box(root_node), black_box(SAMPLE_TS)))
-    });
+    c.bench_function("extract_exports", |b| b.iter(|| extract_exports(black_box(root_node), black_box(SAMPLE_TS))));
 }
 
 fn bench_count_loc(c: &mut Criterion) {
-    c.bench_function("count_loc", |b| {
-        b.iter(|| count_loc(black_box(SAMPLE_TS)))
-    });
+    c.bench_function("count_loc", |b| b.iter(|| count_loc(black_box(SAMPLE_TS))));
 }
 
 fn bench_ast_parse(c: &mut Criterion) {
     let mut parser = AstParser::new().expect("parser init");
-    c.bench_function("ast_parse_ts", |b| {
-        b.iter(|| parser.parse(black_box(SAMPLE_TS), false))
-    });
+    c.bench_function("ast_parse_ts", |b| b.iter(|| parser.parse(black_box(SAMPLE_TS), false)));
 }
 
 // ---------------------------------------------------------------------------
@@ -118,9 +104,7 @@ fn bench_ast_parse(c: &mut Criterion) {
 
 fn bench_detect_duplicate_groups(c: &mut Criterion) {
     let issues = build_sample_duplication_issues(50);
-    c.bench_function("build_clone_groups_50_issues", |b| {
-        b.iter(|| build_clone_groups(black_box(&issues)))
-    });
+    c.bench_function("build_clone_groups_50_issues", |b| b.iter(|| build_clone_groups(black_box(&issues))));
 }
 
 fn build_sample_duplication_issues(count: usize) -> Vec<DuplicateCodeIssue> {

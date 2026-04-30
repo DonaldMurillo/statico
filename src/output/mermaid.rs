@@ -11,8 +11,8 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
-use crate::types::AnalysisOutput;
 use super::OutputFormatter;
+use crate::types::AnalysisOutput;
 
 /// Mermaid flowchart diagram formatter.
 pub struct MermaidFormatter;
@@ -34,26 +34,12 @@ impl OutputFormatter for MermaidFormatter {
         }
 
         // ── 2. Classify files ──
-        let dead_set: HashSet<String> = output
-            .issues
-            .dead_code
-            .iter()
-            .map(|d| d.path.clone())
-            .collect();
+        let dead_set: HashSet<String> = output.issues.dead_code.iter().map(|d| d.path.clone()).collect();
 
-        let entry_set: HashSet<String> = output
-            .structure
-            .entry_points
-            .iter()
-            .cloned()
-            .collect();
+        let entry_set: HashSet<String> = output.structure.entry_points.iter().cloned().collect();
 
-        let circular_set: HashSet<String> = output
-            .issues
-            .circular_dependencies
-            .iter()
-            .flat_map(|cd| cd.files.iter().cloned())
-            .collect();
+        let circular_set: HashSet<String> =
+            output.issues.circular_dependencies.iter().flat_map(|cd| cd.files.iter().cloned()).collect();
 
         // Build the set of edges that participate in a circular dep.
         // For each circular dep chain A→B→C→A, mark every adjacent pair.
@@ -64,10 +50,7 @@ impl OutputFormatter for MermaidFormatter {
             }
             // Close the cycle: last → first
             if cd.files.len() >= 2 {
-                circular_edges.insert((
-                    cd.files[cd.files.len() - 1].clone(),
-                    cd.files[0].clone(),
-                ));
+                circular_edges.insert((cd.files[cd.files.len() - 1].clone(), cd.files[0].clone()));
             }
         }
 
@@ -89,11 +72,8 @@ impl OutputFormatter for MermaidFormatter {
         };
 
         // ── 5. Assign stable short IDs (N0, N1, …) ──
-        let id_map: HashMap<String, String> = visible_files
-            .iter()
-            .enumerate()
-            .map(|(i, path)| (path.clone(), format!("N{}", i)))
-            .collect();
+        let id_map: HashMap<String, String> =
+            visible_files.iter().enumerate().map(|(i, path)| (path.clone(), format!("N{}", i))).collect();
 
         // ── 6. Determine the common prefix to strip for display names ──
         let common_prefix = common_path_prefix(visible_files.iter());
@@ -104,11 +84,7 @@ impl OutputFormatter for MermaidFormatter {
         // ── 8. Emit subgraphs ──
         for (dir, paths) in &dir_groups {
             // Mermaid subgraph label: escape quotes if present
-            let label = if dir.is_empty() {
-                "(root)".to_string()
-            } else {
-                dir.clone()
-            };
+            let label = if dir.is_empty() { "(root)".to_string() } else { dir.clone() };
             buf.push_str(&format!("    subgraph {}\n", label));
             for path in paths {
                 let id = &id_map[path];
@@ -134,10 +110,7 @@ impl OutputFormatter for MermaidFormatter {
                 let tgt_id = &id_map[target];
 
                 if circular_edges.contains(&(fi.source.clone(), target.clone())) {
-                    buf.push_str(&format!(
-                        "    {} -.->|circular| {}\n",
-                        src_id, tgt_id
-                    ));
+                    buf.push_str(&format!("    {} -.->|circular| {}\n", src_id, tgt_id));
                     circular_edge_indices.push(edge_index);
                 } else {
                     buf.push_str(&format!("    {} --> {}\n", src_id, tgt_id));
@@ -176,10 +149,7 @@ impl OutputFormatter for MermaidFormatter {
 
         // ── 13. Style: circular dep edges (thick red) ──
         for idx in &circular_edge_indices {
-            buf.push_str(&format!(
-                "    linkStyle {} stroke:red,stroke-width:3px\n",
-                idx
-            ));
+            buf.push_str(&format!("    linkStyle {} stroke:red,stroke-width:3px\n", idx));
         }
 
         Ok(buf)
@@ -263,11 +233,8 @@ fn select_important_files(
     }
 
     // 4. Top 10 files by issue count
-    let mut by_issues: Vec<(String, usize)> = issue_counts
-        .iter()
-        .filter(|(p, _)| all_files.contains(*p))
-        .map(|(p, c)| (p.clone(), *c))
-        .collect();
+    let mut by_issues: Vec<(String, usize)> =
+        issue_counts.iter().filter(|(p, _)| all_files.contains(*p)).map(|(p, c)| (p.clone(), *c)).collect();
     by_issues.sort_by(|a, b| b.1.cmp(&a.1));
     for (path, _) in by_issues.iter().take(10) {
         important.insert(path.clone());
@@ -278,10 +245,7 @@ fn select_important_files(
     for fi in imports {
         for t in &fi.targets {
             adjacency.entry(fi.source.clone()).or_default().push(t.clone());
-            adjacency
-                .entry(t.clone())
-                .or_default()
-                .push(fi.source.clone());
+            adjacency.entry(t.clone()).or_default().push(fi.source.clone());
         }
     }
 
@@ -334,32 +298,18 @@ where
 
 /// Return a short display name by stripping the common prefix.
 fn display_name(path: &str, prefix: &str) -> String {
-    if prefix.is_empty() {
-        path.to_string()
-    } else {
-        path.strip_prefix(prefix).unwrap_or(path).to_string()
-    }
+    if prefix.is_empty() { path.to_string() } else { path.strip_prefix(prefix).unwrap_or(path).to_string() }
 }
 
 /// Group files into directory buckets for Mermaid subgraphs.
 ///
 /// Returns a `BTreeMap` keyed by directory (relative to `prefix`), preserving
 /// a stable ordering.
-fn group_by_directory(
-    files: &BTreeSet<String>,
-    prefix: &str,
-) -> BTreeMap<String, Vec<String>> {
+fn group_by_directory(files: &BTreeSet<String>, prefix: &str) -> BTreeMap<String, Vec<String>> {
     let mut groups: BTreeMap<String, Vec<String>> = BTreeMap::new();
     for path in files {
-        let relative = if prefix.is_empty() {
-            path.as_str()
-        } else {
-            path.strip_prefix(prefix).unwrap_or(path)
-        };
-        let dir = relative
-            .rfind('/')
-            .map(|pos| relative[..pos].to_string())
-            .unwrap_or_default();
+        let relative = if prefix.is_empty() { path.as_str() } else { path.strip_prefix(prefix).unwrap_or(path) };
+        let dir = relative.rfind('/').map(|pos| relative[..pos].to_string()).unwrap_or_default();
         groups.entry(dir).or_default().push(path.clone());
     }
     groups
@@ -371,11 +321,7 @@ mod tests {
 
     #[test]
     fn common_prefix_finds_shared_dir() {
-        let files = vec![
-            "src/main.rs".to_string(),
-            "src/utils.rs".to_string(),
-            "src/lib/mod.rs".to_string(),
-        ];
+        let files = vec!["src/main.rs".to_string(), "src/utils.rs".to_string(), "src/lib/mod.rs".to_string()];
         let prefix = common_path_prefix(files.iter());
         assert_eq!(prefix, "src/");
     }

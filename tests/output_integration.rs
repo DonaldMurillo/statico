@@ -1,7 +1,7 @@
 //! Integration tests for output formatters and AI-friendly features.
 
-use std::path::Path;
 use statico::output::OutputFormatter;
+use std::path::Path;
 
 /// Helper: run analyze on a fixture project.
 fn analyze_fixture(name: &str) -> statico::types::AnalysisOutput {

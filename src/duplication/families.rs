@@ -22,11 +22,7 @@ pub fn build_clone_families(groups: &[CloneGroup]) -> Vec<CloneFamily> {
 
     for (gi, group) in groups.iter().enumerate() {
         // Collect unique files in this group.
-        let mut files: Vec<&str> = group
-            .instances
-            .iter()
-            .map(|i| i.file.as_str())
-            .collect();
+        let mut files: Vec<&str> = group.instances.iter().map(|i| i.file.as_str()).collect();
         files.sort();
         files.dedup();
 
@@ -46,15 +42,8 @@ pub fn build_clone_families(groups: &[CloneGroup]) -> Vec<CloneFamily> {
             if group_indices.len() < 2 {
                 return None;
             }
-            let total_duplicated_lines: usize = group_indices
-                .iter()
-                .map(|&gi| groups[gi].line_count)
-                .sum();
-            Some(CloneFamily {
-                files: vec![fa, fb],
-                group_count: group_indices.len(),
-                total_duplicated_lines,
-            })
+            let total_duplicated_lines: usize = group_indices.iter().map(|&gi| groups[gi].line_count).sum();
+            Some(CloneFamily { files: vec![fa, fb], group_count: group_indices.len(), total_duplicated_lines })
         })
         .collect();
 
@@ -99,10 +88,8 @@ mod tests {
 
     #[test]
     fn two_groups_same_file_pair_form_family() {
-        let groups = vec![
-            group(&[("a.ts", 1, 10), ("b.ts", 1, 10)], 10),
-            group(&[("a.ts", 20, 30), ("b.ts", 20, 30)], 11),
-        ];
+        let groups =
+            vec![group(&[("a.ts", 1, 10), ("b.ts", 1, 10)], 10), group(&[("a.ts", 20, 30), ("b.ts", 20, 30)], 11)];
         let families = build_clone_families(&groups);
         assert_eq!(families.len(), 1);
         assert_eq!(families[0].group_count, 2);

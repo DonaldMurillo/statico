@@ -3,8 +3,8 @@
 //! Uses carriage returns for in-place updates so piped output stays clean.
 
 use std::io::Write;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 /// Reports analysis progress to stderr.
 pub struct ProgressReporter {
@@ -59,11 +59,7 @@ impl ProgressReporter {
         }
         let done = self.completed.load(Ordering::Relaxed);
         let phase = self.phase.lock().map(|p| p.clone()).unwrap_or_default();
-        let _ = write!(
-            std::io::stderr(),
-            "\r[{}/{}] {}...",
-            done, self.total, phase
-        );
+        let _ = write!(std::io::stderr(), "\r[{}/{}] {}...", done, self.total, phase);
         let _ = std::io::stderr().flush();
     }
 }

@@ -12,11 +12,7 @@ pub fn run_tui(root: &std::path::Path, min_confidence: f64) -> Result<(), String
 
     // 1. Progress spinner while analysing.
     let pb = ProgressBar::new_spinner();
-    pb.set_style(
-        ProgressStyle::default_spinner()
-            .template("{spinner:.green} {msg}")
-            .map_err(|e| e.to_string())?,
-    );
+    pb.set_style(ProgressStyle::default_spinner().template("{spinner:.green} {msg}").map_err(|e| e.to_string())?);
     pb.set_message("Analyzing project…");
     pb.enable_steady_tick(std::time::Duration::from_millis(80));
 
@@ -74,40 +70,18 @@ fn print_summary_cards(summary: &crate::types::Summary) {
 
     println!("  {}  {}", "Total Files:".dimmed(), summary.total_files.to_string().cyan());
     println!("  {}  {}", "Total Lines:".dimmed(), summary.total_lines.to_string().cyan());
-    println!(
-        "  {}  {}/100",
-        "Health Score:".dimmed(),
-        format!("{:.1}", score).color(score_color)
-    );
-    println!(
-        "  {}  {}%",
-        "Duplication:".dimmed(),
-        format!("{:.1}", dup).color(dup_color)
-    );
+    println!("  {}  {}/100", "Health Score:".dimmed(), format!("{:.1}", score).color(score_color));
+    println!("  {}  {}%", "Duplication:".dimmed(), format!("{:.1}", dup).color(dup_color));
     println!();
 }
 
-fn print_issues(
-    output: &AnalysisOutput,
-    counts: &crate::types::IssueCounts,
-    min_confidence: f64,
-) {
+fn print_issues(output: &AnalysisOutput, counts: &crate::types::IssueCounts, min_confidence: f64) {
     println!("  {}", "Issues by Category".bold());
     println!("  {}\n", "─".repeat(40).dimmed());
 
     // Count items above confidence threshold.
-    let dead: usize = output
-        .issues
-        .dead_code
-        .iter()
-        .filter(|i| i.confidence >= min_confidence)
-        .count();
-    let gotchas: usize = output
-        .issues
-        .gotchas
-        .iter()
-        .filter(|i| i.confidence >= min_confidence)
-        .count();
+    let dead: usize = output.issues.dead_code.iter().filter(|i| i.confidence >= min_confidence).count();
+    let gotchas: usize = output.issues.gotchas.iter().filter(|i| i.confidence >= min_confidence).count();
 
     print_category_line("🔴", "Dead Code", dead);
     print_category_line("🟡", "Unused Exports", counts.unused_exports);
@@ -121,11 +95,8 @@ fn print_issues(
 }
 
 fn print_category_line(icon: &str, label: &str, count: usize) {
-    let count_str = if count == 0 {
-        count.to_string().green().to_string()
-    } else {
-        count.to_string().yellow().to_string()
-    };
+    let count_str =
+        if count == 0 { count.to_string().green().to_string() } else { count.to_string().yellow().to_string() };
     println!("  {} {:<25} {}", icon, label, count_str);
 }
 
@@ -160,12 +131,7 @@ fn print_top_issues(output: &AnalysisOutput, min_confidence: f64) {
     }
 
     // Table header.
-    println!(
-        "  {:<40} {:<30} {}",
-        "File".dimmed(),
-        "Issue".dimmed(),
-        "Confidence".dimmed()
-    );
+    println!("  {:<40} {:<30} {}", "File".dimmed(), "Issue".dimmed(), "Confidence".dimmed());
 
     for (file, issue, conf) in &issues {
         let short_file = shorten_path(file, 38);
@@ -198,11 +164,7 @@ fn print_frameworks(frameworks: &[String]) {
     if frameworks.is_empty() {
         return;
     }
-    println!(
-        "  {} {}",
-        "Frameworks:".dimmed(),
-        frameworks.join(", ").cyan()
-    );
+    println!("  {} {}", "Frameworks:".dimmed(), frameworks.join(", ").cyan());
     println!();
 }
 

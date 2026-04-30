@@ -19,10 +19,7 @@ pub fn detect(dep_graph: &BTreeMap<String, Vec<String>>) -> Vec<UnresolvedImport
     for (source_file, targets) in dep_graph {
         for spec in targets {
             if is_unresolved(spec) {
-                issues.push(UnresolvedImportIssue {
-                    source_file: source_file.clone(),
-                    import_spec: spec.clone(),
-                });
+                issues.push(UnresolvedImportIssue { source_file: source_file.clone(), import_spec: spec.clone() });
             }
         }
     }
@@ -51,18 +48,14 @@ mod tests {
 
     #[test]
     fn no_unresolved() {
-        let graph = BTreeMap::from([
-            ("src/app.ts".into(), vec!["src/utils.ts".into(), "react".into()]),
-        ]);
+        let graph = BTreeMap::from([("src/app.ts".into(), vec!["src/utils.ts".into(), "react".into()])]);
         let issues = detect(&graph);
         assert!(issues.is_empty());
     }
 
     #[test]
     fn unresolved_relative() {
-        let graph = BTreeMap::from([
-            ("src/app.ts".into(), vec!["./missing.ts".into(), "src/utils.ts".into()]),
-        ]);
+        let graph = BTreeMap::from([("src/app.ts".into(), vec!["./missing.ts".into(), "src/utils.ts".into()])]);
         let issues = detect(&graph);
         assert_eq!(issues.len(), 1);
         assert_eq!(issues[0].import_spec, "./missing.ts");
@@ -71,9 +64,10 @@ mod tests {
 
     #[test]
     fn unresolved_alias() {
-        let graph = BTreeMap::from([
-            ("src/app.ts".into(), vec!["@/components/foo".into(), "~/lib/bar".into(), "#internal/baz".into()]),
-        ]);
+        let graph = BTreeMap::from([(
+            "src/app.ts".into(),
+            vec!["@/components/foo".into(), "~/lib/bar".into(), "#internal/baz".into()],
+        )]);
         let issues = detect(&graph);
         assert_eq!(issues.len(), 3);
     }

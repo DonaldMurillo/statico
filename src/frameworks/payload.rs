@@ -13,27 +13,15 @@ pub const PROFILE: FrameworkProfile = FrameworkProfile {
 
     dep_markers: &["payload"],
 
-    entry_matchers: &[
-        PathMatcher::FileName("payload.config.ts"),
-        PathMatcher::FileName("payload.config.js"),
-    ],
+    entry_matchers: &[PathMatcher::FileName("payload.config.ts"), PathMatcher::FileName("payload.config.js")],
 
     implicit_matchers: &[
         // Collections: index.ts or config.ts in any collection dir.
-        PathMatcher::PrefixAndFile {
-            prefix: "src/collections/",
-            files: &["index.ts", "config.ts"],
-        },
+        PathMatcher::PrefixAndFile { prefix: "src/collections/", files: &["index.ts", "config.ts"] },
         // Globals.
-        PathMatcher::PrefixAndFile {
-            prefix: "src/globals/",
-            files: &["index.ts", "config.ts"],
-        },
+        PathMatcher::PrefixAndFile { prefix: "src/globals/", files: &["index.ts", "config.ts"] },
         // Blocks.
-        PathMatcher::PrefixAndFile {
-            prefix: "src/blocks/",
-            files: &["index.ts", "config.ts"],
-        },
+        PathMatcher::PrefixAndFile { prefix: "src/blocks/", files: &["index.ts", "config.ts"] },
         // Endpoints.
         PathMatcher::Prefix("src/endpoints/"),
         PathMatcher::Prefix("endpoints/"),

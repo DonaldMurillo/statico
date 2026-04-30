@@ -15,10 +15,7 @@ pub const PROFILE: FrameworkProfile = FrameworkProfile {
 
     entry_matchers: &[
         // SvelteKit route convention files.
-        PathMatcher::DirAndStems {
-            dir: "routes",
-            stems: &["+page", "+layout", "+error", "+loading"],
-        },
+        PathMatcher::DirAndStems { dir: "routes", stems: &["+page", "+layout", "+error", "+loading"] },
         // Root-level route config files.
         PathMatcher::FileName("+page.ts"),
         PathMatcher::FileName("+layout.ts"),
@@ -40,22 +37,13 @@ mod tests {
 
     #[test]
     fn entry_route_pages() {
-        assert!(PROFILE
-            .entry_matchers
-            .iter()
-            .any(|m| m.matches("src/routes/+page.svelte")));
-        assert!(PROFILE
-            .entry_matchers
-            .iter()
-            .any(|m| m.matches("src/routes/about/+page.svelte")));
+        assert!(PROFILE.entry_matchers.iter().any(|m| m.matches("src/routes/+page.svelte")));
+        assert!(PROFILE.entry_matchers.iter().any(|m| m.matches("src/routes/about/+page.svelte")));
     }
 
     #[test]
     fn entry_layout_files() {
-        assert!(PROFILE
-            .entry_matchers
-            .iter()
-            .any(|m| m.matches("src/routes/+layout.svelte")));
+        assert!(PROFILE.entry_matchers.iter().any(|m| m.matches("src/routes/+layout.svelte")));
     }
 
     #[test]
@@ -72,9 +60,6 @@ mod tests {
 
     #[test]
     fn lib_file_is_not_entry() {
-        assert!(!PROFILE
-            .entry_matchers
-            .iter()
-            .any(|m| m.matches("src/lib/util.ts")));
+        assert!(!PROFILE.entry_matchers.iter().any(|m| m.matches("src/lib/util.ts")));
     }
 }

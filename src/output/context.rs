@@ -30,19 +30,12 @@ impl OutputFormatter for ContextFormatter {
         // Line 2: Issue counts
         lines.push(format!(
             "Issues: {} dead, {} unused exports, {} duplication, {} gotchas, {} circular deps",
-            ic.dead_code,
-            ic.unused_exports,
-            ic.duplicate_code,
-            ic.gotchas,
-            ic.circular_dependencies
+            ic.dead_code, ic.unused_exports, ic.duplicate_code, ic.gotchas, ic.circular_dependencies
         ));
 
         // Line 3: Top risk file
         if let Some(risk) = top_risk {
-            lines.push(format!(
-                "Top risk: {} ({} unused exports)",
-                risk.0, risk.1
-            ));
+            lines.push(format!("Top risk: {} ({} unused exports)", risk.0, risk.1));
         }
 
         // Line 4: Footer
@@ -54,11 +47,7 @@ impl OutputFormatter for ContextFormatter {
 
 /// Format LOC with K suffix when > 999.
 fn format_loc(loc: usize) -> String {
-    if loc > 999 {
-        format!("{}K", loc / 1000)
-    } else {
-        loc.to_string()
-    }
+    if loc > 999 { format!("{}K", loc / 1000) } else { loc.to_string() }
 }
 
 /// Find the file with the most unused exports.
@@ -71,8 +60,5 @@ fn find_top_risk_file(output: &AnalysisOutput) -> Option<(String, usize)> {
         *counts.entry(ue.path.clone()).or_insert(0) += 1;
     }
 
-    counts
-        .into_iter()
-        .max_by_key(|(_, c)| *c)
-        .map(|(path, count)| (path, count))
+    counts.into_iter().max_by_key(|(_, c)| *c)
 }

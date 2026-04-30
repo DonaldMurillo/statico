@@ -3,9 +3,7 @@
 use std::path::Path;
 
 fn fixture(name: &str) -> std::path::PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("fixtures")
-        .join(name)
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures").join(name)
 }
 
 fn analyze_fixture(name: &str) -> statico::types::AnalysisOutput {
@@ -36,7 +34,8 @@ fn angular_detects_dead_code() {
     let dead_paths: Vec<&str> = output.issues.dead_code.iter().map(|d| d.path.as_str()).collect();
     assert!(
         dead_paths.iter().any(|p| p.contains("sidebar")),
-        "expected dead code in sidebar.component.ts, got: {:?}", dead_paths
+        "expected dead code in sidebar.component.ts, got: {:?}",
+        dead_paths
     );
 }
 
@@ -44,19 +43,13 @@ fn angular_detects_dead_code() {
 fn angular_detects_orphan() {
     let output = analyze_fixture("angular-project");
     let dead_paths: Vec<&str> = output.issues.dead_code.iter().map(|d| d.path.as_str()).collect();
-    assert!(
-        dead_paths.iter().any(|p| p.contains("styles")),
-        "expected orphan styles.ts, got: {:?}", dead_paths
-    );
+    assert!(dead_paths.iter().any(|p| p.contains("styles")), "expected orphan styles.ts, got: {:?}", dead_paths);
 }
 
 #[test]
 fn angular_main_is_entry_point() {
     let output = analyze_fixture("angular-project");
-    assert!(
-        output.structure.entry_points.iter().any(|e| e.contains("main")),
-        "main.ts should be an entry point"
-    );
+    assert!(output.structure.entry_points.iter().any(|e| e.contains("main")), "main.ts should be an entry point");
 }
 
 // ---------------------------------------------------------------------------
@@ -83,17 +76,15 @@ fn nestjs_detects_dead_code() {
     // roles.guard.ts and deprecated.ts should be dead code.
     assert!(
         dead_paths.iter().any(|p| p.contains("deprecated") || p.contains("roles")),
-        "expected dead code, got: {:?}", dead_paths
+        "expected dead code, got: {:?}",
+        dead_paths
     );
 }
 
 #[test]
 fn nestjs_main_is_entry_point() {
     let output = analyze_fixture("nestjs-project");
-    assert!(
-        output.structure.entry_points.iter().any(|e| e.contains("main")),
-        "main.ts should be an entry point"
-    );
+    assert!(output.structure.entry_points.iter().any(|e| e.contains("main")), "main.ts should be an entry point");
 }
 
 #[test]
@@ -109,8 +100,7 @@ fn nestjs_monorepo_not_detected() {
 
 #[test]
 fn pnpm_monorepo_detected() {
-    let info = statico::monorepo::detect_monorepo(&fixture("pnpm-monorepo"))
-        .expect("should detect pnpm monorepo");
+    let info = statico::monorepo::detect_monorepo(&fixture("pnpm-monorepo")).expect("should detect pnpm monorepo");
     assert_eq!(info.kind, statico::monorepo::MonorepoKind::Pnpm);
     assert!(info.packages.contains(&"packages/".to_string()), "packages: {:?}", info.packages);
     assert!(info.packages.contains(&"apps/".to_string()), "packages: {:?}", info.packages);
@@ -118,16 +108,14 @@ fn pnpm_monorepo_detected() {
 
 #[test]
 fn npm_monorepo_detected() {
-    let info = statico::monorepo::detect_monorepo(&fixture("npm-monorepo"))
-        .expect("should detect npm monorepo");
+    let info = statico::monorepo::detect_monorepo(&fixture("npm-monorepo")).expect("should detect npm monorepo");
     assert_eq!(info.kind, statico::monorepo::MonorepoKind::Npm);
     assert!(info.packages.contains(&"packages/".to_string()), "packages: {:?}", info.packages);
 }
 
 #[test]
 fn nx_monorepo_detected() {
-    let info = statico::monorepo::detect_monorepo(&fixture("nx-monorepo"))
-        .expect("should detect nx monorepo");
+    let info = statico::monorepo::detect_monorepo(&fixture("nx-monorepo")).expect("should detect nx monorepo");
     assert_eq!(info.kind, statico::monorepo::MonorepoKind::Nx);
     assert!(info.packages.contains(&"packages/".to_string()), "packages: {:?}", info.packages);
 }
@@ -169,7 +157,8 @@ fn pnpm_monorepo_detects_dead_code() {
     let dead_paths: Vec<&str> = output.issues.dead_code.iter().map(|d| d.path.as_str()).collect();
     assert!(
         dead_paths.iter().any(|p| p.contains("unused") || p.contains("deprecated")),
-        "expected dead code in pnpm monorepo, got: {:?}", dead_paths
+        "expected dead code in pnpm monorepo, got: {:?}",
+        dead_paths
     );
 }
 
@@ -179,7 +168,8 @@ fn npm_monorepo_detects_dead_code() {
     let dead_paths: Vec<&str> = output.issues.dead_code.iter().map(|d| d.path.as_str()).collect();
     assert!(
         dead_paths.iter().any(|p| p.contains("orphan")),
-        "expected dead code in npm monorepo, got: {:?}", dead_paths
+        "expected dead code in npm monorepo, got: {:?}",
+        dead_paths
     );
 }
 
@@ -189,7 +179,8 @@ fn nx_monorepo_detects_dead_code() {
     let dead_paths: Vec<&str> = output.issues.dead_code.iter().map(|d| d.path.as_str()).collect();
     assert!(
         dead_paths.iter().any(|p| p.contains("dead") || p.contains("Dead")),
-        "expected dead code in nx monorepo, got: {:?}", dead_paths
+        "expected dead code in nx monorepo, got: {:?}",
+        dead_paths
     );
 }
 
@@ -217,8 +208,7 @@ fn angular_includes_detected_frameworks() {
 
 #[test]
 fn turborepo_monorepo_detected() {
-    let info = statico::monorepo::detect_monorepo(&fixture("turborepo-monorepo"))
-        .expect("should detect turborepo");
+    let info = statico::monorepo::detect_monorepo(&fixture("turborepo-monorepo")).expect("should detect turborepo");
     assert_eq!(info.kind, statico::monorepo::MonorepoKind::Turborepo);
 }
 
@@ -235,7 +225,8 @@ fn turborepo_detects_dead_code() {
     let dead_paths: Vec<&str> = output.issues.dead_code.iter().map(|d| d.path.as_str()).collect();
     assert!(
         dead_paths.iter().any(|p| p.contains("unused") || p.contains("Unused")),
-        "expected dead code in turborepo, got: {:?}", dead_paths
+        "expected dead code in turborepo, got: {:?}",
+        dead_paths
     );
 }
 
@@ -270,17 +261,15 @@ fn vue_detects_dead_code() {
     let dead_paths: Vec<&str> = output.issues.dead_code.iter().map(|d| d.path.as_str()).collect();
     assert!(
         dead_paths.iter().any(|p| p.contains("DeadWidget")),
-        "expected dead code in DeadWidget, got: {:?}", dead_paths
+        "expected dead code in DeadWidget, got: {:?}",
+        dead_paths
     );
 }
 
 #[test]
 fn vue_main_is_entry_point() {
     let output = analyze_fixture("vue-project");
-    assert!(
-        output.structure.entry_points.iter().any(|e| e.contains("main")),
-        "main.ts should be an entry point"
-    );
+    assert!(output.structure.entry_points.iter().any(|e| e.contains("main")), "main.ts should be an entry point");
 }
 
 // ---------------------------------------------------------------------------
@@ -306,17 +295,15 @@ fn svelte_detects_dead_code() {
     let dead_paths: Vec<&str> = output.issues.dead_code.iter().map(|d| d.path.as_str()).collect();
     assert!(
         dead_paths.iter().any(|p| p.contains("dead-util")),
-        "expected dead code in dead-util, got: {:?}", dead_paths
+        "expected dead code in dead-util, got: {:?}",
+        dead_paths
     );
 }
 
 #[test]
 fn svelte_route_is_entry_point() {
     let output = analyze_fixture("svelte-project");
-    assert!(
-        output.structure.entry_points.iter().any(|e| e.contains("+page")),
-        "+page should be an entry point"
-    );
+    assert!(output.structure.entry_points.iter().any(|e| e.contains("+page")), "+page should be an entry point");
 }
 
 // ---------------------------------------------------------------------------
@@ -342,17 +329,15 @@ fn remix_detects_dead_code() {
     let dead_paths: Vec<&str> = output.issues.dead_code.iter().map(|d| d.path.as_str()).collect();
     assert!(
         dead_paths.iter().any(|p| p.contains("DeadComp") || p.contains("dead")),
-        "expected dead code in DeadComp or dead, got: {:?}", dead_paths
+        "expected dead code in DeadComp or dead, got: {:?}",
+        dead_paths
     );
 }
 
 #[test]
 fn remix_routes_are_entry_points() {
     let output = analyze_fixture("remix-project");
-    assert!(
-        output.structure.entry_points.iter().any(|e| e.contains("routes")),
-        "routes should be entry points"
-    );
+    assert!(output.structure.entry_points.iter().any(|e| e.contains("routes")), "routes should be entry points");
 }
 
 // ---------------------------------------------------------------------------
@@ -378,17 +363,15 @@ fn astro_detects_dead_code() {
     let dead_paths: Vec<&str> = output.issues.dead_code.iter().map(|d| d.path.as_str()).collect();
     assert!(
         dead_paths.iter().any(|p| p.contains("Sidebar") || p.contains("unused")),
-        "expected dead code in Sidebar or unused, got: {:?}", dead_paths
+        "expected dead code in Sidebar or unused, got: {:?}",
+        dead_paths
     );
 }
 
 #[test]
 fn astro_pages_are_entry_points() {
     let output = analyze_fixture("astro-project");
-    assert!(
-        output.structure.entry_points.iter().any(|e| e.contains("pages")),
-        "pages should be entry points"
-    );
+    assert!(output.structure.entry_points.iter().any(|e| e.contains("pages")), "pages should be entry points");
 }
 
 // ---------------------------------------------------------------------------
@@ -446,12 +429,27 @@ fn dynamic_imports_conditional_reachable() {
     let result = statico::analyzer::analyze(&root).unwrap();
     let dead_paths: Vec<&str> = result.issues.dead_code.iter().map(|d| d.path.as_str()).collect();
     // conditional.ts is reachable via static import from index.ts
-    assert!(!dead_paths.iter().any(|p| p.contains("conditional")), "conditional.ts should be reachable via static import");
+    assert!(
+        !dead_paths.iter().any(|p| p.contains("conditional")),
+        "conditional.ts should be reachable via static import"
+    );
     // lazy.ts and feature.ts are reachable via dynamic import() from index.ts
-    assert!(!dead_paths.iter().any(|p| p.contains("lazy")), "lazy.ts should be reachable via dynamic import: {:?}", dead_paths);
-    assert!(!dead_paths.iter().any(|p| p.contains("feature")), "feature.ts should be reachable via dynamic import: {:?}", dead_paths);
+    assert!(
+        !dead_paths.iter().any(|p| p.contains("lazy")),
+        "lazy.ts should be reachable via dynamic import: {:?}",
+        dead_paths
+    );
+    assert!(
+        !dead_paths.iter().any(|p| p.contains("feature")),
+        "feature.ts should be reachable via dynamic import: {:?}",
+        dead_paths
+    );
     // debug.ts is reachable via dynamic import from conditional.ts
-    assert!(!dead_paths.iter().any(|p| p.contains("debug")), "debug.ts should be reachable via dynamic import: {:?}", dead_paths);
+    assert!(
+        !dead_paths.iter().any(|p| p.contains("debug")),
+        "debug.ts should be reachable via dynamic import: {:?}",
+        dead_paths
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -507,9 +505,7 @@ fn type_only_runtime_file_reachable() {
     let dead_paths: Vec<&str> = result.issues.dead_code.iter().map(|d| d.path.as_str()).collect();
     // Helper: exact filename match within a path to avoid substring false positives
     let is_dead = |name: &str| {
-        dead_paths.iter().any(|p| {
-            p.strip_prefix("src/").map(|s| s == name).unwrap_or(false) || *p == name
-        })
+        dead_paths.iter().any(|p| p.strip_prefix("src/").map(|s| s == name).unwrap_or(false) || *p == name)
     };
     // runtime.ts is reachable via regular import from index.ts
     assert!(!is_dead("runtime.ts"), "runtime.ts should be reachable: {:?}", dead_paths);
@@ -626,9 +622,7 @@ fn realworld_services_are_alive() {
 fn nestjs_body_without_dto_gotcha() {
     let root = fixture("nestjs-project");
     let result = statico::analyzer::analyze(&root).unwrap();
-    let body_gotchas: Vec<_> = result.issues.gotchas.iter()
-        .filter(|g| g.rule == "nestjs-body-without-dto")
-        .collect();
+    let body_gotchas: Vec<_> = result.issues.gotchas.iter().filter(|g| g.rule == "nestjs-body-without-dto").collect();
     assert!(!body_gotchas.is_empty(), "Should detect @Body() without DTO in NestJS project");
 }
 
@@ -636,8 +630,6 @@ fn nestjs_body_without_dto_gotcha() {
 fn nextjs_gotchas_only_fire_for_nextjs() {
     let root = fixture("nestjs-project");
     let result = statico::analyzer::analyze(&root).unwrap();
-    let nextjs_gotchas: Vec<_> = result.issues.gotchas.iter()
-        .filter(|g| g.rule.starts_with("nextjs-"))
-        .collect();
+    let nextjs_gotchas: Vec<_> = result.issues.gotchas.iter().filter(|g| g.rule.starts_with("nextjs-")).collect();
     assert!(nextjs_gotchas.is_empty(), "Next.js gotchas should not fire in NestJS project");
 }

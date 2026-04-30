@@ -76,10 +76,7 @@ pub fn compute_metrics(root: Node, source: &[u8]) -> ComplexityMetrics {
         }
     }
 
-    ComplexityMetrics {
-        complexity,
-        max_nesting_depth: max_depth,
-    }
+    ComplexityMetrics { complexity, max_nesting_depth: max_depth }
 }
 
 // ---------------------------------------------------------------------------

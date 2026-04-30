@@ -39,8 +39,7 @@ const FIXTURES: &[&str] = &[
 fn prop_dead_code_subset_of_source_files() {
     for &name in FIXTURES {
         let out = analyze_fixture(name);
-        let source_paths: BTreeSet<&str> =
-            out.structure.source_files.iter().map(|sf| sf.path.as_str()).collect();
+        let source_paths: BTreeSet<&str> = out.structure.source_files.iter().map(|sf| sf.path.as_str()).collect();
         for dc in &out.issues.dead_code {
             assert!(
                 source_paths.contains(dc.path.as_str()),
@@ -60,8 +59,7 @@ fn prop_dead_code_subset_of_source_files() {
 fn prop_unused_exports_subset_of_source_files() {
     for &name in FIXTURES {
         let out = analyze_fixture(name);
-        let source_paths: BTreeSet<&str> =
-            out.structure.source_files.iter().map(|sf| sf.path.as_str()).collect();
+        let source_paths: BTreeSet<&str> = out.structure.source_files.iter().map(|sf| sf.path.as_str()).collect();
         for ue in &out.issues.unused_exports {
             assert!(
                 source_paths.contains(ue.path.as_str()),
@@ -82,12 +80,7 @@ fn prop_duplication_percentage_in_range() {
     for &name in FIXTURES {
         let out = analyze_fixture(name);
         let pct = out.duplication.stats.duplication_percentage;
-        assert!(
-            (0.0..=100.0).contains(&pct),
-            "duplication_percentage = {} not in [0, 100] ({})",
-            pct,
-            name,
-        );
+        assert!((0.0..=100.0).contains(&pct), "duplication_percentage = {} not in [0, 100] ({})", pct, name,);
     }
 }
 
@@ -122,12 +115,19 @@ fn prop_clone_instances_valid_line_ranges() {
                 assert!(
                     inst.start_line >= 1,
                     "clone_group[{}].instances[{}].start_line = {} < 1 ({})",
-                    gi, ii, inst.start_line, name,
+                    gi,
+                    ii,
+                    inst.start_line,
+                    name,
                 );
                 assert!(
                     inst.end_line >= inst.start_line,
                     "clone_group[{}].instances[{}].end_line {} < start_line {} ({})",
-                    gi, ii, inst.end_line, inst.start_line, name,
+                    gi,
+                    ii,
+                    inst.end_line,
+                    inst.start_line,
+                    name,
                 );
             }
         }
@@ -147,22 +147,20 @@ fn prop_confidence_scores_in_range() {
             assert!(
                 (0.0..=1.0).contains(&dc.confidence),
                 "dead_code confidence {} not in [0,1] ({})",
-                dc.confidence, name,
+                dc.confidence,
+                name,
             );
         }
         for dup in &out.issues.duplicate_code {
             assert!(
                 (0.0..=1.0).contains(&dup.confidence),
                 "duplicate_code confidence {} not in [0,1] ({})",
-                dup.confidence, name,
+                dup.confidence,
+                name,
             );
         }
         for g in &out.issues.gotchas {
-            assert!(
-                (0.0..=1.0).contains(&g.confidence),
-                "gotcha confidence {} not in [0,1] ({})",
-                g.confidence, name,
-            );
+            assert!((0.0..=1.0).contains(&g.confidence), "gotcha confidence {} not in [0,1] ({})", g.confidence, name,);
         }
     }
 }
@@ -218,26 +216,15 @@ fn prop_circular_deps_form_cycles() {
 
         for (ci, cycle) in out.issues.circular_dependencies.iter().enumerate() {
             let files = &cycle.files;
-            assert!(
-                files.len() >= 2,
-                "circular_dep[{}] has {} files, need >= 2 ({})",
-                ci, files.len(), name,
-            );
+            assert!(files.len() >= 2, "circular_dep[{}] has {} files, need >= 2 ({})", ci, files.len(), name,);
 
             // Verify each consecutive pair has an edge in the dependency graph.
             for i in 0..files.len() {
                 let from = files[i].as_str();
                 let to = files[(i + 1) % files.len()].as_str();
-                let has_edge = adj
-                    .get(from)
-                    .is_some_and(|targets| targets.contains(to));
-                assert!(
-                    has_edge,
-                    "circular_dep[{}]: no edge '{}' -> '{}' ({})",
-                    ci, from, to, name,
-                );
+                let has_edge = adj.get(from).is_some_and(|targets| targets.contains(to));
+                assert!(has_edge, "circular_dep[{}]: no edge '{}' -> '{}' ({})", ci, from, to, name,);
             }
         }
     }
 }
-

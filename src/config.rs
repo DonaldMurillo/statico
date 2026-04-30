@@ -30,15 +30,24 @@ pub struct StaticoConfig {
     pub threads: usize,
 }
 
-fn default_format() -> String { "json".to_string() }
-fn default_max_file_size() -> u64 { 1_000_000 }
+fn default_format() -> String {
+    "json".to_string()
+}
+fn default_max_file_size() -> u64 {
+    1_000_000
+}
 
 impl Default for StaticoConfig {
     fn default() -> Self {
         Self {
-            format: default_format(), min_confidence: 0.0, exit_code: false, quiet: false,
-            exclude: Vec::new(), include: Vec::new(),
-            max_file_size: default_max_file_size(), threads: 0,
+            format: default_format(),
+            min_confidence: 0.0,
+            exit_code: false,
+            quiet: false,
+            exclude: Vec::new(),
+            include: Vec::new(),
+            max_file_size: default_max_file_size(),
+            threads: 0,
         }
     }
 }
@@ -47,24 +56,40 @@ impl StaticoConfig {
     /// Load config from a .statico.toml file in the given directory.
     pub fn load(project_root: &Path) -> Self {
         let config_path = project_root.join(".statico.toml");
-        if !config_path.exists() { return Self::default(); }
+        if !config_path.exists() {
+            return Self::default();
+        }
         let content = match std::fs::read_to_string(&config_path) {
             Ok(c) => c,
-            Err(e) => { eprintln!("warning: failed to read {}: {}", config_path.display(), e); return Self::default(); }
+            Err(e) => {
+                eprintln!("warning: failed to read {}: {}", config_path.display(), e);
+                return Self::default();
+            }
         };
         match toml::from_str(&content) {
             Ok(c) => c,
-            Err(e) => { eprintln!("warning: failed to parse {}: {}", config_path.display(), e); Self::default() }
+            Err(e) => {
+                eprintln!("warning: failed to parse {}: {}", config_path.display(), e);
+                Self::default()
+            }
         }
     }
 
     /// Merge CLI arguments over config defaults.
     pub fn merge_cli(&self, format: Option<&str>, min_confidence: Option<f64>, exit_code: bool, quiet: bool) -> Self {
         let mut merged = self.clone();
-        if let Some(f) = format { merged.format = f.to_string(); }
-        if let Some(c) = min_confidence { merged.min_confidence = c; }
-        if exit_code { merged.exit_code = true; }
-        if quiet { merged.quiet = true; }
+        if let Some(f) = format {
+            merged.format = f.to_string();
+        }
+        if let Some(c) = min_confidence {
+            merged.min_confidence = c;
+        }
+        if exit_code {
+            merged.exit_code = true;
+        }
+        if quiet {
+            merged.quiet = true;
+        }
         merged
     }
 }
@@ -95,7 +120,8 @@ mod tests {
 
     #[test]
     fn test_parse_valid_toml() {
-        let c: StaticoConfig = toml::from_str(r#"
+        let c: StaticoConfig = toml::from_str(
+            r#"
 format = "markdown"
 min_confidence = 0.7
 exit_code = true
@@ -104,7 +130,9 @@ exclude = ["node_modules", "dist"]
 include = ["src/**/*.ts"]
 max_file_size = 500000
 threads = 4
-"#).unwrap();
+"#,
+        )
+        .unwrap();
         assert_eq!(c.format, "markdown");
         assert!((c.min_confidence - 0.7).abs() < f64::EPSILON);
         assert!(c.exit_code);
@@ -158,10 +186,14 @@ threads = 4
     #[test]
     fn test_load_valid_config_file() {
         let dir = make_temp_dir("valid");
-        std::fs::write(dir.join(".statico.toml"), r#"format = "markdown"
+        std::fs::write(
+            dir.join(".statico.toml"),
+            r#"format = "markdown"
 min_confidence = 0.8
 exclude = ["vendor"]
-"#).unwrap();
+"#,
+        )
+        .unwrap();
         let c = StaticoConfig::load(&dir);
         assert_eq!(c.format, "markdown");
         assert!((c.min_confidence - 0.8).abs() < f64::EPSILON);
@@ -181,9 +213,14 @@ exclude = ["vendor"]
     #[test]
     fn test_serialization_roundtrip() {
         let c = StaticoConfig {
-            format: "html".into(), min_confidence: 0.3, exit_code: true, quiet: false,
-            exclude: vec!["build".into()], include: vec!["src/**/*.tsx".into()],
-            max_file_size: 2_000_000, threads: 8,
+            format: "html".into(),
+            min_confidence: 0.3,
+            exit_code: true,
+            quiet: false,
+            exclude: vec!["build".into()],
+            include: vec!["src/**/*.tsx".into()],
+            max_file_size: 2_000_000,
+            threads: 8,
         };
         let toml_str = toml::to_string(&c).unwrap();
         let parsed: StaticoConfig = toml::from_str(&toml_str).unwrap();

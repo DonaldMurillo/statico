@@ -12,9 +12,7 @@ impl RustAstParser {
         let mut parser = Parser::new();
         let lang: tree_sitter::Language = tree_sitter_rust::LANGUAGE.into();
         parser.set_language(&lang)?;
-        Ok(Self {
-            parser: std::sync::Mutex::new(parser),
-        })
+        Ok(Self { parser: std::sync::Mutex::new(parser) })
     }
 
     pub fn parse(&self, code: &str) -> Option<RustParseResult> {
@@ -62,22 +60,13 @@ pub fn extract_exports(code: &str, tree: &Tree) -> Vec<RustExport> {
     exports
 }
 
-fn collect_pub_items(
-    node: Node,
-    code: &str,
-    item_kinds: &[(&str, &str)],
-    exports: &mut Vec<RustExport>,
-) {
+fn collect_pub_items(node: Node, code: &str, item_kinds: &[(&str, &str)], exports: &mut Vec<RustExport>) {
     for child in node.children(&mut node.walk()) {
         for (tree_kind, export_kind) in item_kinds {
-            if child.kind() == *tree_kind && is_pub(&child) {
-                if let Some(name) = get_item_name(&child, code) {
-                    exports.push(RustExport {
-                        name,
-                        kind: export_kind.to_string(),
-                    });
+            if child.kind() == *tree_kind && is_pub(&child)
+                && let Some(name) = get_item_name(&child, code) {
+                    exports.push(RustExport { name, kind: export_kind.to_string() });
                 }
-            }
         }
         // Recurse into impl blocks and mod blocks for inline items
         if child.kind() == "impl_item" || child.kind() == "declaration_list" {
@@ -124,11 +113,10 @@ pub fn extract_imports(code: &str, tree: &Tree) -> Vec<RustImport> {
     let root = tree.root_node();
 
     for node in root.children(&mut root.walk()) {
-        if node.kind() == "use_declaration" {
-            if let Some(imp) = parse_use_decl(node, code) {
+        if node.kind() == "use_declaration"
+            && let Some(imp) = parse_use_decl(node, code) {
                 imports.extend(imp);
             }
-        }
     }
     imports
 }
@@ -147,11 +135,7 @@ fn extract_from_use_node(node: Node, code: &str) -> Vec<RustImport> {
             // e.g., std::collections::HashMap or crate::parser::AstParser
             let full_path = collect_scoped_path(node, code);
             let last = full_path.split("::").last().unwrap_or("").to_string();
-            vec![RustImport {
-                names: vec![last],
-                raw_path: full_path,
-                is_glob: false,
-            }]
+            vec![RustImport { names: vec![last], raw_path: full_path, is_glob: false }]
         }
         "scoped_use_list" => {
             // e.g., std::collections::{HashMap, BTreeMap} or serde::{Deserialize, Serialize}
@@ -172,11 +156,7 @@ fn extract_from_use_node(node: Node, code: &str) -> Vec<RustImport> {
 
             if let Some(list) = use_list {
                 let names = collect_use_list_names(*list, code);
-                vec![RustImport {
-                    names,
-                    raw_path: prefix_path,
-                    is_glob: false,
-                }]
+                vec![RustImport { names, raw_path: prefix_path, is_glob: false }]
             } else {
                 vec![]
             }
@@ -184,11 +164,7 @@ fn extract_from_use_node(node: Node, code: &str) -> Vec<RustImport> {
         "use_list" => {
             // Top-level use list without prefix: use {foo, bar};
             let names = collect_use_list_names(node, code);
-            vec![RustImport {
-                names,
-                raw_path: String::new(),
-                is_glob: false,
-            }]
+            vec![RustImport { names, raw_path: String::new(), is_glob: false }]
         }
         "use_wildcard" => {
             // use std::sync::*;
@@ -197,20 +173,12 @@ fn extract_from_use_node(node: Node, code: &str) -> Vec<RustImport> {
                 .find(|c| c.kind() == "scoped_identifier")
                 .map(|c| collect_scoped_path(c, code))
                 .unwrap_or_default();
-            vec![RustImport {
-                names: vec!["*".to_string()],
-                raw_path: scoped,
-                is_glob: true,
-            }]
+            vec![RustImport { names: vec!["*".to_string()], raw_path: scoped, is_glob: true }]
         }
         "identifier" => {
             // Simple: use foo;
             let name = code[node.byte_range()].to_string();
-            vec![RustImport {
-                names: vec![name.clone()],
-                raw_path: name,
-                is_glob: false,
-            }]
+            vec![RustImport { names: vec![name.clone()], raw_path: name, is_glob: false }]
         }
         _ => vec![],
     }
@@ -240,11 +208,7 @@ fn collect_scoped_parts(node: Node, code: &str, parts: &mut Vec<String>) {
 /// Collect names from a use_list node: {foo, bar, Baz}.
 fn collect_use_list_names(node: Node, code: &str) -> Vec<String> {
     node.children(&mut node.walk())
-        .filter(|c| {
-            c.kind() == "identifier"
-                || c.kind() == "scoped_identifier"
-                || c.kind() == "self"
-        })
+        .filter(|c| c.kind() == "identifier" || c.kind() == "scoped_identifier" || c.kind() == "self")
         .map(|c| {
             if c.kind() == "scoped_identifier" {
                 // Nested path like Foo::Bar — take last segment
@@ -287,15 +251,10 @@ fn collect_mod_decls(node: Node, code: &str, mods: &mut Vec<RustModDecl>) {
             if let Some(name_node) = child.child_by_field_name("name") {
                 let name = code[name_node.byte_range()].to_string();
                 // Check if it has a body (inline module) — look for declaration_list child
-                let has_body = child.children(&mut child.walk())
-                    .any(|c| c.kind() == "declaration_list");
+                let has_body = child.children(&mut child.walk()).any(|c| c.kind() == "declaration_list");
                 // Check for #[path = "..."] attribute
                 let path_override = extract_path_attr(&child, code);
-                mods.push(RustModDecl {
-                    name,
-                    is_inline: has_body,
-                    path_override,
-                });
+                mods.push(RustModDecl { name, is_inline: has_body, path_override });
             }
         } else if child.kind() == "macro_invocation" {
             // Macro bodies like cfg_feature! { pub mod client; } or
@@ -316,9 +275,7 @@ fn collect_mod_decls(node: Node, code: &str, mods: &mut Vec<RustModDecl>) {
 /// Also handles nested macros: `cfg_net! { cfg_inner! { mod foo; } }`.
 fn extract_mods_from_macro(macro_node: &Node, code: &str, mods: &mut Vec<RustModDecl>) {
     // Find the token_tree child (the {...} body)
-    let Some(token_tree) = macro_node.children(&mut macro_node.walk())
-        .find(|c| c.kind() == "token_tree")
-    else {
+    let Some(token_tree) = macro_node.children(&mut macro_node.walk()).find(|c| c.kind() == "token_tree") else {
         return;
     };
 
@@ -334,12 +291,12 @@ fn scan_token_tree_for_mods(token_tree: &Node, code: &str, mods: &mut Vec<RustMo
 
 fn scan_tokens_with_prefix(tokens: &[Node], code: &str, mods: &mut Vec<RustModDecl>, prefix: &[String]) {
     let mut i = 0;
-    let mut inline_mod_stack: Vec<String> = prefix.to_vec();
+    let inline_mod_stack: Vec<String> = prefix.to_vec();
     while i < tokens.len() {
         let tok = &tokens[i];
         // Recurse into nested token_tree nodes (for macros and attributes)
         if tok.kind() == "token_tree" {
-            scan_token_tree_for_mods(&tok, code, mods);
+            scan_token_tree_for_mods(tok, code, mods);
             i += 1;
             continue;
         }
@@ -348,7 +305,10 @@ fn scan_tokens_with_prefix(tokens: &[Node], code: &str, mods: &mut Vec<RustModDe
             let attr_path = extract_path_from_token_attr(&tokens[i + 1], code);
             if attr_path.is_some() {
                 let mut j = i + 2;
-                while j + 1 < tokens.len() && &code[tokens[j].byte_range()] == "#" && tokens[j + 1].kind() == "token_tree" {
+                while j + 1 < tokens.len()
+                    && &code[tokens[j].byte_range()] == "#"
+                    && tokens[j + 1].kind() == "token_tree"
+                {
                     j += 2;
                 }
                 if j + 2 < tokens.len() && &code[tokens[j].byte_range()] == "mod" {
@@ -357,16 +317,13 @@ fn scan_tokens_with_prefix(tokens: &[Node], code: &str, mods: &mut Vec<RustModDe
                     if name_tok.kind() == "identifier" {
                         let name = code[name_tok.byte_range()].to_string();
                         let _sep = &code[sep_tok.byte_range()];
-                        let full_prefix = if inline_mod_stack.is_empty() { None } else { Some(inline_mod_stack.join("/")) };
+                        let full_prefix =
+                            if inline_mod_stack.is_empty() { None } else { Some(inline_mod_stack.join("/")) };
                         let full_name = match full_prefix {
                             Some(p) => format!("{}/{}", p, name),
                             None => name,
                         };
-                        mods.push(RustModDecl {
-                            name: full_name,
-                            is_inline: false,
-                            path_override: attr_path,
-                        });
+                        mods.push(RustModDecl { name: full_name, is_inline: false, path_override: attr_path });
                         i = j + 3;
                         continue;
                     }
@@ -374,8 +331,8 @@ fn scan_tokens_with_prefix(tokens: &[Node], code: &str, mods: &mut Vec<RustModDe
             }
         }
         // Look for `mod` keyword followed by identifier
-        if &code[tok.byte_range()] == "mod" {
-            if i + 2 < tokens.len() {
+        if &code[tok.byte_range()] == "mod"
+            && i + 2 < tokens.len() {
                 let name_tok = &tokens[i + 1];
                 let sep_tok = &tokens[i + 2];
                 if name_tok.kind() == "identifier" {
@@ -394,22 +351,18 @@ fn scan_tokens_with_prefix(tokens: &[Node], code: &str, mods: &mut Vec<RustModDe
                         continue;
                     } else if &code[sep_tok.byte_range()] == ";" {
                         // mod <name>; — file reference
-                        let full_prefix = if inline_mod_stack.is_empty() { None } else { Some(inline_mod_stack.join("/")) };
+                        let full_prefix =
+                            if inline_mod_stack.is_empty() { None } else { Some(inline_mod_stack.join("/")) };
                         let full_name = match full_prefix {
                             Some(p) => format!("{}/{}", p, name),
                             None => name,
                         };
-                        mods.push(RustModDecl {
-                            name: full_name,
-                            is_inline: false,
-                            path_override: None,
-                        });
+                        mods.push(RustModDecl { name: full_name, is_inline: false, path_override: None });
                         i += 3;
                         continue;
                     }
                 }
             }
-        }
         i += 1;
     }
 }
@@ -428,7 +381,7 @@ fn extract_path_from_token_attr(attr_tt: &Node, code: &str) -> Option<String> {
             let raw = &code[tokens[i + 2].byte_range()];
             // Strip quotes
             if raw.len() >= 2 {
-                return Some(raw[1..raw.len()-1].to_string());
+                return Some(raw[1..raw.len() - 1].to_string());
             }
         }
         i += 1;
@@ -440,15 +393,10 @@ fn extract_path_from_token_attr(attr_tt: &Node, code: &str) -> Option<String> {
 /// The attribute is a preceding sibling, not a child of mod_item.
 fn extract_path_attr(node: &Node, code: &str) -> Option<String> {
     // Walk preceding siblings to find attribute_item with #[path = ...]
-    let parent = match node.parent() {
-        Some(p) => p,
-        None => return None,
-    };
+    let parent = node.parent()?;
     let mut last_path: Option<String> = None;
-    let mut found_mod = false;
     for child in parent.children(&mut parent.walk()) {
         if child.id() == node.id() {
-            found_mod = true;
             break;
         }
         if child.kind() == "attribute_item" {
@@ -469,13 +417,19 @@ fn parse_path_attr_value(attr: &str) -> Option<String> {
     // Strip #[ and ]
     let inner = attr.trim().trim_start_matches("#[").trim_end_matches(']');
     // Look for path = "..."
-    if !inner.starts_with("path") { return None; }
+    if !inner.starts_with("path") {
+        return None;
+    }
     let rest = inner[4..].trim();
-    if !rest.starts_with('=') { return None; }
+    if !rest.starts_with('=') {
+        return None;
+    }
     let val = rest[1..].trim();
     if val.starts_with('"') && val.ends_with('"') && val.len() >= 2 {
-        Some(val[1..val.len()-1].to_string())
-    } else { None }
+        Some(val[1..val.len() - 1].to_string())
+    } else {
+        None
+    }
 }
 
 // ---------------------------------------------------------------------------

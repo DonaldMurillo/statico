@@ -1,4 +1,4 @@
-use tree_sitter::{Parser, Node};
+use tree_sitter::{Node, Parser};
 
 fn main() {
     let mut parser = Parser::new();
@@ -40,11 +40,7 @@ use std::io::{self, Read, Write};
 
 fn print_nodes(node: Node, code: &str, depth: usize) {
     let indent = "  ".repeat(depth);
-    let text = if node.child_count() == 0 {
-        &code[node.byte_range()]
-    } else {
-        ""
-    };
+    let text = if node.child_count() == 0 { &code[node.byte_range()] } else { "" };
     if !text.is_empty() {
         println!("{}{}: {:?}", indent, node.kind(), text);
     } else if depth < 4 {

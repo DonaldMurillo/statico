@@ -60,8 +60,8 @@ fn collect_blocks_recursive(node: Node, source: &[u8], blocks: &mut Vec<CodeBloc
             // Class arrow-function properties: myMethod = () => { ... }
             let mut cursor = node.walk();
             for child in node.children(&mut cursor) {
-                if child.kind() == "arrow_function" || child.kind() == "function_expression" {
-                    if let Some(name_node) = node.child_by_field_name("name") {
+                if (child.kind() == "arrow_function" || child.kind() == "function_expression")
+                    && let Some(name_node) = node.child_by_field_name("name") {
                         let name = name_node.utf8_text(source).unwrap_or("anonymous").to_string();
                         let start = child.start_position().row + 1;
                         let end = child.end_position().row + 1;
@@ -77,7 +77,6 @@ fn collect_blocks_recursive(node: Node, source: &[u8], blocks: &mut Vec<CodeBloc
                             });
                         }
                     }
-                }
             }
         }
         _ => {}
@@ -119,26 +118,14 @@ fn extract_declarator_blocks(node: Node, source: &[u8], blocks: &mut Vec<CodeBlo
     }
 }
 
-fn push_block(
-    node: Node,
-    name_node: Node,
-    source: &[u8],
-    kind: BlockKind,
-    blocks: &mut Vec<CodeBlock>,
-) {
+fn push_block(node: Node, name_node: Node, source: &[u8], kind: BlockKind, blocks: &mut Vec<CodeBlock>) {
     let name = name_node.utf8_text(source).unwrap_or("anonymous").to_string();
     let start = node.start_position().row + 1;
     let end = node.end_position().row + 1;
     let body_text = node.utf8_text(source).unwrap_or("").to_string();
     // Only include blocks with enough substance (3+ lines).
     if body_text.lines().count() >= 3 {
-        blocks.push(CodeBlock {
-            name,
-            source: body_text,
-            start_line: start,
-            end_line: end,
-            kind,
-        });
+        blocks.push(CodeBlock { name, source: body_text, start_line: start, end_line: end, kind });
     }
 }
 
@@ -169,9 +156,8 @@ mod tests {
 
     #[test]
     fn extracts_arrow_function() {
-        let blocks = parse_blocks(
-            "const compute = (x: number) => {\n  const y = x * 2;\n  const z = y + 1;\n  return z;\n};",
-        );
+        let blocks =
+            parse_blocks("const compute = (x: number) => {\n  const y = x * 2;\n  const z = y + 1;\n  return z;\n};");
         assert_eq!(blocks.len(), 1);
         assert_eq!(blocks[0].name, "compute");
         assert_eq!(blocks[0].kind, BlockKind::ArrowFunction);

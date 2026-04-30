@@ -9,12 +9,12 @@ pub struct HtmlFormatter;
 impl OutputFormatter for HtmlFormatter {
     fn format(&self, output: &AnalysisOutput) -> Result<String, String> {
         let summary = compute_summary(output);
-        let json_data = serde_json::to_string(output)
-            .map_err(|e| format!("failed to serialize: {}", e))?;
-        let summary_json = serde_json::to_string(&summary)
-            .map_err(|e| format!("failed to serialize summary: {}", e))?;
+        let json_data = serde_json::to_string(output).map_err(|e| format!("failed to serialize: {}", e))?;
+        let summary_json =
+            serde_json::to_string(&summary).map_err(|e| format!("failed to serialize summary: {}", e))?;
 
-        Ok(format!(r##"<!DOCTYPE html>
+        Ok(format!(
+            r##"<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -142,6 +142,7 @@ function toggleSection(el) {{
 render();
 </script>
 </body>
-</html>"##))
+</html>"##
+        ))
     }
 }

@@ -18,58 +18,60 @@ pub mod unused_deps;
 pub mod unused_exports;
 pub mod unused_types;
 
+/// Bag of everything the issue detectors need.
+pub struct IssueContext<'a> {
+    /// Union of framework + implicit entries.
+    pub all_entries: &'a [String],
+    /// Only framework entry points (used for dead code reachability).
+    pub framework_entries: &'a [String],
+    pub dep_graph: &'a BTreeMap<String, Vec<String>>,
+    pub file_exports: &'a BTreeMap<String, Vec<String>>,
+    pub file_loc: &'a BTreeMap<String, usize>,
+    pub file_blocks: &'a BTreeMap<String, Vec<CodeBlock>>,
+    pub file_sources: &'a [(String, String)],
+    pub root: &'a Path,
+    pub external_imports: &'a [String],
+    pub imported_names: &'a BTreeMap<String, HashSet<String>>,
+    pub profiles: &'a [&'a crate::frameworks::FrameworkProfile],
+    pub public_api: &'a [String],
+}
+
 /// Run all issue detectors.
-/// * `all_entries` — union of framework + implicit entries (unused currently, kept for API compat)
-/// * `framework_entries` — only framework entry points (used for dead code reachability; exports not checked for usage)
-pub fn detect_issues(
-    _all_entries: &[String],
-    framework_entries: &[String],
-    dep_graph: &BTreeMap<String, Vec<String>>,
-    file_exports: &BTreeMap<String, Vec<String>>,
-    file_loc: &BTreeMap<String, usize>,
-    file_blocks: &BTreeMap<String, Vec<CodeBlock>>,
-    file_sources: &[(String, String)],
-    root: &Path,
-    external_imports: &[String],
-    imported_names: &BTreeMap<String, HashSet<String>>,
-    profiles: &[&crate::frameworks::FrameworkProfile],
-    public_api: &[String],
-) -> Issues {
+pub fn detect_issues(ctx: &IssueContext) -> Issues {
     Issues {
         dead_code: {
-            let mut issues = dead_code::detect(_all_entries, dep_graph, file_loc);
+            let mut issues = dead_code::detect(ctx.all_entries, ctx.dep_graph, ctx.file_loc);
             // Also find files only reachable through implicit entries (tooling/scripts).
-            let implicit_set: Vec<String> = _all_entries
-                .iter()
-                .filter(|ep| !framework_entries.contains(ep))
-                .cloned()
-                .collect();
+            let implicit_set: Vec<String> =
+                ctx.all_entries.iter().filter(|ep| !ctx.framework_entries.contains(ep)).cloned().collect();
             issues.extend(dead_code::detect_framework_dead(
-                framework_entries,
+                ctx.framework_entries,
                 &implicit_set,
-                dep_graph,
-                file_loc,
+                ctx.dep_graph,
+                ctx.file_loc,
             ));
             issues
         },
         unused_exports: unused_exports::detect(
-            file_exports, imported_names, framework_entries, file_sources, public_api, root,
+            ctx.file_exports,
+            ctx.imported_names,
+            ctx.framework_entries,
+            ctx.file_sources,
+            ctx.public_api,
+            ctx.root,
         ),
-        duplicate_exports: duplicate_exports::detect(file_exports),
-        duplicate_code: duplicate_code::detect(file_blocks, file_sources),
-        gotchas: gotchas::detect_with_frameworks(file_sources, profiles),
+        duplicate_exports: duplicate_exports::detect(ctx.file_exports),
+        duplicate_code: duplicate_code::detect(ctx.file_blocks, ctx.file_sources),
+        gotchas: gotchas::detect_with_frameworks(ctx.file_sources, ctx.profiles),
         unused_types: unused_types::detect(
-            &extract_type_exports_map(file_sources, root),
-            file_sources,
-            framework_entries,
+            &extract_type_exports_map(ctx.file_sources, ctx.root),
+            ctx.file_sources,
+            ctx.framework_entries,
         ),
-        circular_dependencies: circular_deps::detect(dep_graph),
-        unused_dependencies: unused_deps::detect(root, external_imports),
-        unresolved_imports: unresolved_imports::detect(dep_graph),
-        unlisted_dependencies: unlisted_deps::detect(
-            root,
-            &build_external_import_pairs(file_sources),
-        ),
+        circular_dependencies: circular_deps::detect(ctx.dep_graph),
+        unused_dependencies: unused_deps::detect(ctx.root, ctx.external_imports),
+        unresolved_imports: unresolved_imports::detect(ctx.dep_graph),
+        unlisted_dependencies: unlisted_deps::detect(ctx.root, &build_external_import_pairs(ctx.file_sources)),
     }
 }
 
@@ -106,9 +108,7 @@ fn extract_type_exports_map(file_sources: &[(String, String)], root: &Path) -> B
 
     // Second pass: resolve export * from targets and include their types.
     for (file_path, specs) in &star_reexports {
-        let abs_dir = root.join(file_path).parent()
-            .map(|p| p.to_path_buf())
-            .unwrap_or_else(|| root.to_path_buf());
+        let abs_dir = root.join(file_path).parent().map(|p| p.to_path_buf()).unwrap_or_else(|| root.to_path_buf());
 
         for spec in specs {
             let resolved = crate::resolution::resolve_import(&abs_dir, spec);

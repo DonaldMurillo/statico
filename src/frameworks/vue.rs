@@ -18,15 +18,9 @@ pub const PROFILE: FrameworkProfile = FrameworkProfile {
         PathMatcher::FileName("main.ts"),
         PathMatcher::FileName("main.js"),
         // Router entry.
-        PathMatcher::DirAndStems {
-            dir: "router",
-            stems: &["index"],
-        },
+        PathMatcher::DirAndStems { dir: "router", stems: &["index"] },
         // Store entry.
-        PathMatcher::PrefixAndFile {
-            prefix: "src/stores/",
-            files: &["index.ts", "index.js"],
-        },
+        PathMatcher::PrefixAndFile { prefix: "src/stores/", files: &["index.ts", "index.js"] },
     ],
 
     implicit_matchers: &[
@@ -53,22 +47,13 @@ mod tests {
 
     #[test]
     fn entry_router_index() {
-        assert!(PROFILE
-            .entry_matchers
-            .iter()
-            .any(|m| m.matches("src/router/index.ts")));
+        assert!(PROFILE.entry_matchers.iter().any(|m| m.matches("src/router/index.ts")));
     }
 
     #[test]
     fn entry_store_index() {
-        assert!(PROFILE
-            .entry_matchers
-            .iter()
-            .any(|m| m.matches("src/stores/index.ts")));
-        assert!(PROFILE
-            .entry_matchers
-            .iter()
-            .any(|m| m.matches("src/stores/index.js")));
+        assert!(PROFILE.entry_matchers.iter().any(|m| m.matches("src/stores/index.ts")));
+        assert!(PROFILE.entry_matchers.iter().any(|m| m.matches("src/stores/index.js")));
     }
 
     #[test]
@@ -85,9 +70,6 @@ mod tests {
 
     #[test]
     fn component_is_not_entry() {
-        assert!(!PROFILE
-            .entry_matchers
-            .iter()
-            .any(|m| m.matches("src/components/Header.ts")));
+        assert!(!PROFILE.entry_matchers.iter().any(|m| m.matches("src/components/Header.ts")));
     }
 }

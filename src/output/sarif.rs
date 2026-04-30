@@ -4,7 +4,7 @@
 
 use crate::output::OutputFormatter;
 use crate::types::AnalysisOutput;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 /// SARIF 2.1.0 formatter.
 pub struct SarifFormatter;
@@ -58,7 +58,12 @@ impl OutputFormatter for SarifFormatter {
         }
 
         // Duplicate code
-        rules.push(make_rule("duplicate_code", "Duplicate code", "Similar code blocks found in multiple locations.", "note"));
+        rules.push(make_rule(
+            "duplicate_code",
+            "Duplicate code",
+            "Similar code blocks found in multiple locations.",
+            "note",
+        ));
         append_dup_code_results(&mut results, output);
 
         // Gotchas
@@ -66,11 +71,21 @@ impl OutputFormatter for SarifFormatter {
         append_gotcha_results(&mut results, output);
 
         // Circular dependencies
-        rules.push(make_rule("circular_dependency", "Circular dependency", "Circular import chain detected.", "warning"));
+        rules.push(make_rule(
+            "circular_dependency",
+            "Circular dependency",
+            "Circular import chain detected.",
+            "warning",
+        ));
         append_circular_dep_results(&mut results, output);
 
         // Duplicate exports
-        rules.push(make_rule("duplicate_export", "Duplicate export", "Same export name defined in multiple files.", "warning"));
+        rules.push(make_rule(
+            "duplicate_export",
+            "Duplicate export",
+            "Same export name defined in multiple files.",
+            "warning",
+        ));
         for de in &output.issues.duplicate_exports {
             results.push(json!({
                 "ruleId": "duplicate_export",
@@ -80,7 +95,12 @@ impl OutputFormatter for SarifFormatter {
         }
 
         // Unresolved imports
-        rules.push(make_rule("unresolved_import", "Unresolved import", "Import could not be resolved to a file.", "warning"));
+        rules.push(make_rule(
+            "unresolved_import",
+            "Unresolved import",
+            "Import could not be resolved to a file.",
+            "warning",
+        ));
         for ui in &output.issues.unresolved_imports {
             results.push(json!({
                 "ruleId": "unresolved_import",
@@ -94,7 +114,12 @@ impl OutputFormatter for SarifFormatter {
         }
 
         // Unused / unlisted dependencies
-        rules.push(make_rule("unused_dependency", "Unused dependency", "Package listed in package.json but never imported.", "note"));
+        rules.push(make_rule(
+            "unused_dependency",
+            "Unused dependency",
+            "Package listed in package.json but never imported.",
+            "note",
+        ));
         for ud in &output.issues.unused_dependencies {
             results.push(json!({
                 "ruleId": "unused_dependency",
@@ -103,7 +128,12 @@ impl OutputFormatter for SarifFormatter {
             }));
         }
 
-        rules.push(make_rule("unlisted_dependency", "Unlisted dependency", "External import not in package.json.", "warning"));
+        rules.push(make_rule(
+            "unlisted_dependency",
+            "Unlisted dependency",
+            "External import not in package.json.",
+            "warning",
+        ));
         for ud in &output.issues.unlisted_dependencies {
             results.push(json!({
                 "ruleId": "unlisted_dependency",
@@ -127,8 +157,7 @@ impl OutputFormatter for SarifFormatter {
             }]
         });
 
-        serde_json::to_string_pretty(&sarif)
-            .map_err(|e| format!("failed to serialize SARIF: {}", e))
+        serde_json::to_string_pretty(&sarif).map_err(|e| format!("failed to serialize SARIF: {}", e))
     }
 }
 

@@ -46,30 +46,21 @@ pub fn detect_monorepo(root: &Path) -> Option<MonorepoInfo> {
 
     // 1. pnpm workspaces — pnpm-workspace.yaml
     if root.join("pnpm-workspace.yaml").exists() || root.join("pnpm-workspace.yml").exists() {
-        let mut packages = parse_pnpm_workspaces(root);
-        return Some(MonorepoInfo {
-            kind: MonorepoKind::Pnpm,
-            packages,
-        });
+        let packages = parse_pnpm_workspaces(root);
+        return Some(MonorepoInfo { kind: MonorepoKind::Pnpm, packages });
     }
 
     // 2. Turborepo — turbo.json
     if root.join("turbo.json").exists() {
-        let mut packages = parse_package_json_workspaces(root);
+        let packages = parse_package_json_workspaces(root);
         // Also check for Nx integration.
-        return Some(MonorepoInfo {
-            kind: MonorepoKind::Turborepo,
-            packages,
-        });
+        return Some(MonorepoInfo { kind: MonorepoKind::Turborepo, packages });
     }
 
     // 3. Nx — nx.json or "nx" in package.json
     if root.join("nx.json").exists() || has_nx_in_package_json(root) {
-        let mut packages = parse_nx_workspaces(root);
-        return Some(MonorepoInfo {
-            kind: MonorepoKind::Nx,
-            packages,
-        });
+        let packages = parse_nx_workspaces(root);
+        return Some(MonorepoInfo { kind: MonorepoKind::Nx, packages });
     }
 
     // 4. npm/yarn workspaces — package.json "workspaces" field
@@ -98,29 +89,27 @@ pub fn discover_workspace_roots(root: &Path, packages: &[String]) -> Vec<PathBuf
         if pkg_pattern.ends_with('/') {
             // Directory prefix like "packages/" — enumerate subdirs with package.json.
             let dir = root.join(pkg_pattern.trim_end_matches('/'));
-            if dir.is_dir() {
-                if let Ok(entries) = std::fs::read_dir(&dir) {
+            if dir.is_dir()
+                && let Ok(entries) = std::fs::read_dir(&dir) {
                     for entry in entries.flatten() {
                         if entry.path().is_dir() && entry.path().join("package.json").exists() {
                             roots.push(entry.path());
                         }
                     }
                 }
-            }
         } else if pkg_pattern.contains('*') {
             // Handle glob patterns like "packages/*".
             if let Some(parent) = pkg_pattern.trim_end_matches("/*").strip_suffix('*') {
                 let parent = parent.trim_end_matches('/');
                 let parent_dir = root.join(parent);
-                if parent_dir.is_dir() {
-                    if let Ok(entries) = std::fs::read_dir(&parent_dir) {
+                if parent_dir.is_dir()
+                    && let Ok(entries) = std::fs::read_dir(&parent_dir) {
                         for entry in entries.flatten() {
                             if entry.path().is_dir() && entry.path().join("package.json").exists() {
                                 roots.push(entry.path());
                             }
                         }
                     }
-                }
             }
         } else {
             let pkg_dir = root.join(pkg_pattern);
@@ -200,21 +189,15 @@ fn detect_npm_workspaces(root: &Path) -> Option<MonorepoInfo> {
     let pkg: serde_json::Value = serde_json::from_str(&content).ok()?;
     let ws = pkg.get("workspaces")?;
 
-    let mut packages = match ws {
+    let packages = match ws {
         serde_json::Value::Array(arr) => {
-            let items: Vec<String> = arr
-                .iter()
-                .filter_map(|v| v.as_str().map(|s| s.to_string()))
-                .collect();
+            let items: Vec<String> = arr.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect();
             glob_to_prefix(items)
         }
         serde_json::Value::Object(obj) => {
             // yarn workspaces: { packages: [...] }
             if let Some(packages) = obj.get("packages").and_then(|p| p.as_array()) {
-                let items: Vec<String> = packages
-                    .iter()
-                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
-                    .collect();
+                let items: Vec<String> = packages.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect();
                 glob_to_prefix(items)
             } else {
                 Vec::new()
@@ -223,16 +206,11 @@ fn detect_npm_workspaces(root: &Path) -> Option<MonorepoInfo> {
         _ => return None,
     };
 
-    Some(MonorepoInfo {
-        kind: MonorepoKind::Npm,
-        packages,
-    })
+    Some(MonorepoInfo { kind: MonorepoKind::Npm, packages })
 }
 
 fn parse_package_json_workspaces(root: &Path) -> Vec<String> {
-    detect_npm_workspaces(root)
-        .map(|info| info.packages)
-        .unwrap_or_default()
+    detect_npm_workspaces(root).map(|info| info.packages).unwrap_or_default()
 }
 
 fn has_nx_in_package_json(root: &Path) -> bool {
@@ -246,11 +224,10 @@ fn has_nx_in_package_json(root: &Path) -> bool {
     };
     // Check devDependencies or dependencies for nx.
     for field in &["devDependencies", "dependencies"] {
-        if let Some(deps) = pkg.get(field).and_then(|v| v.as_object()) {
-            if deps.contains_key("nx") || deps.contains_key("@nrwl/workspace") {
+        if let Some(deps) = pkg.get(field).and_then(|v| v.as_object())
+            && (deps.contains_key("nx") || deps.contains_key("@nrwl/workspace")) {
                 return true;
             }
-        }
     }
     false
 }
@@ -272,13 +249,7 @@ fn parse_nx_workspaces(root: &Path) -> Vec<String> {
 fn glob_to_prefix(patterns: Vec<String>) -> Vec<String> {
     patterns
         .into_iter()
-        .map(|p| {
-            if p.ends_with("/*") || p.ends_with("/**") {
-                p.trim_end_matches('*').to_string()
-            } else {
-                p
-            }
-        })
+        .map(|p| if p.ends_with("/*") || p.ends_with("/**") { p.trim_end_matches('*').to_string() } else { p })
         .collect()
 }
 
@@ -310,11 +281,7 @@ packages:
 
     #[test]
     fn test_glob_to_prefix() {
-        let result = glob_to_prefix(vec![
-            "packages/*".to_string(),
-            "libs/*".to_string(),
-            "apps/admin".to_string(),
-        ]);
+        let result = glob_to_prefix(vec!["packages/*".to_string(), "libs/*".to_string(), "apps/admin".to_string()]);
         assert_eq!(result, vec!["packages/", "libs/", "apps/admin"]);
     }
 
@@ -350,11 +317,7 @@ packages:
         let tmp = std::env::temp_dir().join("statico_test_npm");
         let _ = std::fs::remove_dir_all(&tmp);
         std::fs::create_dir_all(&tmp).unwrap();
-        std::fs::write(
-            tmp.join("package.json"),
-            r#"{"workspaces": ["packages/*"]}"#,
-        )
-        .unwrap();
+        std::fs::write(tmp.join("package.json"), r#"{"workspaces": ["packages/*"]}"#).unwrap();
         let info = detect_monorepo(&tmp).expect("should detect npm");
         assert_eq!(info.kind, MonorepoKind::Npm);
         assert_eq!(info.packages, vec!["packages/"]);

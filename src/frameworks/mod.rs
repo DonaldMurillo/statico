@@ -52,9 +52,7 @@ impl PathMatcher {
     /// Check if a relative file path matches this rule.
     pub fn matches(&self, rel: &str) -> bool {
         match self {
-            Self::FileName(name) => {
-                rel == *name || rel.ends_with(&format!("/{}", name))
-            }
+            Self::FileName(name) => rel == *name || rel.ends_with(&format!("/{}", name)),
             Self::Prefix(prefix) => rel.starts_with(prefix),
             Self::FileContains(needle) => {
                 let filename = rel.rsplit('/').next().unwrap_or(rel);
@@ -63,19 +61,19 @@ impl PathMatcher {
             Self::PathContains(needle) => rel.contains(needle),
             Self::DirAndStems { dir, stems } => {
                 let segments: Vec<&str> = rel.split('/').collect();
-                if !segments.iter().any(|s| *s == *dir) {
+                if !segments.contains(dir) {
                     return false;
                 }
                 let filename = segments.last().unwrap_or(&"");
                 let stem = filename.split('.').next().unwrap_or("");
-                stems.iter().any(|s| *s == stem)
+                stems.contains(&stem)
             }
             Self::PrefixAndFile { prefix, files } => {
                 if !rel.starts_with(prefix) {
                     return false;
                 }
                 let filename = rel.rsplit('/').next().unwrap_or(rel);
-                files.iter().any(|f| *f == filename)
+                files.contains(&filename)
             }
         }
     }
@@ -166,9 +164,9 @@ pub fn detect_profiles(root: &Path) -> Vec<&'static FrameworkProfile> {
             continue;
         }
         // Dependency-based markers.
-        if !profile.dep_markers.is_empty() && pkg_deps.as_ref().is_some_and(|deps| {
-            profile.dep_markers.iter().any(|dm| deps.contains(*dm))
-        }) {
+        if !profile.dep_markers.is_empty()
+            && pkg_deps.as_ref().is_some_and(|deps| profile.dep_markers.iter().any(|dm| deps.contains(*dm)))
+        {
             matched.push(profile);
         }
     }
@@ -184,28 +182,25 @@ pub fn detect_profiles(root: &Path) -> Vec<&'static FrameworkProfile> {
                     if profile.name == "generic" {
                         continue;
                     }
-                    if profile.markers.iter().any(|m| ws_root.join(m).exists()) {
-                        if !matched.iter().any(|p| p.name == profile.name) {
+                    if profile.markers.iter().any(|m| ws_root.join(m).exists())
+                        && !matched.iter().any(|p| p.name == profile.name) {
                             matched.push(profile);
                         }
-                    }
                     // Also check deps in workspace package.json.
-                    if !profile.dep_markers.is_empty() && ws_deps.as_ref().is_some_and(|deps| {
-                        profile.dep_markers.iter().any(|dm| deps.contains(*dm))
-                    }) {
-                        if !matched.iter().any(|p| p.name == profile.name) {
+                    if !profile.dep_markers.is_empty()
+                        && ws_deps.as_ref().is_some_and(|deps| profile.dep_markers.iter().any(|dm| deps.contains(*dm)))
+                        && !matched.iter().any(|p| p.name == profile.name) {
                             matched.push(profile);
                         }
-                    }
                 }
             }
         }
 
         // 2b. Also try a shallow scan: walk first-level subdirectories.
-        if matched.len() <= 1 {
-            if let Ok(entries) = std::fs::read_dir(root) {
+        if matched.len() <= 1
+            && let Ok(entries) = std::fs::read_dir(root) {
                 for entry in entries.flatten() {
-                    if !entry.file_type().map_or(false, |t| t.is_dir()) {
+                    if !entry.file_type().is_ok_and(|t| t.is_dir()) {
                         continue;
                     }
                     let name = entry.file_name();
@@ -227,22 +222,20 @@ pub fn detect_profiles(root: &Path) -> Vec<&'static FrameworkProfile> {
                         if profile.name == "generic" {
                             continue;
                         }
-                        if profile.markers.iter().any(|m| sub.join(m).exists()) {
-                            if !matched.iter().any(|p| p.name == profile.name) {
+                        if profile.markers.iter().any(|m| sub.join(m).exists())
+                            && !matched.iter().any(|p| p.name == profile.name) {
                                 matched.push(profile);
                             }
-                        }
-                        if !profile.dep_markers.is_empty() && sub_deps.as_ref().is_some_and(|deps| {
-                            profile.dep_markers.iter().any(|dm| deps.contains(*dm))
-                        }) {
-                            if !matched.iter().any(|p| p.name == profile.name) {
+                        if !profile.dep_markers.is_empty()
+                            && sub_deps
+                                .as_ref()
+                                .is_some_and(|deps| profile.dep_markers.iter().any(|dm| deps.contains(*dm)))
+                            && !matched.iter().any(|p| p.name == profile.name) {
                                 matched.push(profile);
                             }
-                        }
                     }
                 }
             }
-        }
     }
 
     // Always include generic fallback.
@@ -330,10 +323,7 @@ mod tests {
 
     #[test]
     fn path_matcher_dir_and_stems() {
-        let m = PathMatcher::DirAndStems {
-            dir: "app",
-            stems: &["page", "layout", "route"],
-        };
+        let m = PathMatcher::DirAndStems { dir: "app", stems: &["page", "layout", "route"] };
         assert!(m.matches("src/app/page.tsx"));
         assert!(m.matches("src/app/blog/[slug]/page.tsx"));
         assert!(m.matches("app/layout.tsx"));
@@ -344,10 +334,7 @@ mod tests {
 
     #[test]
     fn path_matcher_prefix_and_file() {
-        let m = PathMatcher::PrefixAndFile {
-            prefix: "src/collections/",
-            files: &["index.ts", "config.ts"],
-        };
+        let m = PathMatcher::PrefixAndFile { prefix: "src/collections/", files: &["index.ts", "config.ts"] };
         assert!(m.matches("src/collections/Users/index.ts"));
         assert!(m.matches("src/collections/Posts/config.ts"));
         assert!(!m.matches("src/collections/Users/fields.ts"));
