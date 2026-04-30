@@ -168,7 +168,12 @@ fn merge_config(root: &Path, plugins: &mut Vec<DiscoveredPlugin>) {
                 existing.override_all = override_all;
             }
             if let Some(p) = pc.get("path").and_then(|v| v.as_str()) {
-                existing.path = root.join(p);
+                let resolved = root.join(p);
+                if let Err(e) = crate::ensure_within_root(&resolved, root) {
+                    eprintln!("warning: skipping plugin '{}': {}", name, e);
+                    continue;
+                }
+                existing.path = resolved;
                 existing.kind = detect_plugin_kind(&existing.path);
             }
             if let Some(langs) = pc.get("languages").and_then(|v| v.as_array()) {
@@ -185,6 +190,10 @@ fn merge_config(root: &Path, plugins: &mut Vec<DiscoveredPlugin>) {
                 .and_then(|v| v.as_str())
                 .map(|p| root.join(p))
                 .unwrap_or_else(|| root.join(format!(".statico/plugins/{}", name)));
+            if let Err(e) = crate::ensure_within_root(&path, root) {
+                eprintln!("warning: skipping plugin '{}': {}", name, e);
+                continue;
+            }
             let kind = if path.exists() { detect_plugin_kind(&path) } else { PluginKind::Executable };
             plugins.push(DiscoveredPlugin {
                 name,

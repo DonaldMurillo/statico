@@ -40,6 +40,7 @@ flate2 = "1"
 tar = "0.4"
 sha2 = "0.10"
 dirs = "6"
+tempfile = "3"
 
 [[bench]]
 name = "analysis_benchmarks"

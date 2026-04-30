@@ -88,7 +88,7 @@ fn error_path_nonexistent_directory_exits_nonzero() {
     assert!(!success, "expected non-zero exit code");
 
     // stderr contains human-readable error.
-    assert!(stderr.contains("path not found"), "expected 'path not found' in stderr, got: {stderr}");
+    assert!(stderr.contains("cannot resolve path"), "expected 'cannot resolve path' in stderr, got: {stderr}");
 
     // stdout is empty (no JSON output).
     assert!(stdout.trim().is_empty(), "expected empty stdout, got: {stdout}");

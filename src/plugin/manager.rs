@@ -1,12 +1,28 @@
 //! Plugin subprocess manager — spawn, handshake, message dispatch, shutdown.
+//!
+//! Security hardening (audit F-01, F-02, F-05):
+//! - 10MB response size limit prevents OOM from malicious plugins
+//! - 30s read timeout prevents blocking on unresponsive plugins
+//! - Error messages truncate raw responses to 200 chars
 
 use std::collections::HashMap;
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::path::Path;
-use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
+use std::process::{Child, ChildStdin, Command, Stdio};
+use std::sync::mpsc;
+use std::time::Duration;
 
 use crate::plugin::discovery::{DiscoveredPlugin, PluginKind};
 use crate::plugin::protocol::*;
+
+/// Maximum bytes to read from a plugin response (10 MB) — prevents OOM (F-01).
+const MAX_RESPONSE_SIZE: u64 = 10 * 1024 * 1024;
+
+/// Maximum time to wait for a plugin response — prevents hangs (F-02).
+const RESPONSE_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// Maximum chars of raw response to include in error messages (F-05).
+const MAX_ERROR_RAW_LEN: usize = 200;
 
 /// A running plugin subprocess with its initialized capabilities.
 pub struct ActivePlugin {
@@ -14,15 +30,13 @@ pub struct ActivePlugin {
     pub capabilities: PluginCapabilities,
     process: Child,
     stdin: ChildStdin,
-    stdout: BufReader<ChildStdout>,
+    // Wrapped in Option so we can temporarily move it to a read thread.
+    stdout: Option<BufReader<std::process::ChildStdout>>,
     next_id: u64,
 }
 
 impl ActivePlugin {
     /// Spawn and initialize a plugin.
-    ///
-    /// Spawns the subprocess, sends an `init` request, and validates the
-    /// capabilities response.
     pub fn spawn(plugin: &DiscoveredPlugin, root: &Path) -> Result<Self, String> {
         let (cmd, args) = build_command(plugin)?;
         let mut child = Command::new(&cmd)
@@ -36,7 +50,6 @@ impl ActivePlugin {
 
         let stdin = child.stdin.take().ok_or("Failed to get plugin stdin")?;
         let stdout = child.stdout.take().ok_or("Failed to get plugin stdout")?;
-        let stdout = BufReader::new(stdout);
 
         let init_params = InitParams {
             root: root.to_string_lossy().to_string(),
@@ -55,11 +68,10 @@ impl ActivePlugin {
             },
             process: child,
             stdin,
-            stdout,
+            stdout: Some(BufReader::new(stdout)),
             next_id: 1,
         };
 
-        // Apply override_all from config — all hooks become Override.
         let caps: PluginCapabilities = active.send_request("init", &init_params)?;
         let caps = if plugin.override_all {
             PluginCapabilities {
@@ -76,11 +88,14 @@ impl ActivePlugin {
 
         active.capabilities = caps;
         active.name = plugin.name.clone();
-
         Ok(active)
     }
 
     /// Send a JSON-RPC request and read the response.
+    ///
+    /// Spawns a background thread that reads with a 10MB limit.
+    /// If the read doesn't complete within 30s, kills the child process
+    /// and returns an error.
     pub fn send_request<T: serde::Serialize, R: serde::de::DeserializeOwned>(
         &mut self,
         method: &str,
@@ -107,48 +122,49 @@ impl ActivePlugin {
             .flush()
             .map_err(|e| format!("Flush error to plugin '{}': {}", self.name, e))?;
 
-        // Read response.
-        let mut response_line = String::new();
-        self.stdout
-            .read_line(&mut response_line)
-            .map_err(|e| format!("Read error from plugin '{}': {}", self.name, e))?;
+        // Take stdout and move to a read thread for bounded + timed read.
+        let mut stdout = self.stdout.take().expect("stdout already taken (concurrent send_request?)");
+        let name = self.name.clone();
+        let (tx, rx) = mpsc::channel();
+        let read_thread = std::thread::spawn(move || {
+            let mut response_line = String::new();
+            let result = (&mut stdout).take(MAX_RESPONSE_SIZE).read_line(&mut response_line);
+            let _ = tx.send((result, response_line));
+            stdout // Return ownership
+        });
 
-        let response_line = response_line.trim();
-        if response_line.is_empty() {
-            return Err(format!("Plugin '{}' returned empty response", self.name));
-        }
+        match rx.recv_timeout(RESPONSE_TIMEOUT) {
+            Ok((read_result, response_line)) => {
+                // Recover stdout from thread
+                self.stdout = Some(read_thread.join().expect("plugin read thread panicked"));
 
-        // Try success response first, then error.
-        if let Ok(resp) = serde_json::from_str::<GenericResponse>(response_line) {
-            if resp.id != id {
-                return Err(format!(
-                    "Plugin '{}' response id mismatch: expected {}, got {}",
-                    self.name, id, resp.id
-                ));
+                let bytes_read = read_result
+                    .map_err(|e| format!("Read error from plugin '{}': {}", name, e))?;
+                if bytes_read == 0 && response_line.is_empty() {
+                    return Err(format!("Plugin '{}' returned empty response (EOF)", name));
+                }
+                if response_line.len() as u64 >= MAX_RESPONSE_SIZE {
+                    return Err(format!("Plugin '{}' response exceeded 10MB limit", name));
+                }
+
+                parse_response::<R>(&name, id, &response_line)
             }
-            let result: R = serde_json::from_value(resp.result).map_err(|e| {
-                format!(
-                    "Plugin '{}' response deserialization error: {} — raw: {}",
-                    self.name, e, response_line
-                )
-            })?;
-            Ok(result)
-        } else if let Ok(err_resp) = serde_json::from_str::<ErrorResponse>(response_line) {
-            Err(format!(
-                "Plugin '{}' error: [{}] {}",
-                self.name, err_resp.error.code, err_resp.error.message
-            ))
-        } else {
-            Err(format!(
-                "Plugin '{}' sent invalid JSON-RPC: {}",
-                self.name, response_line
-            ))
+            Err(mpsc::RecvTimeoutError::Timeout) => {
+                let _ = self.process.kill();
+                Err(format!(
+                    "Plugin '{}' timed out waiting for response (>{}s)",
+                    name,
+                    RESPONSE_TIMEOUT.as_secs()
+                ))
+            }
+            Err(mpsc::RecvTimeoutError::Disconnected) => {
+                Err(format!("Plugin '{}' reader thread panicked", name))
+            }
         }
     }
 
     /// Send shutdown signal and wait for the process to exit.
     pub fn shutdown(&mut self) -> Result<(), String> {
-        // Best-effort: send shutdown, ignore response.
         let id = self.next_id;
         self.next_id += 1;
         let request = Request {
@@ -162,8 +178,7 @@ impl ActivePlugin {
             let _ = self.stdin.write_all(line.as_bytes());
             let _ = self.stdin.flush();
         }
-        // Give it a moment, then kill.
-        std::thread::sleep(std::time::Duration::from_millis(100));
+        std::thread::sleep(Duration::from_millis(100));
         let _ = self.process.wait();
         Ok(())
     }
@@ -176,6 +191,58 @@ impl ActivePlugin {
     /// Get the mode for a hook.
     pub fn hook_mode(&self, hook: &HookName) -> Option<&HookMode> {
         self.capabilities.hooks.get(hook)
+    }
+}
+
+/// Parse a JSON-RPC response, truncating raw output in error messages (F-05).
+fn parse_response<R: serde::de::DeserializeOwned>(
+    name: &str,
+    expected_id: u64,
+    raw: &str,
+) -> Result<R, String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Err(format!("Plugin '{}' returned empty response", name));
+    }
+
+    let truncated = truncate_str(trimmed, MAX_ERROR_RAW_LEN);
+
+    if let Ok(resp) = serde_json::from_str::<GenericResponse>(trimmed) {
+        if resp.id != expected_id {
+            return Err(format!(
+                "Plugin '{}' response id mismatch: expected {}, got {}",
+                name, expected_id, resp.id
+            ));
+        }
+        serde_json::from_value(resp.result).map_err(|e| {
+            format!(
+                "Plugin '{}' response deserialization error: {} — raw: {}…",
+                name, e, truncated
+            )
+        })
+    } else if let Ok(err_resp) = serde_json::from_str::<ErrorResponse>(trimmed) {
+        Err(format!(
+            "Plugin '{}' error: [{}] {}",
+            name, err_resp.error.code, err_resp.error.message
+        ))
+    } else {
+        Err(format!(
+            "Plugin '{}' sent invalid JSON-RPC: {}…",
+            name, truncated
+        ))
+    }
+}
+
+/// Truncate a string at a char boundary near `max_len`.
+fn truncate_str(s: &str, max_len: usize) -> &str {
+    if s.len() <= max_len {
+        s
+    } else {
+        let mut end = max_len;
+        while !s.is_char_boundary(end) && end > 0 {
+            end -= 1;
+        }
+        &s[..end]
     }
 }
 
@@ -243,7 +310,6 @@ fn find_ts_entry(dir: &Path) -> Result<String, String> {
 
 /// Find the Python entry point in a plugin directory.
 fn find_python_entry(dir: &Path) -> Result<String, String> {
-    // Check package.json statico.entry first.
     let pkg_path = dir.join("package.json");
     if pkg_path.exists() {
         if let Ok(contents) = std::fs::read_to_string(&pkg_path) {
@@ -254,6 +320,10 @@ fn find_python_entry(dir: &Path) -> Result<String, String> {
                     .and_then(|e| e.as_str())
                 {
                     let candidate = dir.join(entry);
+                    // Verify entry path stays within plugin directory (F-04).
+                    if !candidate.starts_with(dir) {
+                        return Err(format!("entry path '{}' escapes plugin directory", entry));
+                    }
                     if candidate.exists() {
                         return Ok(candidate.to_string_lossy().to_string());
                     }
@@ -261,7 +331,6 @@ fn find_python_entry(dir: &Path) -> Result<String, String> {
             }
         }
     }
-    // Fallback: common Python entry files.
     for name in &["plugin.py", "main.py", "index.py", "src/main.py"] {
         let candidate = dir.join(name);
         if candidate.exists() {
@@ -298,10 +367,8 @@ mod tests {
     use super::*;
     use std::path::PathBuf;
 
-    /// Create a mock bash plugin that speaks JSON-RPC.
     fn make_mock_plugin(dir: &Path, name: &str) -> PathBuf {
         let script = dir.join(name);
-        // Responds to init with capabilities, ignores other methods.
         let code = r#"#!/bin/bash
 while IFS= read -r line; do
     id=$(echo "$line" | grep -o '"id":[0-9]*' | head -1 | cut -d':' -f2)
@@ -327,7 +394,6 @@ done
     fn spawn_and_handshake() {
         let tmp = tempfile::tempdir().unwrap();
         let script = make_mock_plugin(tmp.path(), "mock-plugin");
-
         let discovered = DiscoveredPlugin {
             name: "mock-plugin".to_string(),
             path: script,
@@ -338,7 +404,6 @@ done
             settings: toml::Value::Table(toml::map::Map::new()),
             languages: Vec::new(),
         };
-
         let mut plugin = ActivePlugin::spawn(&discovered, tmp.path()).unwrap();
         assert_eq!(plugin.capabilities.name, "mock-plugin");
         assert!(plugin.has_hook(&HookName::AnalyzeFile));
@@ -350,18 +415,16 @@ done
     fn spawn_with_override_all() {
         let tmp = tempfile::tempdir().unwrap();
         let script = make_mock_plugin(tmp.path(), "override-plugin");
-
         let discovered = DiscoveredPlugin {
             name: "override-plugin".to_string(),
             path: script,
             kind: PluginKind::Executable,
             enabled: true,
-            override_all: true, // should force all hooks to Override mode
+            override_all: true,
             hook_overrides: HashMap::new(),
             settings: toml::Value::Table(toml::map::Map::new()),
             languages: Vec::new(),
         };
-
         let mut plugin = ActivePlugin::spawn(&discovered, tmp.path()).unwrap();
         assert_eq!(
             plugin.hook_mode(&HookName::AnalyzeFile),
@@ -374,7 +437,6 @@ done
     fn analyze_file_roundtrip() {
         let tmp = tempfile::tempdir().unwrap();
         let script = make_mock_plugin(tmp.path(), "analyze-plugin");
-
         let discovered = DiscoveredPlugin {
             name: "analyze-plugin".to_string(),
             path: script,
@@ -385,7 +447,6 @@ done
             settings: toml::Value::Table(toml::map::Map::new()),
             languages: Vec::new(),
         };
-
         let mut plugin = ActivePlugin::spawn(&discovered, tmp.path()).unwrap();
         let params = AnalyzeFileParams {
             path: "test.ts".to_string(),

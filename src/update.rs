@@ -5,7 +5,7 @@
 use std::env;
 use std::fs;
 use std::io;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 /// GitHub repo for releases.
 const GITHUB_REPO: &str = "domvess/statico";
@@ -122,9 +122,9 @@ pub fn run_update(dry_run: bool) -> Result<String, String> {
 
     eprintln!("Downloading statico v{} for {}...", latest, platform);
 
-    // Download archive to temp file.
-    let tmp_dir = std::env::temp_dir().join("statico-update");
-    fs::create_dir_all(&tmp_dir).map_err(|e| format!("failed to create temp dir: {}", e))?;
+    // Download archive to a secure, randomized temp directory.
+    let tmp_builder = tempfile::TempDir::new().map_err(|e| format!("failed to create temp dir: {}", e))?;
+    let tmp_dir = tmp_builder.path();
     let archive_path = tmp_dir.join(&archive_name);
 
     let agent = ureq::Agent::new_with_defaults();
@@ -154,8 +154,8 @@ pub fn run_update(dry_run: bool) -> Result<String, String> {
     let current_exe = env::current_exe().map_err(|e| format!("cannot determine current executable: {}", e))?;
     replace_binary(&current_exe, &new_binary)?;
 
-    // Clean up.
-    let _ = fs::remove_dir_all(&tmp_dir);
+    // Clean up (temp dir is removed on drop, but be explicit).
+    drop(tmp_builder);
 
     // Record update metadata.
     let data = data_dir();
@@ -166,12 +166,39 @@ pub fn run_update(dry_run: bool) -> Result<String, String> {
     Ok(format!("Updated statico v{} → v{} ✓", current, latest))
 }
 
-/// Extract a .tar.gz archive.
+/// Extract a .tar.gz archive safely.
+///
+/// Validates each entry's path to prevent path traversal attacks (e.g. `../../etc/passwd`).
 fn extract_tar_gz(archive: &Path, dest: &Path) -> Result<(), String> {
     let file = fs::File::open(archive).map_err(|e| format!("failed to open archive: {}", e))?;
     let gz = flate2::read::GzDecoder::new(file);
     let mut archive = tar::Archive::new(gz);
-    archive.unpack(dest).map_err(|e| format!("failed to extract archive: {}", e))?;
+    archive.set_preserve_permissions(false);
+
+    for entry in archive.entries().map_err(|e| format!("failed to read archive entries: {}", e))? {
+        let mut entry = entry.map_err(|e| format!("failed to read archive entry: {}", e))?;
+        let path = entry
+            .path()
+            .map_err(|e| format!("failed to read entry path: {}", e))?
+            .into_owned();
+
+        // Reject any entry whose path contains a parent directory component.
+        if path.components().any(|c| c == Component::ParentDir) {
+            return Err(format!(
+                "refusing to extract archive entry with path traversal: {}",
+                path.display()
+            ));
+        }
+
+        entry.unpack_in(dest).map_err(|e| {
+            format!(
+                "failed to extract archive entry '{}': {}",
+                path.display(),
+                e
+            )
+        })?;
+    }
+
     Ok(())
 }
 

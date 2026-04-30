@@ -80,7 +80,14 @@ impl IncrementalCache {
                 return;
             }
         };
-        if let Err(e) = fs::write(&index_path, json) {
+        if let Err(e) = {
+            let tmp_path = index_path.with_extension("json.tmp");
+            let write_result = fs::write(&tmp_path, &json);
+            match write_result {
+                Ok(()) => fs::rename(&tmp_path, &index_path),
+                Err(e) => Err(e),
+            }
+        } {
             eprintln!("warning: failed to write cache: {}", e);
         }
     }

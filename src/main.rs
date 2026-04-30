@@ -352,7 +352,10 @@ fn run_analyze(
     let root = std::path::Path::new(path);
     let root = match std::fs::canonicalize(root) {
         Ok(c) => c,
-        Err(_) => root.to_path_buf(),
+        Err(e) => {
+            eprintln!("error: cannot resolve path '{}': {}", path, e);
+            process::exit(1);
+        }
     };
 
     // Load config from project root and merge with CLI args.
@@ -1314,6 +1317,16 @@ Full schema: statico plugin schema --format json
 }
 
 fn run_plugin_init(name: &str, lang: &str, path: &str) {
+    // Validate plugin name: only alphanumeric, hyphens, underscores.
+    let valid = name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
+    if !valid || name.is_empty() {
+        eprintln!(
+            "Error: invalid plugin name '{}'. Must match ^[a-zA-Z0-9_-]+$",
+            name
+        );
+        std::process::exit(1);
+    }
+
     let root = std::path::Path::new(path);
     let root = match std::fs::canonicalize(root) {
         Ok(c) => c,
@@ -1647,6 +1660,13 @@ fn run_plugin_run(name: &str, file: &str, path: &str) {
     };
 
     let source_path = root.join(file);
+
+    // Verify the file path is within the project root.
+    if let Err(e) = statico::ensure_within_root(&source_path, &root) {
+        eprintln!("Error: {}", e);
+        std::process::exit(1);
+    }
+
     let source = match std::fs::read_to_string(&source_path) {
         Ok(s) => s,
         Err(e) => {
