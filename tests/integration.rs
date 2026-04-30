@@ -729,3 +729,104 @@ fn cli_setup_generates_pi_skills() {
     let gitignore = std::fs::read_to_string(tmp_path.join(".gitignore")).expect("read gitignore");
     assert!(gitignore.contains(".pi/"), ".gitignore should contain .pi/: {gitignore}");
 }
+
+// ─── Plugin integration tests ────────────────────────────────────
+
+/// Helper to create a mock bash plugin that speaks JSON-RPC.
+fn make_mock_plugin_script(dir: &Path, name: &str) -> PathBuf {
+    let script = dir.join(name);
+    let code = r#"#!/bin/bash
+while IFS= read -r line; do
+    id=$(echo "$line" | grep -o '"id":[0-9]*' | head -1 | cut -d':' -f2)
+    if echo "$line" | grep -q '"method":"init"'; then
+        echo "{\"jsonrpc\":\"2.0\",\"id\":${id},\"result\":{\"name\":\"mock-plugin\",\"version\":\"0.1.0\",\"hooks\":{\"analyze_file\":\"add\"},\"languages\":[],\"rules\":[]}}"
+    elif echo "$line" | grep -q '"method":"shutdown"'; then
+        exit 0
+    elif echo "$line" | grep -q '"method":"analyze_file"'; then
+        echo "{\"jsonrpc\":\"2.0\",\"id\":${id},\"result\":{\"issues\":[],\"exports\":[],\"dependencies\":[]}}"
+    fi
+done
+"#;
+    std::fs::write(&script, code).unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    script
+}
+
+#[test]
+fn test_plugin_list_empty() {
+    let tmp = tempfile::tempdir().unwrap();
+    let output = Command::new(statico_bin())
+        .arg("plugin")
+        .arg("list")
+        .arg("--path")
+        .arg(tmp.path())
+        .output()
+        .expect("failed to run statico plugin list");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("No plugins found"), "expected 'No plugins found' in: {stdout}");
+}
+
+#[test]
+fn test_plugin_list_discovers_executable() {
+    let tmp = tempfile::tempdir().unwrap();
+    let plugins_dir = tmp.path().join(".statico/plugins");
+    std::fs::create_dir_all(&plugins_dir).unwrap();
+    make_mock_plugin_script(&plugins_dir, "my-plugin");
+
+    let output = Command::new(statico_bin())
+        .arg("plugin")
+        .arg("list")
+        .arg("--path")
+        .arg(tmp.path())
+        .output()
+        .expect("failed to run statico plugin list");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("my-plugin"), "expected 'my-plugin' in: {stdout}");
+    assert!(stdout.contains("executable"), "expected 'executable' in: {stdout}");
+}
+
+#[test]
+fn test_plugin_schema_json() {
+    let output = Command::new(statico_bin())
+        .arg("plugin")
+        .arg("schema")
+        .arg("--format")
+        .arg("json")
+        .output()
+        .expect("failed to run statico plugin schema");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let schema: serde_json::Value = serde_json::from_str(stdout.trim()).expect("schema should be valid JSON");
+    assert!(schema["methods"]["init"].is_object(), "schema should have init method");
+    assert!(schema["methods"]["analyze_file"].is_object(), "schema should have analyze_file");
+    assert!(schema["types"].is_object(), "schema should have types section");
+}
+
+#[test]
+fn test_plugin_schema_text() {
+    let output = Command::new(statico_bin())
+        .arg("plugin")
+        .arg("schema")
+        .output()
+        .expect("failed to run statico plugin schema");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("HOOKS:"), "expected HOOKS section in: {stdout}");
+    assert!(stdout.contains("analyze_file"), "expected analyze_file in: {stdout}");
+}
+
+#[test]
+fn test_plugin_docs_output() {
+    let output = Command::new(statico_bin())
+        .arg("plugin")
+        .arg("docs")
+        .output()
+        .expect("failed to run statico plugin docs");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("Plugin Development Guide"), "expected guide title in: {stdout}");
+    assert!(stdout.contains("Quick Start"), "expected Quick Start in: {stdout}");
+    assert!(stdout.contains("Hook Modes"), "expected Hook Modes in: {stdout}");
+}
+
