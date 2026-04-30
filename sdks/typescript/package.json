@@ -1,0 +1,17 @@
+{
+  "name": "@statico/plugin-sdk",
+  "version": "0.1.0",
+  "description": "SDK for building statico plugins in TypeScript",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "build": "bun build src/index.ts --outdir dist --target bun",
+    "check": "bun tsc --noEmit"
+  },
+  "keywords": ["statico", "plugin", "sdk", "analysis", "linting"],
+  "license": "MIT",
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5"
+  }
+}

@@ -1,0 +1,340 @@
+/**
+ * @statico/plugin-sdk — SDK for building statico plugins in TypeScript.
+ *
+ * Provides typed helpers for the JSON-RPC 2.0 protocol that statico
+ * uses to communicate with plugin subprocesses over stdin/stdout.
+ *
+ * ## Quick Start
+ *
+ * ```typescript
+ * import { Plugin } from "@statico/plugin-sdk";
+ *
+ * const plugin = Plugin.create("my-rule", {
+ *   hooks: { analyze_file: "add" },
+ *   languages: ["typescript"],
+ *   rules: [{ id: "no-console", severity: "warning", description: "No console.log" }],
+ * });
+ *
+ * plugin.onAnalyzeFile((params) => {
+ *   const issues = [];
+ *   if (params.source.includes("console.log")) {
+ *     issues.push({ ruleId: "no-console", severity: "warning", message: "Found console.log", file: params.path, line: 1, confidence: 0.9 });
+ *   }
+ *   return { issues };
+ * });
+ *
+ * plugin.start();
+ * ```
+ */
+
+// ─── Types ───────────────────────────────────────────────────────
+
+/** Hook names that plugins can subscribe to. */
+export type HookName =
+  | "analyze_file"
+  | "discover_entries"
+  | "resolve_import"
+  | "post_analysis"
+  | "format_output";
+
+/** How a plugin participates in a hook. */
+export type HookMode = "add" | "override";
+
+/** Severity levels for issues. */
+export type Severity = "error" | "warning" | "info";
+
+/** A rule declared in the plugin manifest. */
+export interface Rule {
+  id: string;
+  severity: Severity;
+  description: string;
+}
+
+/** Plugin manifest — passed to Plugin.create(). */
+export interface PluginManifest {
+  version?: string;
+  hooks: Partial<Record<HookName, HookMode>>;
+  languages?: string[];
+  rules?: Rule[];
+}
+
+/** A single issue reported by a plugin. */
+export interface Issue {
+  ruleId: string;
+  severity: Severity;
+  message: string;
+  file: string;
+  line: number;
+  column?: number;
+  endLine?: number;
+  endColumn?: number;
+  confidence?: number;
+  suggestion?: string;
+}
+
+/** An entry point discovered by a plugin. */
+export interface EntryPoint {
+  path: string;
+  type?: string;
+  framework?: string;
+}
+
+/** File metrics reported alongside analysis. */
+export interface FileMetrics {
+  complexity: number;
+  loc: number;
+}
+
+// ─── Hook parameter / result types ───────────────────────────────
+
+/** analyze_file params. */
+export interface AnalyzeFileParams {
+  path: string;
+  source: string;
+  language: string;
+  existingIssues: Issue[];
+}
+
+/** analyze_file result. */
+export interface AnalyzeFileResult {
+  issues: Issue[];
+  exports?: string[];
+  dependencies?: string[];
+  metrics?: FileMetrics;
+}
+
+/** discover_entries params. */
+export interface DiscoverEntriesParams {
+  root: string;
+  configFiles: string[];
+  language: string;
+}
+
+/** discover_entries result. */
+export interface DiscoverEntriesResult {
+  entryPoints: EntryPoint[];
+}
+
+/** resolve_import params. */
+export interface ResolveImportParams {
+  fromFile: string;
+  specifier: string;
+  root: string;
+}
+
+/** resolve_import result. */
+export interface ResolveImportResult {
+  resolvedPath: string;
+  external: boolean;
+}
+
+/** post_analysis params. */
+export interface PostAnalysisParams {
+  results: Record<string, unknown>;
+  healthScore: number;
+  totalFiles: number;
+  language: string;
+}
+
+/** post_analysis result. */
+export interface PostAnalysisResult {
+  issues: Issue[];
+  suggestions: string[];
+}
+
+/** format_output params. */
+export interface FormatOutputParams {
+  results: Record<string, unknown>;
+  format: string;
+  healthScore: number;
+}
+
+/** format_output result. */
+export interface FormatOutputResult {
+  output: string;
+  exitCode?: number;
+}
+
+// ─── JSON-RPC internals ──────────────────────────────────────────
+
+interface JsonRpcRequest {
+  jsonrpc: "2.0";
+  id: number;
+  method: string;
+  params: unknown;
+}
+
+interface JsonRpcSuccessResponse {
+  jsonrpc: "2.0";
+  id: number;
+  result: unknown;
+}
+
+interface JsonRpcErrorResponse {
+  jsonrpc: "2.0";
+  id: number;
+  error: { code: number; message: string; data?: unknown };
+}
+
+type JsonRpcResponse = JsonRpcSuccessResponse | JsonRpcErrorResponse;
+
+function isErrorResponse(resp: JsonRpcResponse): resp is JsonRpcErrorResponse {
+  return "error" in resp;
+}
+
+// ─── Plugin class ────────────────────────────────────────────────
+
+type HookHandler<P, R> = (params: P) => R | Promise<R>;
+
+/**
+ * Main plugin class — reads JSON-RPC from stdin, dispatches to handlers, writes to stdout.
+ *
+ * Usage:
+ *   const plugin = Plugin.create("my-plugin", { hooks: { analyze_file: "add" } });
+ *   plugin.onAnalyzeFile((params) => ({ issues: [] }));
+ *   plugin.start();
+ */
+export class Plugin {
+  private name: string;
+  private manifest: PluginManifest;
+  private handlers: Map<string, HookHandler<unknown, unknown>> = new Map();
+
+  private constructor(name: string, manifest: PluginManifest) {
+    this.name = name;
+    this.manifest = manifest;
+  }
+
+  /** Create a new plugin instance. */
+  static create(name: string, manifest: PluginManifest): Plugin {
+    return new Plugin(name, manifest);
+  }
+
+  /** Register a handler for the analyze_file hook. */
+  onAnalyzeFile(handler: HookHandler<AnalyzeFileParams, AnalyzeFileResult>): this {
+    this.handlers.set("analyze_file", handler as HookHandler<unknown, unknown>);
+    return this;
+  }
+
+  /** Register a handler for the discover_entries hook. */
+  onDiscoverEntries(handler: HookHandler<DiscoverEntriesParams, DiscoverEntriesResult>): this {
+    this.handlers.set("discover_entries", handler as HookHandler<unknown, unknown>);
+    return this;
+  }
+
+  /** Register a handler for the resolve_import hook. */
+  onResolveImport(handler: HookHandler<ResolveImportParams, ResolveImportResult>): this {
+    this.handlers.set("resolve_import", handler as HookHandler<unknown, unknown>);
+    return this;
+  }
+
+  /** Register a handler for the post_analysis hook. */
+  onPostAnalysis(handler: HookHandler<PostAnalysisParams, PostAnalysisResult>): this {
+    this.handlers.set("post_analysis", handler as HookHandler<unknown, unknown>);
+    return this;
+  }
+
+  /** Register a handler for the format_output hook. */
+  onFormatOutput(handler: HookHandler<FormatOutputParams, FormatOutputResult>): this {
+    this.handlers.set("format_output", handler as HookHandler<unknown, unknown>);
+    return this;
+  }
+
+  /**
+   * Start the JSON-RPC read loop.
+   *
+   * Reads newline-delimited JSON from stdin, dispatches to registered
+   * handlers, and writes responses to stdout.
+   *
+   * Handles the "init" and "shutdown" methods automatically.
+   */
+  start(): void {
+    const decoder = new TextDecoder();
+    const encoder = new TextEncoder();
+
+    let buffer = "";
+
+    const writeResponse = (resp: JsonRpcSuccessResponse | JsonRpcErrorResponse) => {
+      const line = JSON.stringify(resp) + "\n";
+      Bun.write(Bun.stdout, encoder.encode(line));
+    };
+
+    const handleLine = async (line: string) => {
+      let req: JsonRpcRequest;
+      try {
+        req = JSON.parse(line);
+      } catch {
+        writeResponse({
+          jsonrpc: "2.0",
+          id: 0,
+          error: { code: -32700, message: "Parse error" },
+        });
+        return;
+      }
+
+      const { id, method, params } = req;
+
+      // Built-in: init
+      if (method === "init") {
+        writeResponse({
+          jsonrpc: "2.0",
+          id,
+          result: {
+            name: this.name,
+            version: this.manifest.version ?? null,
+            hooks: this.manifest.hooks,
+            languages: this.manifest.languages ?? [],
+            rules: this.manifest.rules ?? [],
+          },
+        });
+        return;
+      }
+
+      // Built-in: shutdown
+      if (method === "shutdown") {
+        writeResponse({ jsonrpc: "2.0", id, result: null });
+        process.exit(0);
+      }
+
+      // Dispatch to registered handler
+      const handler = this.handlers.get(method);
+      if (!handler) {
+        writeResponse({
+          jsonrpc: "2.0",
+          id,
+          error: { code: -32601, message: `Method not found: ${method}` },
+        });
+        return;
+      }
+
+      try {
+        const result = await handler(params);
+        writeResponse({ jsonrpc: "2.0", id, result });
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        writeResponse({
+          jsonrpc: "2.0",
+          id,
+          error: { code: -32000, message },
+        });
+      }
+    };
+
+    // Read stdin line by line.
+    Bun.stdin.stream().on("data", (chunk: Uint8Array) => {
+      buffer += decoder.decode(chunk, { stream: true });
+      const lines = buffer.split("\n");
+      // Keep the last (potentially incomplete) line in the buffer.
+      buffer = lines.pop() ?? "";
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (trimmed) {
+          handleLine(trimmed);
+        }
+      }
+    });
+
+    // Keep the process alive.
+    // The process will exit when stdin closes (statico sends shutdown first).
+  }
+}
