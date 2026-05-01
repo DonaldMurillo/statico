@@ -37,6 +37,7 @@ oxc_resolver = { version = "11", optional = true }
 tree-sitter-rust = "0.24"
 ureq = { version = "3", features = ["json"] }
 flate2 = "1"
+zstd = "0.13"
 tar = "0.4"
 sha2 = "0.10"
 dirs = "6"

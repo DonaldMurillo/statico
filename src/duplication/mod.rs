@@ -3,11 +3,13 @@
 mod families;
 mod groups;
 mod mirrored;
+mod ncd;
 mod stats;
 
 pub use families::build_clone_families;
 pub use groups::build_clone_groups;
 pub use mirrored::detect_mirrored_directories;
+pub use ncd::{detect_ncd_duplicates, find_candidate_pairs, ncd, NcdCandidate};
 pub use stats::compute_duplication_stats;
 
 use crate::types::{DuplicateCodeIssue, DuplicationSection};
