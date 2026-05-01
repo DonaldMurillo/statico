@@ -245,17 +245,27 @@ fn classify_import(spec: &str, internal: &mut Vec<String>, external: &mut Vec<St
         }
     } else if !spec.is_empty() {
         let pkg = extract_package_name(spec);
-        if !external.contains(&pkg) {
+        // V7-8: Skip when extract_package_name returns empty (e.g. bare "@")
+        // to avoid polluting the external packages list with empty strings.
+        if !pkg.is_empty() && !external.contains(&pkg) {
             external.push(pkg);
         }
     }
 }
 
 /// Extract the package name from an import specifier.
+/// V7-5: `@` alone (no scope name) is not a valid package specifier and
+/// is treated as the empty string / skipped by the caller.
 pub fn extract_package_name(spec: &str) -> String {
     if spec.starts_with('@') {
         let parts: Vec<&str> = spec.splitn(3, '/').collect();
-        if parts.len() >= 2 { format!("{}/{}", parts[0], parts[1]) } else { spec.to_string() }
+        if parts.len() >= 2 && !parts[1].is_empty() {
+            format!("{}/{}", parts[0], parts[1])
+        } else {
+            // Bare `@` without a scope name — not a valid package.
+            // Return the spec as-is; classify_import's empty check will skip it.
+            String::new()
+        }
     } else {
         spec.split('/').next().unwrap_or(spec).to_string()
     }
@@ -342,5 +352,38 @@ import { qux } from 'lodash';
         assert!(internal.iter().any(|s| s.contains("~/lib")));
         assert!(internal.iter().any(|s| s.contains("#internal")));
         assert!(external.contains(&"lodash".to_string()));
+    }
+
+    // ── V7-5: extract_package_name must not return bare "@" ──
+    #[test]
+    fn sec_v7_5_extract_package_name_bare_at() {
+        // A bare "@" is not a valid package specifier.
+        // extract_package_name should return empty string, not "@".
+        assert_eq!(extract_package_name("@"), "",
+            "bare '@' should return empty, not a fake package");
+        // Also verify that classify_import treats bare @ as neither internal nor external
+        let mut internal = vec![];
+        let mut external = vec![];
+        classify_import("@", &mut internal, &mut external);
+        assert!(!internal.contains(&"@".to_string()),
+            "bare '@' should not be classified as internal");
+        assert!(!external.contains(&"@".to_string()),
+            "bare '@' should not be classified as external package");
+    }
+
+    // ── V7-8: classify_import must not push empty string to external ──
+    #[test]
+    fn sec_v7_8_classify_import_no_empty_external() {
+        let mut internal = vec![];
+        let mut external = vec![];
+        // "@@" → extract_package_name returns empty → should be skipped
+        classify_import("@@", &mut internal, &mut external);
+        assert!(external.iter().all(|e| !e.is_empty()),
+            "external packages should not contain empty strings, got: {:?}", external);
+        // Also test bare "@" doesn't produce empty external
+        external.clear();
+        classify_import("@", &mut internal, &mut external);
+        assert!(external.iter().all(|e| !e.is_empty()),
+            "bare '@' should not produce empty external, got: {:?}", external);
     }
 }

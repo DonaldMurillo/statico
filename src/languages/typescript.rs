@@ -27,7 +27,8 @@ impl TypeScriptPlugin {
     }
 
     fn get_resolver(&self, root: &Path) -> Arc<Resolver> {
-        let mut cache = self.resolver_cache.lock().unwrap();
+        // V7-2: Recover from poisoned mutex (another thread panicked while holding it).
+        let mut cache = self.resolver_cache.lock().unwrap_or_else(|e| e.into_inner());
         if let Some((_, resolver)) = cache.iter().find(|(r, _)| r == root) {
             return Arc::clone(resolver);
         }

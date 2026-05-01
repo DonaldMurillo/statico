@@ -301,20 +301,28 @@ where
 fn escape_mermaid_label(s: &str) -> String {
     s.replace('\n', " ")
      .replace('\r', " ")
+     .replace('&', "&amp;")
+     .replace('#', "&#35;")
      .replace('"', "&quot;")
      .replace('[', "&#91;")
      .replace(']', "&#93;")
      .replace('{', "&#123;")
      .replace('}', "&#125;")
-     .replace('#', "&#35;")
 }
 
 /// Return a short display name by stripping the common prefix.
 fn display_name(path: &str, prefix: &str) -> String {
     let raw = if prefix.is_empty() { path.to_string() } else { path.strip_prefix(prefix).unwrap_or(path).to_string() };
-    // Escape characters that could break Mermaid node labels
+    // Escape characters that could break Mermaid node labels.
+    // V7-3: `#` must be escaped because Mermaid interprets `#quot;` etc. as
+    // entity references, allowing injection of quotes and other chars.
+    // V7-9: `&` must be escaped FIRST to prevent injection via HTML entities.
+    // Order matters: `&` and `#` must be escaped before `"`, `[]`, `{}`
+    // whose replacement strings contain `#` (e.g. `&#123;`).
     raw.replace('\n', " ")
        .replace('\r', " ")
+       .replace('&', "&amp;")
+       .replace('#', "&#35;")
        .replace('"', "&quot;")
        .replace(']', "&#93;")
        .replace('[', "&#91;")
@@ -518,5 +526,47 @@ mod tests {
             "# followed by text should be escaped, got: {:?}", escaped);
         assert!(escaped.contains("&#35;"),
             "# should become &#35;, got: {:?}", escaped);
+    }
+
+    // ── V7-3: display_name must escape # to prevent Mermaid entity injection ──
+    #[test]
+    fn sec_v7_3_display_name_escapes_hash() {
+        // In Mermaid, `#quot;` is interpreted as a literal `"`. A file path
+        // containing `#quot;` would inject a quote into the node label, breaking
+        // the chart structure and allowing label injection.
+        let name = display_name("src/file#quot;.ts", "");
+        // After escaping, `#` should become `&#35;`
+        assert!(name.contains("&#35;"),
+            "# should become &#35;, got: {}", name);
+        // No raw `#` should remain (it's been replaced with entity)
+        let without_entities = name.replace("&amp;", "").replace("&#35;", "").replace("&quot;", "");
+        assert!(!without_entities.contains('#'),
+            "no raw # should remain, got: {}", name);
+    }
+
+    // ── V7-9: display_name and escape_mermaid_label must escape & ──
+    #[test]
+    fn sec_v7_9_display_name_escapes_ampersand() {
+        // In Mermaid, `&` starts HTML entities. A path like `foo&quot;.ts` would
+        // have `&quot;` decoded to `"`, injecting a quote into the node label.
+        let name = display_name("src/foo&quot;.ts", "");
+        // After escaping, `&` should be `&amp;` so Mermaid doesn't decode the entity
+        assert!(name.contains("&amp;"),
+            "& should become &amp;, got: {}", name);
+        // Verify no raw `&` followed by a letter remains (which would be an entity)
+        let raw_amp = name.replace("&amp;", "").replace("&quot;", "").replace("&#35;", "").replace("&#91;", "").replace("&#93;", "").replace("&#123;", "").replace("&#125;", "");
+        assert!(!raw_amp.contains('&'),
+            "no unescaped & should remain, got: {}", name);
+    }
+
+    #[test]
+    fn sec_v7_9_escape_mermaid_label_escapes_ampersand() {
+        let escaped = escape_mermaid_label("foo&amp;evil");
+        // After escaping, every original `&` should be `&amp;`
+        assert!(escaped.contains("&amp;"),
+            "& should become &amp;, got: {:?}", escaped);
+        // The result should contain &amp;amp; because the original & in &amp; gets escaped too
+        assert!(escaped.contains("&amp;amp;"),
+            "nested & should be double-escaped, got: {:?}", escaped);
     }
 }

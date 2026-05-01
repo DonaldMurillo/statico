@@ -139,6 +139,9 @@ pub fn content_hash(content: &str) -> String {
 /// Ensure `.statico/` is in the project's .gitignore.
 /// V-8: Refuses to modify .gitignore if it is a symlink (prevents corruption
 /// of linked files).
+/// V7-4: Checks for `.statico/` as a standalone gitignore pattern on its
+/// own line (not just a substring match), preventing false positives from
+/// comments like `# statico is great` or negation `!.statico`.
 pub fn ensure_gitignore(project_root: &Path) {
     let gitignore_path = project_root.join(".gitignore");
     // V-8: Don't follow symlinks — could point to important system files
@@ -146,7 +149,19 @@ pub fn ensure_gitignore(project_root: &Path) {
         return;
     }
     let existing = fs::read_to_string(&gitignore_path).unwrap_or_default();
-    if !existing.contains(".statico")
+    // V7-4: Check for `.statico` as a gitignore pattern (on its own line),
+    // not just as a substring. A comment like `# statico` or a negation like
+    // `!.statico` should not prevent us from adding the real ignore entry.
+    let has_statico_pattern = existing.lines().any(|line| {
+        let trimmed = line.trim();
+        // Skip comments and empty lines
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            return false;
+        }
+        // Check if the pattern matches .statico (with or without trailing /)
+        trimmed == ".statico" || trimmed == ".statico/" || trimmed == "/.statico" || trimmed == "/.statico/"
+    });
+    if !has_statico_pattern
         && let Ok(mut f) = fs::OpenOptions::new().create(true).append(true).open(&gitignore_path) {
             let _ = writeln!(f, "\n# statico cache\n.statico/");
         }
@@ -309,6 +324,37 @@ mod tests {
                     "Cache file should not be world-readable: mode={:o}", mode);
             }
         }
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    // ── V7-4: ensure_gitignore must detect real patterns, not substrings ──
+    #[test]
+    fn sec_v7_4_gitignore_adds_entry_when_only_comment_present() {
+        let dir = std::env::temp_dir().join("statico_sec_v7_4_comment");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        // A .gitignore with a comment mentioning statico should NOT prevent
+        // the real `.statico/` pattern from being added.
+        fs::write(dir.join(".gitignore"), "# statico is a great tool\nnode_modules/\n").unwrap();
+        ensure_gitignore(&dir);
+        let contents = fs::read_to_string(dir.join(".gitignore")).unwrap();
+        assert!(contents.contains(".statico/"),
+            "ensure_gitignore should add .statico/ even when comment mentions it, got:\n{}", contents);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn sec_v7_4_gitignore_skips_when_real_pattern_present() {
+        let dir = std::env::temp_dir().join("statico_sec_v7_4_exists");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join(".gitignore"), ".statico/\nnode_modules/\n").unwrap();
+        ensure_gitignore(&dir);
+        let contents = fs::read_to_string(dir.join(".gitignore")).unwrap();
+        // Should NOT add a duplicate entry
+        let count = contents.matches(".statico").count();
+        assert_eq!(count, 1,
+            "should not add duplicate .statico entry, found {} occurrences:\n{}", count, contents);
         let _ = fs::remove_dir_all(&dir);
     }
 }

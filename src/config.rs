@@ -111,6 +111,15 @@ impl StaticoConfig {
                     );
                     c.max_file_size = MAX_ALLOWED_FILE_SIZE;
                 }
+                // V7-10: Clamp min_confidence to [0.0, 1.0].
+                // NaN, negative, or >1.0 values would cause filter_by_confidence
+                // to produce misleading results (e.g. NaN drops ALL issues,
+                // giving a false 100/100 health score).
+                if c.min_confidence.is_nan() || c.min_confidence < 0.0 {
+                    c.min_confidence = 0.0;
+                } else if c.min_confidence > 1.0 {
+                    c.min_confidence = 1.0;
+                }
                 c
             }
             Err(e) => {
@@ -127,7 +136,8 @@ impl StaticoConfig {
             merged.format = f.to_string();
         }
         if let Some(c) = min_confidence {
-            merged.min_confidence = c;
+            // V7-10: Clamp min_confidence to [0.0, 1.0] — same as load().
+            merged.min_confidence = if c.is_nan() || c < 0.0 { 0.0 } else if c > 1.0 { 1.0 } else { c };
         }
         if exit_code {
             merged.exit_code = true;
@@ -340,5 +350,30 @@ override = true
         let c = StaticoConfig::default();
         assert_eq!(c.max_file_size, 1_000_000);
         assert!(c.max_file_size <= MAX_ALLOWED_FILE_SIZE);
+    }
+
+    // ── V7-10: min_confidence must be clamped to [0.0, 1.0] ──
+    #[test]
+    fn sec_v7_10_min_confidence_clamped_nan() {
+        // NaN causes ALL issues to be filtered (NaN >= x is always false),
+        // giving a false 100/100 health score.
+        let merged = StaticoConfig::default().merge_cli(None, Some(f64::NAN), false, false);
+        assert!(!merged.min_confidence.is_nan(),
+            "NaN min_confidence should be clamped to 0.0");
+        assert_eq!(merged.min_confidence, 0.0);
+    }
+
+    #[test]
+    fn sec_v7_10_min_confidence_clamped_negative() {
+        let merged = StaticoConfig::default().merge_cli(None, Some(-0.5), false, false);
+        assert_eq!(merged.min_confidence, 0.0,
+            "negative min_confidence should be clamped to 0.0");
+    }
+
+    #[test]
+    fn sec_v7_10_min_confidence_clamped_above_one() {
+        let merged = StaticoConfig::default().merge_cli(None, Some(2.0), false, false);
+        assert_eq!(merged.min_confidence, 1.0,
+            "min_confidence > 1.0 should be clamped to 1.0");
     }
 }

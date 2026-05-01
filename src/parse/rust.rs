@@ -16,7 +16,8 @@ impl RustAstParser {
     }
 
     pub fn parse(&self, code: &str) -> Option<RustParseResult> {
-        let mut parser = self.parser.lock().unwrap();
+        // V7-2: Recover from poisoned mutex (another thread panicked while holding it).
+        let mut parser = self.parser.lock().unwrap_or_else(|e| e.into_inner());
         let tree = parser.parse(code, None)?;
         Some(RustParseResult { tree })
     }

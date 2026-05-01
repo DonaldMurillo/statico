@@ -107,10 +107,9 @@ fn match_glob(pattern: &str, path: &str) -> bool {
 }
 
 /// Match a simple glob pattern (no **, just * for any non-slash chars).
+/// V7-7: `*` must NOT match `/` — only `**` crosses directory boundaries.
 fn match_simple_glob(pattern: &str, path: &str) -> bool {
     if pattern.contains('*') {
-        let _regex = pattern.replace('*', "*/?"); // rough approach
-        // Use a simpler approach: split on * and check segments in order
         let segments: Vec<&str> = pattern.split('*').collect();
         if segments.len() == 1 {
             return path == pattern;
@@ -129,12 +128,29 @@ fn match_simple_glob(pattern: &str, path: &str) -> bool {
                 if !path.ends_with(seg) {
                     return false;
                 }
+                // V7-7: the wildcard gap between previous match and this
+                // suffix must not span a '/'
+                let suffix_start = path.len() - seg.len();
+                if path[idx..suffix_start].contains('/') {
+                    return false;
+                }
             } else {
                 if let Some(pos) = path[idx..].find(seg) {
+                    // V7-7: the wildcard gap must not span a '/'
+                    if path[idx..idx + pos].contains('/') {
+                        return false;
+                    }
                     idx += pos + seg.len();
                 } else {
                     return false;
                 }
+            }
+        }
+        // V7-7: If the pattern ends with `*` (last segment is empty),
+        // check the tail gap from last match to end of path.
+        if segments.last() == Some(&"") {
+            if path[idx..].contains('/') {
+                return false;
             }
         }
         return true;
@@ -264,5 +280,24 @@ mod tests {
         let paths: Vec<&str> = files.iter().map(|(p, _)| p.as_str()).collect();
         assert!(!paths.iter().any(|p| p.contains("deep.ts")),
             "deeply nested file should be skipped: {:?}", paths);
+    }
+
+    // ── V7-7: match_simple_glob * must not cross directory boundaries ──
+    #[test]
+    fn sec_v7_7_star_does_not_match_slash() {
+        // `dist*` should match `dist-old.ts` but NOT `dist/foo.ts`
+        assert!(match_simple_glob("dist*", "dist-old.ts"),
+            "dist* should match dist-old.ts");
+        assert!(!match_simple_glob("dist*", "dist/foo.ts"),
+            "dist* should NOT match dist/foo.ts — * must not cross /");
+        // `*.spec.ts` should match `foo.spec.ts` but NOT `src/foo.spec.ts`
+        assert!(match_simple_glob("*.spec.ts", "foo.spec.ts"),
+            "*.spec.ts should match foo.spec.ts");
+        assert!(!match_simple_glob("*.spec.ts", "src/foo.spec.ts"),
+            "*.spec.ts should NOT match src/foo.spec.ts — * must not cross /");
+        // `test_*` should match `test_foo.ts` but NOT `foo/test_bar.ts`
+        assert!(match_simple_glob("test_*", "test_foo.ts"));
+        assert!(!match_simple_glob("test_*", "foo/test_bar.ts"),
+            "test_* should NOT match foo/test_bar.ts");
     }
 }

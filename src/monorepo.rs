@@ -253,10 +253,25 @@ fn parse_nx_workspaces(root: &Path) -> Vec<String> {
 }
 
 /// Convert glob patterns like "packages/*" to directory prefixes like "packages/".
+/// V7-6: Also handles double-star patterns like "packages/**" and "packages/**/"
+/// which should become "packages/".
 fn glob_to_prefix(patterns: Vec<String>) -> Vec<String> {
     patterns
         .into_iter()
-        .map(|p| if p.ends_with("/*") || p.ends_with("/**") { p.trim_end_matches('*').to_string() } else { p })
+        .map(|p| {
+            if p.ends_with("/*") {
+                // "packages/*" → "packages/"
+                format!("{}/", &p[..p.len() - 2])
+            } else if p.ends_with("/**/") {
+                // "packages/**/" → "packages/"
+                format!("{}/", &p[..p.len() - 4])
+            } else if p.ends_with("/**") {
+                // "packages/**" → "packages/"
+                format!("{}/", &p[..p.len() - 3])
+            } else {
+                p
+            }
+        })
         .collect()
 }
 
@@ -290,6 +305,19 @@ packages:
     fn test_glob_to_prefix() {
         let result = glob_to_prefix(vec!["packages/*".to_string(), "libs/*".to_string(), "apps/admin".to_string()]);
         assert_eq!(result, vec!["packages/", "libs/", "apps/admin"]);
+    }
+
+    // ── V7-6: glob_to_prefix must handle double-star patterns ──
+    #[test]
+    fn sec_v7_6_glob_to_prefix_double_star() {
+        let result = glob_to_prefix(vec![
+            "packages/*".to_string(),
+            "libs/**".to_string(),
+            "apps/**/".to_string(),
+            "tools/admin".to_string(),
+        ]);
+        assert_eq!(result, vec!["packages/", "libs/", "apps/", "tools/admin"],
+            "double-star patterns should normalize to directory prefixes, got: {:?}", result);
     }
 
     #[test]
