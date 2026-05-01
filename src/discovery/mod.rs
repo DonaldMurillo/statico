@@ -18,7 +18,7 @@ const SOURCE_EXTENSIONS: &[&str] = &["ts", "tsx", "js", "jsx", "rs", "py"];
 pub fn discover_source_files(root: &Path) -> Result<Vec<(String, String)>, String> {
     let mut files: Vec<(String, String)> = Vec::new();
 
-    for entry in walkdir::WalkDir::new(root).follow_links(false).into_iter().filter_entry(|e| !is_skipped_dir(e.path())) {
+    for entry in walkdir::WalkDir::new(root).follow_links(false).max_depth(20).into_iter().filter_entry(|e| !is_skipped_dir(e.path())) {
         let entry = match entry {
             Ok(e) => e,
             Err(_) => continue,

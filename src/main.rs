@@ -391,6 +391,14 @@ fn run_analyze(
         for file_entry in source_files {
             let rel_path = &file_entry.path;
             let abs_path = root_path.join(rel_path);
+                // Skip files exceeding max_file_size (S3-04).
+            let file_size = match std::fs::metadata(&abs_path) {
+                Ok(m) => m.len(),
+                Err(_) => continue,
+            };
+            if file_size > config.max_file_size {
+                continue;
+            }
             let source = match std::fs::read_to_string(&abs_path) {
                 Ok(s) => s,
                 Err(_) => continue,

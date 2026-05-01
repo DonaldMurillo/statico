@@ -9,9 +9,11 @@ pub struct HtmlFormatter;
 impl OutputFormatter for HtmlFormatter {
     fn format(&self, output: &AnalysisOutput) -> Result<String, String> {
         let summary = compute_summary(output);
-        let json_data = serde_json::to_string(output).map_err(|e| format!("failed to serialize: {}", e))?;
+        let json_data = serde_json::to_string(output).map_err(|e| format!("failed to serialize: {}", e))?
+            .replace("</", "<\\/"); // Prevent </script> injection (S3-01)
         let summary_json =
-            serde_json::to_string(&summary).map_err(|e| format!("failed to serialize summary: {}", e))?;
+            serde_json::to_string(&summary).map_err(|e| format!("failed to serialize summary: {}", e))?
+                .replace("</", "<\\/");
 
         Ok(format!(
             r##"<!DOCTYPE html>
