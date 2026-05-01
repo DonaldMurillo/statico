@@ -15,6 +15,34 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use paths::resolve_relative;
+
+/// Check that a resolved path is within the project root.
+/// Uses the same logic as `ensure_within_root` but returns bool.
+fn is_within_root(root: &Path, resolved: &Path) -> bool {
+    if let (Ok(canonical), Ok(canonical_root)) =
+        (std::fs::canonicalize(resolved), std::fs::canonicalize(root))
+    {
+        return canonical.starts_with(&canonical_root);
+    }
+    // Fallback: lexical check
+    match resolved.strip_prefix(root) {
+        Ok(suffix) => {
+            let mut depth = 0i32;
+            for component in suffix.components() {
+                match component {
+                    std::path::Component::ParentDir => {
+                        depth -= 1;
+                        if depth < 0 { return false; }
+                    }
+                    std::path::Component::Normal(_) => { depth += 1; }
+                    _ => {}
+                }
+            }
+            depth >= 0
+        }
+        Err(_) => false,
+    }
+}
 use tsconfig::{parse_tsconfig_paths, parse_tsconfig_paths_relative, resolve_scoped, TsconfigScope};
 
 /// A tsconfig `paths` alias mapping.
@@ -254,7 +282,13 @@ impl Resolver {
 
         // 1. Try relative imports first.
         if spec.starts_with('.') || spec.starts_with('/') {
-            return resolve_relative(from_dir, spec);
+            if let Some(resolved) = resolve_relative(from_dir, spec) {
+                // V-3: Verify resolved path stays within project root
+                if is_within_root(&self.root, &resolved) {
+                    return Some(resolved);
+                }
+            }
+            return None;
         }
 
         // 2. Try scoped tsconfig path aliases (nearest tsconfig first).
