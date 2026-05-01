@@ -20,7 +20,14 @@ pub fn analyze(root: &Path) -> Result<AnalysisOutput, String> {
 }
 
 /// Analyze with optional exclude patterns.
+///
+/// Set `no_cache` to true to force a full re-parse of all files.
 pub fn analyze_with_excludes(root: &Path, exclude: &[String]) -> Result<AnalysisOutput, String> {
+    analyze_with_options(root, exclude, false)
+}
+
+/// Analyze with full options.
+pub fn analyze_with_options(root: &Path, exclude: &[String], no_cache: bool) -> Result<AnalysisOutput, String> {
     if !root.exists() {
         return Err(format!("path not found: {}", root.display()));
     }
@@ -69,7 +76,18 @@ pub fn analyze_with_excludes(root: &Path, exclude: &[String]) -> Result<Analysis
 
     // ── Plugin-dispatched parsing ──────────────────────────────────────
     // Route each file to its language plugin and collect results.
-    let pipeline_results = parse_all_files_plugin(root, &source_files, &progress);
+    // Uses incremental cache (content-hash keyed) to skip re-parsing unchanged files.
+    let cache = if no_cache {
+        None
+    } else {
+        crate::cache::ensure_gitignore(root);
+        let mut c = crate::cache::IncrementalCache::new(root);
+        // Prune entries for files that no longer exist.
+        let existing: Vec<&str> = source_files.iter().map(|(p, _)| p.as_str()).collect();
+        c.prune_missing(&existing);
+        Some(std::sync::Mutex::new(c))
+    };
+    let pipeline_results = parse_all_files_plugin(root, &source_files, &progress, cache.as_ref());
     progress.finish();
 
     let PipelineResults {
@@ -126,10 +144,15 @@ pub fn analyze_with_excludes(root: &Path, exclude: &[String]) -> Result<Analysis
 }
 
 /// Parse all source files by dispatching to language plugins in parallel.
+///
+/// If an incremental cache is provided, unchanged files (same content hash)
+/// are served from cache instead of re-parsed. New/modified results are
+/// written back to the cache.
 fn parse_all_files_plugin(
     root: &Path,
     source_files: &[(String, String)],
     progress: &crate::progress::SharedProgress,
+    cache: Option<&std::sync::Mutex<crate::cache::IncrementalCache>>,
 ) -> PipelineResults {
     use rayon::prelude::*;
     use std::sync::Arc;
@@ -162,6 +185,19 @@ fn parse_all_files_plugin(
                 }
             };
 
+            // ── Incremental cache lookup ────────────────────────────────
+            // Compute content hash and check the cache.
+            let hash = crate::cache::content_hash(&source);
+            if let Some(cache_ref) = cache {
+                let cached = cache_ref.lock().unwrap().get(rel_path, &hash).cloned();
+                if let Some(cached_data) = cached {
+                    // Cache hit — reconstruct FileAnalysis from cached parse + fresh source.
+                    progress.inc();
+                    return Some(cached_data.to_analysis(rel_path.clone(), source));
+                }
+            }
+
+            // Cache miss — parse the file.
             // Use the static plugin registry (compile-time known, no allocation)
             let plugin = plugin_for_extension(ext)
                 .or_else(|| {
@@ -194,6 +230,12 @@ fn parse_all_files_plugin(
                     source,
                 })
             };
+
+            // ── Store parse result in cache ────────────────────────────
+            if let (Some(cache_ref), Some(fa)) = (cache, &result) {
+                cache_ref.lock().unwrap().set(rel_path, &hash, crate::cache::CachedFileData::from_analysis(fa));
+            }
+
             progress.inc();
             result
         })

@@ -17,3 +17,6 @@ benchmarks/results/
 
 .claude/
 tmp-plugin-test/
+
+# statico cache
+.statico/

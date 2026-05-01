@@ -8,6 +8,7 @@ pub fn run_analyze(
     min_confidence: Option<f64>,
     exit_code: bool,
     quiet: bool,
+    no_cache: bool,
 ) {
     let root = std::path::Path::new(path);
     let root = match std::fs::canonicalize(root) {
@@ -35,7 +36,7 @@ pub fn run_analyze(
         eprintln!("info: {} plugin(s) active", plugin_pipeline.len());
     }
 
-    let mut output = match statico::analyzer::analyze_with_excludes(&root, &config.exclude) {
+    let mut output = match statico::analyzer::analyze_with_options(&root, &config.exclude, no_cache) {
         Ok(o) => o,
         Err(msg) => {
             eprintln!("error: {}", msg);

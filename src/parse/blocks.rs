@@ -1,10 +1,11 @@
 //! Code block extraction — pull named functions, methods, and arrow-function const
 //! declarations from an AST so we can fingerprint them for duplicate detection.
 
+use serde::{Deserialize, Serialize};
 use tree_sitter::Node;
 
 /// A named code block with its source text and location.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CodeBlock {
     pub name: String,
     pub source: String,
@@ -13,7 +14,7 @@ pub struct CodeBlock {
     pub kind: BlockKind,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum BlockKind {
     Function,
     Method,

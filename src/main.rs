@@ -88,6 +88,14 @@ enum Commands {
         /// Useful for CI pipelines where you want builds to fail on code quality issues.
         #[arg(long)]
         exit_code: bool,
+
+        /// Disable incremental cache. Forces a full re-parse of all files.
+        ///
+        /// By default, statico caches parsed results keyed by file content hash.
+        /// Unchanged files are served from cache on subsequent runs, making
+        /// warm analysis ~5-10x faster than cold.
+        #[arg(long)]
+        no_cache: bool,
     },
 
     /// Show an interactive terminal dashboard for exploring analysis results.
@@ -283,8 +291,9 @@ fn main() {
             format,
             min_confidence,
             exit_code,
+            no_cache,
         } => {
-            commands::analyze::run_analyze(&path, format.as_deref(), min_confidence, exit_code, quiet);
+            commands::analyze::run_analyze(&path, format.as_deref(), min_confidence, exit_code, quiet, no_cache);
         }
         Commands::Tui {
             path,

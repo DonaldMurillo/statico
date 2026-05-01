@@ -9,15 +9,71 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 /// Per-file cached data.
+///
+/// Stores the full parse result (except raw source) so unchanged files
+/// can skip re-parsing on subsequent runs.
 #[derive(Debug, serde::Serialize, serde::Deserialize, Clone)]
 pub struct CachedFileData {
+    // -- Dependency graph --
+    pub dep_targets: Vec<String>,
+    pub external_specs: Vec<String>,
+    /// Per-target imported names: (resolved_file, [name1, name2, ...]).
+    pub imported_names: Vec<(String, Vec<String>)>,
+
+    // -- Exports --
     pub exports: Vec<String>,
+
+    // -- Quality metrics --
     pub loc: usize,
     pub total_lines: usize,
     pub functions: usize,
     pub classes: usize,
     pub complexity: usize,
     pub max_nesting_depth: usize,
+    pub parse_errors: Vec<crate::types::ParseError>,
+
+    // -- Code blocks (for duplication detection) --
+    pub blocks: Vec<crate::parse::blocks::CodeBlock>,
+}
+
+impl CachedFileData {
+    /// Extract cacheable data from a completed `FileAnalysis`.
+    pub fn from_analysis(fa: &crate::languages::FileAnalysis) -> Self {
+        Self {
+            dep_targets: fa.dep_targets.clone(),
+            external_specs: fa.external_specs.clone(),
+            imported_names: fa.imported_names.clone(),
+            exports: fa.exports.clone(),
+            loc: fa.loc,
+            total_lines: fa.total_lines,
+            functions: fa.functions,
+            classes: fa.classes,
+            complexity: fa.complexity,
+            max_nesting_depth: fa.max_nesting_depth,
+            parse_errors: fa.parse_errors.clone(),
+            blocks: fa.blocks.clone(),
+        }
+    }
+
+    /// Reconstruct a `FileAnalysis` from cached data + the raw source text.
+    pub fn to_analysis(&self, rel_path: String, source: String) -> crate::languages::FileAnalysis {
+        crate::languages::FileAnalysis {
+            rel_path,
+            dep_targets: self.dep_targets.clone(),
+            external_specs: self.external_specs.clone(),
+            imported_names: self.imported_names.clone(),
+            exports: self.exports.clone(),
+            loc: self.loc,
+            total_lines: self.total_lines,
+            functions: self.functions,
+            classes: self.classes,
+            complexity: self.complexity,
+            max_nesting_depth: self.max_nesting_depth,
+            parse_errors: self.parse_errors.clone(),
+            blocks: self.blocks.clone(),
+            source,
+        }
+    }
 }
 
 /// Incremental file cache manager.
@@ -171,6 +227,24 @@ pub fn ensure_gitignore(project_root: &Path) {
 mod tests {
     use super::*;
 
+    /// Helper to create a minimal CachedFileData for tests.
+    fn test_cache_data(exports: Vec<&str>) -> CachedFileData {
+        CachedFileData {
+            dep_targets: vec![],
+            external_specs: vec![],
+            imported_names: vec![],
+            exports: exports.into_iter().map(|s| s.to_string()).collect(),
+            loc: 1,
+            total_lines: 1,
+            functions: 0,
+            classes: 0,
+            complexity: 0,
+            max_nesting_depth: 0,
+            parse_errors: vec![],
+            blocks: vec![],
+        }
+    }
+
     #[test]
     fn test_content_hash_deterministic() {
         let a = content_hash("hello world");
@@ -190,15 +264,7 @@ mod tests {
         let dir = std::env::temp_dir().join("statico_test_cache_set");
         let _ = fs::remove_dir_all(&dir);
         let mut cache = IncrementalCache::new(&dir);
-        let data = CachedFileData {
-            exports: vec!["foo".into()],
-            loc: 10,
-            total_lines: 15,
-            functions: 2,
-            classes: 1,
-            complexity: 3,
-            max_nesting_depth: 2,
-        };
+        let data = test_cache_data(vec!["foo"]);
         cache.set("src/a.ts", "abc123", data.clone());
         assert!(cache.get("src/a.ts", "abc123").is_some());
         assert!(cache.get("src/a.ts", "wrong").is_none());
@@ -209,15 +275,7 @@ mod tests {
     fn test_cache_persist() {
         let dir = std::env::temp_dir().join("statico_test_cache_persist");
         let _ = fs::remove_dir_all(&dir);
-        let data = CachedFileData {
-            exports: vec![],
-            loc: 5,
-            total_lines: 8,
-            functions: 0,
-            classes: 0,
-            complexity: 1,
-            max_nesting_depth: 0,
-        };
+        let data = test_cache_data(vec![]);
         {
             let mut cache = IncrementalCache::new(&dir);
             cache.set("src/x.ts", "hash1", data);
@@ -242,11 +300,7 @@ mod tests {
         let cache_dir = dir.join(".statico").join("cache");
         {
             let mut cache = IncrementalCache::new(&dir);
-            cache.set("src/a.ts", "hash", CachedFileData {
-                exports: vec!["foo".into()],
-                loc: 1, total_lines: 1, functions: 0,
-                classes: 0, complexity: 0, max_nesting_depth: 0,
-            });
+            cache.set("src/a.ts", "hash", test_cache_data(vec!["foo"]));
             cache.save();
         }
         // The main cache file should exist and be valid
@@ -306,11 +360,7 @@ mod tests {
         fs::create_dir_all(&dir).unwrap();
         {
             let mut cache = IncrementalCache::new(&dir);
-            cache.set("src/a.ts", "hash1", CachedFileData {
-                exports: vec!["secret_export".into()],
-                loc: 1, total_lines: 1, functions: 0,
-                classes: 0, complexity: 0, max_nesting_depth: 0,
-            });
+            cache.set("src/a.ts", "hash1", test_cache_data(vec!["secret_export"]));
             cache.save();
         }
         let cache_file = dir.join(".statico").join("cache").join("index.json");
