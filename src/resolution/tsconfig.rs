@@ -44,12 +44,16 @@ pub(super) fn strip_jsonc(input: &str) -> String {
                 i += 1;
             }
         } else if chars[i] == '/' && i + 1 < chars.len() && chars[i + 1] == '*' {
-            // Block comment — skip to */.
+            // Block comment — skip to *​/.
             i += 2;
             while i + 1 < chars.len() && !(chars[i] == '*' && chars[i + 1] == '/') {
                 i += 1;
             }
-            i += 2; // skip */
+            if i + 1 < chars.len() {
+                i += 2; // skip *​/
+            } else {
+                break; // unterminated block comment — stop
+            }
         } else {
             out.push(chars[i]);
             i += 1;
@@ -79,6 +83,7 @@ pub(super) fn parse_tsconfig_paths(tsconfig_path: &Path) -> Option<Vec<PathAlias
                 arr.iter()
                     .filter_map(|v| v.as_str().map(String::from))
                     .map(|t| if t.ends_with('*') { t.trim_end_matches('*').to_string() } else { t.clone() })
+                    .filter(|t| !t.starts_with('/') && !t.contains(".."))
                     .collect()
             })
             .unwrap_or_default();
@@ -109,8 +114,12 @@ pub(super) fn parse_tsconfig_paths_relative(
         .and_then(|v| v.as_str())
         .unwrap_or(".");
 
-    let convert_target = |t: &str, tsconfig_dir_rel: &str, base_url: &str| -> String {
+    let convert_target = |t: &str, tsconfig_dir_rel: &str, base_url: &str| -> Option<String> {
         let bare = if t.ends_with('*') { t.trim_end_matches('*').to_string() } else { t.to_string() };
+        // Reject targets that escape the project via ..
+        if bare.starts_with('/') || bare.contains("..") {
+            return None;
+        }
         let resolved = if bare.starts_with('.') {
             format!("./{}/{}", tsconfig_dir_rel, bare.trim_start_matches("./"))
         } else {
@@ -121,7 +130,7 @@ pub(super) fn parse_tsconfig_paths_relative(
                 bare.trim_start_matches("./")
             )
         };
-        resolved.replace("././", "./").replace("//", "/")
+        Some(resolved.replace("././", "./").replace("//", "/"))
     };
 
     let mut global_aliases: Vec<PathAlias> = Vec::new();
@@ -136,7 +145,7 @@ pub(super) fn parse_tsconfig_paths_relative(
             .map(|arr| {
                 arr.iter()
                     .filter_map(|v| v.as_str().map(String::from))
-                    .map(|t| convert_target(&t, &tsconfig_dir_rel, base_url))
+                    .filter_map(|t| convert_target(&t, &tsconfig_dir_rel, base_url))
                     .collect()
             })
             .unwrap_or_default();
@@ -183,4 +192,87 @@ pub(super) fn resolve_scoped(
     }
 
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
+
+    #[test]
+    fn sec_v32_strip_jsonc_unterminated_block_comment() {
+        // Unterminated block comment should not panic or over-read
+        let input = "/* this is never closed";
+        let result = strip_jsonc(input);
+        // Should return empty (comment content removed, no panic)
+        assert_eq!(result, "", "unterminated block comment should produce empty output, got: {}", result);
+    }
+
+    #[test]
+    fn sec_v32_strip_jsonc_normal_block_comment() {
+        let input = "before /* comment */ after";
+        let result = strip_jsonc(input);
+        assert_eq!(result, "before  after");
+    }
+
+    #[test]
+    fn sec_v36_tsconfig_target_traversal_rejected() {
+        let tmp = tempfile::tempdir().unwrap();
+        let tsconfig_dir = tmp.path().join("apps/web");
+        std::fs::create_dir_all(&tsconfig_dir).unwrap();
+        std::fs::write(
+            tsconfig_dir.join("tsconfig.json"),
+            r#"{
+                "compilerOptions": {
+                    "paths": {
+                        "@evil/*": ["../../etc/*"]
+                    }
+                }
+            }"#, 
+        ).unwrap();
+        let result = parse_tsconfig_paths_relative(&tsconfig_dir.join("tsconfig.json"), tmp.path());
+        if let Some((ref aliases, _)) = result {
+            for alias in aliases {
+                for target in &alias.targets {
+                    assert!(!target.contains(".."),
+                        "target should not contain ..: {}", target);
+                }
+            }
+        }
+        // The traversal targets should be filtered out, so no alias with prefix @evil/ should exist
+        if let Some((aliases, _)) = result {
+            let evil_aliases: Vec<_> = aliases.iter().filter(|a| a.prefix == "@evil/").collect();
+            for a in &evil_aliases {
+                assert!(a.targets.is_empty(),
+                    "@evil/ alias targets should be empty after filtering: {:?}", a.targets);
+            }
+        }
+    }
+
+    #[test]
+    fn sec_v39_tsconfig_non_relative_target_traversal_rejected() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(
+            tmp.path().join("tsconfig.json"),
+            r#"{
+                "compilerOptions": {
+                    "paths": {
+                        "@app/*": ["../../etc/*"],
+                        "@ok/*": ["src/*"]
+                    }
+                }
+            }"#, 
+        ).unwrap();
+        let result = parse_tsconfig_paths(&tmp.path().join("tsconfig.json"));
+        if let Some(aliases) = result {
+            for alias in &aliases {
+                for target in &alias.targets {
+                    assert!(!target.contains(".."),
+                        "target should not contain ..: {}", target);
+                    assert!(!target.starts_with('/'),
+                        "target should not be absolute: {}", target);
+                }
+            }
+        }
+    }
 }

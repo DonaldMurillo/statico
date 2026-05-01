@@ -38,7 +38,10 @@ pub fn ensure_within_root(path: &std::path::Path, root: &std::path::Path) -> Res
                     ));
                 }
             }
-            std::path::Component::CurDir | std::path::Component::Prefix(_) => {}
+            std::path::Component::CurDir => {
+                // `.` doesn't change depth — no action needed.
+            }
+            std::path::Component::Prefix(_) => {}
         }
     }
     Ok(())

@@ -601,21 +601,17 @@ fn run_init(shell: Option<&str>) {
     // Build the rc snippet — PATH + alias + completions.
     let exe = std::env::current_exe().expect("cannot determine current executable");
     let bin_dir = exe.parent().unwrap_or_else(|| std::path::Path::new("/usr/local/bin"));
-    let bin_dir_str = bin_dir.display();
+    let bin_dir_escaped = shell_escape(&bin_dir.display().to_string());
 
     let snippet = if is_fish {
         format!(
-            "\n# statico\nset -gx PATH {bin_dir_str} $PATH\nalias st statico\nsource {}\n",
-            completion_file.display()
-        )
-    } else if is_zsh {
-        format!(
-            "\n# statico\nexport PATH=\"{bin_dir_str}:$PATH\"\nalias st='statico'\nsource {}\n",
+            "\n# statico\nset -gx PATH {bin_dir_escaped} $PATH\nalias st statico\nsource {}\n",
             completion_file.display()
         )
     } else {
+        // bash and zsh — double-quote the path, escape internal special chars.
         format!(
-            "\n# statico\nexport PATH=\"{bin_dir_str}:$PATH\"\nalias st='statico'\nsource {}\n",
+            "\n# statico\nexport PATH=\"{bin_dir_escaped}:$PATH\"\nalias st='statico'\nsource {}\n",
             completion_file.display()
         )
     };
@@ -1091,6 +1087,55 @@ When the user asks about code quality:
 }
 
 // ---------------------------------------------------------------------------
+
+/// Shell-escape a string for safe embedding in bash/zsh/fish PATH assignment.
+/// Escapes characters that would be interpreted by the shell: `$`, " `", `"`, `\\`, `` ` ``.
+fn shell_escape(s: &str) -> String {
+    s.replace('\\', "\\\\")
+     .replace('"', "\\\"")
+     .replace('$', "\\$")
+     .replace('`', "\\`")
+}
+
+#[cfg(test)]
+mod shell_escape_tests {
+    use super::*;
+
+    #[test]
+    fn sec_v34_shell_escape_dollar() {
+        let result = shell_escape("/path/$HOME/bin");
+        assert_eq!(result, "/path/\\$HOME/bin",
+            "dollar sign should be escaped: got {}", result);
+    }
+
+    #[test]
+    fn sec_v34_shell_escape_backtick() {
+        let result = shell_escape("/path/`whoami`/bin");
+        assert_eq!(result, "/path/\\`whoami\\`/bin",
+            "backtick should be escaped: got {}", result);
+    }
+
+    #[test]
+    fn sec_v34_shell_escape_double_quote() {
+        let result = shell_escape("/path/\"evil\"/bin");
+        assert_eq!(result, "/path/\\\"evil\\\"/bin",
+            "double quote should be escaped: got {}", result);
+    }
+
+    #[test]
+    fn sec_v34_shell_escape_backslash() {
+        let result = shell_escape("/path/\\evil/bin");
+        assert_eq!(result, "/path/\\\\evil/bin",
+            "backslash should be escaped: got {}", result);
+    }
+
+    #[test]
+    fn sec_v34_shell_escape_normal_path() {
+        let result = shell_escape("/usr/local/bin");
+        assert_eq!(result, "/usr/local/bin",
+            "normal path should be unchanged: got {}", result);
+    }
+}
 
 fn run_doctor() {
     let mut ok = true;

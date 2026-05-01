@@ -54,7 +54,7 @@ impl ActivePlugin {
         let init_params = InitParams {
             root: root.to_string_lossy().to_string(),
             config: serde_json::Value::Object(serde_json::Map::new()),
-            plugin_settings: toml_to_json_value(&plugin.settings),
+            plugin_settings: toml_to_json_value(&plugin.settings).unwrap_or_default(),
         };
 
         let mut active = ActivePlugin {
@@ -319,10 +319,38 @@ fn find_python_entry(dir: &Path) -> Result<String, String> {
                     .and_then(|s| s.get("entry"))
                     .and_then(|e| e.as_str())
                 {
+                    // Reject absolute paths and traversal sequences.
+                    if entry.starts_with('/') || entry.contains("..") {
+                        return Err(format!("entry path '{}' contains unsafe components", entry));
+                    }
                     let candidate = dir.join(entry);
                     // Verify entry path stays within plugin directory (F-04).
-                    if !candidate.starts_with(dir) {
-                        return Err(format!("entry path '{}' escapes plugin directory", entry));
+                    // Use canonicalize for existing paths, lexical check otherwise.
+                    if let (Ok(canonical), Ok(canonical_dir)) =
+                        (std::fs::canonicalize(&candidate), std::fs::canonicalize(dir))
+                    {
+                        if !canonical.starts_with(&canonical_dir) {
+                            return Err(format!("entry path '{}' escapes plugin directory", entry));
+                        }
+                    } else {
+                        // Lexical fallback: normalize and check.
+                        let normalized = candidate.clone();
+                        let mut depth = 0i32;
+                        for comp in normalized.components() {
+                            match comp {
+                                std::path::Component::ParentDir => {
+                                    depth -= 1;
+                                    if depth < 0 {
+                                        return Err(format!("entry path '{}' escapes plugin directory", entry));
+                                    }
+                                }
+                                std::path::Component::Normal(_) => depth += 1,
+                                std::path::Component::RootDir => {
+                                    return Err(format!("entry path '{}' is absolute", entry));
+                                }
+                                std::path::Component::CurDir | std::path::Component::Prefix(_) => {}
+                            }
+                        }
                     }
                     if candidate.exists() {
                         return Ok(candidate.to_string_lossy().to_string());
@@ -343,23 +371,55 @@ fn find_python_entry(dir: &Path) -> Result<String, String> {
     ))
 }
 
+/// Maximum size of plugin settings JSON (64 KB) — prevents OOM from malicious config.
+const MAX_SETTINGS_SIZE: usize = 64 * 1024;
+
 /// Convert toml::Value to serde_json::Value.
-fn toml_to_json_value(val: &toml::Value) -> serde_json::Value {
-    match val {
-        toml::Value::String(s) => serde_json::Value::String(s.clone()),
+/// Returns error if the resulting JSON would exceed MAX_SETTINGS_SIZE.
+fn toml_to_json_value(val: &toml::Value) -> Result<serde_json::Value, String> {
+    toml_to_json_value_depth(val, 0)
+}
+
+fn toml_to_json_value_depth(val: &toml::Value, depth: usize) -> Result<serde_json::Value, String> {
+    const MAX_DEPTH: usize = 32;
+    if depth > MAX_DEPTH {
+        return Err("plugin settings nesting too deep (max 32 levels)".into());
+    }
+    let result = match val {
+        toml::Value::String(s) => {
+            if s.len() > MAX_SETTINGS_SIZE {
+                return Err(format!("plugin settings string too long (max {} bytes)", MAX_SETTINGS_SIZE));
+            }
+            serde_json::Value::String(s.clone())
+        }
         toml::Value::Integer(i) => serde_json::Value::Number((*i).into()),
         toml::Value::Float(f) => serde_json::Number::from_f64(*f)
             .map(serde_json::Value::Number)
             .unwrap_or(serde_json::Value::Null),
         toml::Value::Boolean(b) => serde_json::Value::Bool(*b),
         toml::Value::Array(arr) => {
-            serde_json::Value::Array(arr.iter().map(toml_to_json_value).collect())
+            if arr.len() > 1000 {
+                return Err("plugin settings array too large (max 1000 elements)".into());
+            }
+            serde_json::Value::Array(
+                arr.iter()
+                    .map(|v| toml_to_json_value_depth(v, depth + 1))
+                    .collect::<Result<_, _>>()?
+            )
         }
-        toml::Value::Table(tbl) => serde_json::Value::Object(
-            tbl.iter().map(|(k, v)| (k.clone(), toml_to_json_value(v))).collect(),
-        ),
+        toml::Value::Table(tbl) => {
+            if tbl.len() > 1000 {
+                return Err("plugin settings table too large (max 1000 keys)".into());
+            }
+            serde_json::Value::Object(
+                tbl.iter()
+                    .map(|(k, v)| Ok((k.clone(), toml_to_json_value_depth(v, depth + 1)?)))
+                    .collect::<Result<_, String>>()?
+            )
+        }
         toml::Value::Datetime(dt) => serde_json::Value::String(dt.to_string()),
-    }
+    };
+    Ok(result)
 }
 
 #[cfg(test)]
@@ -457,5 +517,83 @@ done
         let result: AnalyzeFileResult = plugin.send_request("analyze_file", &params).unwrap();
         assert!(result.issues.is_empty());
         plugin.shutdown().ok();
+    }
+
+    // ── Security tests ──────────────────────────────────────────────────
+
+    #[test]
+    fn sec_v35_python_entry_rejects_traversal() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().join("evil-plugin");
+        std::fs::create_dir_all(&dir).unwrap();
+        // Create package.json with entry pointing outside
+        std::fs::write(
+            dir.join("package.json"),
+            r#"{"statico":{"entry":"../../etc/passwd"}}"#, 
+        ).unwrap();
+        let result = find_python_entry(&dir);
+        assert!(result.is_err(), "should reject .. in entry path, got: {:?}", result);
+        let err = result.unwrap_err();
+        assert!(err.contains("unsafe") || err.contains("traversal") || err.contains("escapes"),
+            "error should mention unsafe/traversal/escape: {}", err);
+    }
+
+    #[test]
+    fn sec_v35_python_entry_rejects_absolute() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().join("abs-plugin");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("package.json"),
+            r#"{"statico":{"entry":"/etc/passwd"}}"#, 
+        ).unwrap();
+        let result = find_python_entry(&dir);
+        assert!(result.is_err(), "should reject absolute entry path, got: {:?}", result);
+    }
+
+    #[test]
+    fn sec_v37_toml_depth_limit() {
+        // Create deeply nested toml that exceeds 32 levels
+        let mut toml_str = String::new();
+        for _ in 0..40 {
+            toml_str.push_str("[a");
+        }
+        for _ in 0..40 {
+            toml_str.push_str("]");
+        }
+        toml_str.push_str("\nval = 1");
+        // Try to parse as toml
+        if let Ok(val) = toml_str.parse::<toml::Value>() {
+            let result = toml_to_json_value(&val);
+            assert!(result.is_err(), "should reject deeply nested toml, got: {:?}", result);
+        }
+        // If toml crate itself rejects it, that's also fine
+    }
+
+    #[test]
+    fn sec_v38_settings_string_size_limit() {
+        let big_string = "x".repeat(100_000);
+        let val = toml::Value::String(big_string);
+        let result = toml_to_json_value(&val);
+        assert!(result.is_err(), "should reject oversized string, got: {:?}", result);
+    }
+
+    #[test]
+    fn sec_v38_settings_array_size_limit() {
+        let arr: Vec<toml::Value> = (0..2000).map(|i| toml::Value::Integer(i)).collect();
+        let val = toml::Value::Array(arr);
+        let result = toml_to_json_value(&val);
+        assert!(result.is_err(), "should reject oversized array, got: {:?}", result);
+    }
+
+    #[test]
+    fn sec_v38_settings_table_size_limit() {
+        let mut table = toml::map::Map::new();
+        for i in 0..2000 {
+            table.insert(format!("key{}", i), toml::Value::Integer(i));
+        }
+        let val = toml::Value::Table(table);
+        let result = toml_to_json_value(&val);
+        assert!(result.is_err(), "should reject oversized table, got: {:?}", result);
     }
 }

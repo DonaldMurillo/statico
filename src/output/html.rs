@@ -10,10 +10,12 @@ impl OutputFormatter for HtmlFormatter {
     fn format(&self, output: &AnalysisOutput) -> Result<String, String> {
         let summary = compute_summary(output);
         let json_data = serde_json::to_string(output).map_err(|e| format!("failed to serialize: {}", e))?
-            .replace("</", "<\\/"); // Prevent </script> injection (S3-01)
+            .replace("</", "<\\/")  // Prevent </script> injection (S3-01)
+            .replace("<!--", "<\\x21--"); // Prevent HTML comment injection in script
         let summary_json =
             serde_json::to_string(&summary).map_err(|e| format!("failed to serialize summary: {}", e))?
-                .replace("</", "<\\/");
+                .replace("</", "<\\/")
+                .replace("<!--", "<\\x21--");
 
         Ok(format!(
             r##"<!DOCTYPE html>
@@ -230,5 +232,15 @@ mod tests {
         // No raw </ sequence in the JSON data (should be <\/ instead)
         assert!(!json_fragment.contains("</script"),
             "JSON in HTML should not contain unescaped </script");
+    }
+
+    #[test]
+    fn sec_v3_html_escapes_comment_injection() {
+        // A file path containing <!-- should not break out of script tag
+        let output = make_output_with_path("test/<!--<script>alert(1)//");
+        let formatter = HtmlFormatter;
+        let html = formatter.format(&output).unwrap();
+        assert!(!html.contains("<!--<script>"),
+            "HTML comment should be escaped, not raw in output");
     }
 }

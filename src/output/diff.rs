@@ -146,6 +146,15 @@ pub fn format_diff_json(diff: &DiffResult) -> Result<String, String> {
     serde_json::to_string_pretty(diff).map_err(|e| format!("failed to serialize diff: {}", e))
 }
 
+/// Escape special characters for safe embedding in Markdown table cells.
+fn escape_md_cell(s: &str) -> String {
+    s.replace('|', "\\|")
+     .replace('[', "\\[")
+     .replace(']', "\\]")
+     .replace('\n', " ")
+     .replace('\r', " ")
+}
+
 /// Format diff result as Markdown.
 pub fn format_diff_markdown(diff: &DiffResult) -> Result<String, String> {
     let mut md = String::new();
@@ -159,7 +168,7 @@ pub fn format_diff_markdown(diff: &DiffResult) -> Result<String, String> {
         md.push_str("## 🆕 New Issues\n\n");
         md.push_str("| Category | Detail |\n|---|---|\n");
         for e in &diff.new_issues {
-            md.push_str(&format!("| {} | {} |\n", e.category, e.detail));
+            md.push_str(&format!("| {} | {} |\n", escape_md_cell(&e.category), escape_md_cell(&e.detail)));
         }
         md.push('\n');
     }
@@ -168,7 +177,7 @@ pub fn format_diff_markdown(diff: &DiffResult) -> Result<String, String> {
         md.push_str("## ✅ Fixed Issues\n\n");
         md.push_str("| Category | Detail |\n|---|---|\n");
         for e in &diff.fixed_issues {
-            md.push_str(&format!("| {} | {} |\n", e.category, e.detail));
+            md.push_str(&format!("| {} | {} |\n", escape_md_cell(&e.category), escape_md_cell(&e.detail)));
         }
         md.push('\n');
     }
@@ -178,7 +187,7 @@ pub fn format_diff_markdown(diff: &DiffResult) -> Result<String, String> {
         if diff.persisting.len() <= 30 {
             md.push_str("| Category | Detail |\n|---|---|\n");
             for e in &diff.persisting {
-                md.push_str(&format!("| {} | {} |\n", e.category, e.detail));
+                md.push_str(&format!("| {} | {} |\n", escape_md_cell(&e.category), escape_md_cell(&e.detail)));
             }
         }
         md.push('\n');
@@ -208,4 +217,105 @@ pub fn format_diff_markdown(diff: &DiffResult) -> Result<String, String> {
     }
 
     Ok(md)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::*;
+    use std::path::PathBuf;
+
+    fn make_diff_entry(category: &str, key: &str, detail: &str) -> DiffEntry {
+        DiffEntry {
+            category: category.to_string(),
+            key: key.to_string(),
+            detail: detail.to_string(),
+        }
+    }
+
+    fn make_output_with_dead(dead: Vec<DeadCodeIssue>) -> AnalysisOutput {
+        AnalysisOutput {
+            version: None,
+            summary: None,
+            detected_frameworks: None,
+            monorepo: None,
+            structure: Structure {
+                root: PathBuf::from("/project"),
+                entry_points: vec![],
+                implicit_entries: vec![],
+                source_files: vec![],
+                config_files: vec![],
+            },
+            dependencies: Dependencies { imports: vec![], external: vec![] },
+            quality: Quality { files: vec![] },
+            issues: Issues {
+                dead_code: dead,
+                unused_exports: vec![],
+                duplicate_exports: vec![],
+                duplicate_code: vec![],
+                gotchas: vec![],
+                unused_types: vec![],
+                circular_dependencies: vec![],
+                unused_dependencies: vec![],
+                unresolved_imports: vec![],
+                unlisted_dependencies: vec![],
+                plugin_issues: vec![],
+            },
+            duplication: DuplicationSection {
+                stats: DuplicationStats {
+                    total_lines: 0,
+                    duplicated_lines: 0,
+                    duplication_percentage: 0.0,
+                    clone_groups: 0,
+                    clone_instances: 0,
+                    clone_families: 0,
+                },
+                clone_groups: vec![],
+                clone_families: vec![],
+                mirrored_directories: vec![],
+            },
+        }
+    }
+
+    #[test]
+    fn sec_v31_diff_markdown_escapes_pipe_in_detail() {
+        let old = make_output_with_dead(vec![DeadCodeIssue {
+            path: "src/a.ts".into(),
+            lines_of_code: 10,
+            confidence: 0.9,
+            reason: "old".into(),
+        }]);
+        let new = make_output_with_dead(vec![DeadCodeIssue {
+            path: "src/a|ts [link](https://evil)".into(),
+            lines_of_code: 10,
+            confidence: 0.9,
+            reason: "injected".into(),
+        }]);
+        let diff = compute_diff(&old, &new);
+        let md = format_diff_markdown(&diff).unwrap();
+        // Raw pipe should be escaped
+        assert!(!md.contains("| src/a|ts"),
+            "pipe in detail should be escaped, got:\n{}", md);
+        assert!(md.contains("\\|") || md.contains("src/a"),
+            "escaped pipe should be present");
+        // Raw markdown link should not appear
+        assert!(!md.contains("[link](https://evil)"),
+            "markdown link in detail should be escaped, got:\n{}", md);
+    }
+
+    #[test]
+    fn sec_v31_diff_markdown_escapes_newlines_in_detail() {
+        let old = make_output_with_dead(vec![]);
+        let new = make_output_with_dead(vec![DeadCodeIssue {
+            path: "src/b.ts".into(),
+            lines_of_code: 5,
+            confidence: 0.8,
+            reason: "line1\nline2\nline3".into(),
+        }]);
+        let diff = compute_diff(&old, &new);
+        let md = format_diff_markdown(&diff).unwrap();
+        // Newlines in detail should be replaced with spaces
+        assert!(!md.contains("line1\nline2"),
+            "newlines in table cells should be escaped, got:\n{}", md);
+    }
 }

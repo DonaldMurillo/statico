@@ -86,6 +86,13 @@ pub fn is_workspace_package_file(rel: &str, packages: &[String]) -> bool {
 pub fn discover_workspace_roots(root: &Path, packages: &[String]) -> Vec<PathBuf> {
     let mut roots = Vec::new();
     for pkg_pattern in packages {
+        // Reject patterns with path traversal.
+        if pkg_pattern.split(['/', '\\']).any(|c| c == "..") {
+            continue;
+        }
+        if pkg_pattern.starts_with('/') {
+            continue;
+        }
         if pkg_pattern.ends_with('/') {
             // Directory prefix like "packages/" — enumerate subdirs with package.json.
             let dir = root.join(pkg_pattern.trim_end_matches('/'));
@@ -374,6 +381,28 @@ packages:
 
         let roots = discover_workspace_roots(&tmp, &["packages/".to_string()]);
         assert_eq!(roots.len(), 2);
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn sec_v310_workspace_roots_reject_traversal() {
+        let tmp = std::env::temp_dir().join("statico_sec_ws_traversal");
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+        let roots = discover_workspace_roots(&tmp, &["../../etc".to_string()]);
+        assert!(roots.is_empty(),
+            "traversal pattern should produce no roots: {:?}", roots);
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn sec_v310_workspace_roots_reject_absolute() {
+        let tmp = std::env::temp_dir().join("statico_sec_ws_absolute");
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+        let roots = discover_workspace_roots(&tmp, &["/etc".to_string()]);
+        assert!(roots.is_empty(),
+            "absolute pattern should produce no roots: {:?}", roots);
         let _ = std::fs::remove_dir_all(&tmp);
     }
 }
