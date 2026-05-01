@@ -109,3 +109,77 @@ mod tests {
         assert!(ensure_within_root(child, root).is_ok());
     }
 }
+
+/// Strip ANSI escape sequences and control characters from a string.
+/// Used to sanitize plugin-provided text before printing to terminal.
+pub fn strip_ansi(s: &str) -> String {
+    let mut result = String::with_capacity(s.len());
+    let mut chars = s.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '\x1b' {
+            // Skip ANSI escape sequence: ESC [ ... (final byte 0x40-0x7E)
+            if chars.peek() == Some(&'[') {
+                chars.next(); // consume '['
+                while let Some(&next) = chars.peek() {
+                    chars.next();
+                    if next >= '\x40' && next <= '\x7e' { break; }
+                }
+            }
+            continue;
+        }
+        if c.is_control() && c != '\n' && c != '\r' && c != '\t' {
+            continue; // strip other control chars
+        }
+        result.push(c);
+    }
+    result
+}
+
+#[cfg(test)]
+mod strip_ansi_tests {
+    use super::*;
+
+    #[test]
+    fn sec_v4_1_strips_ansi_escape_from_plugin_message() {
+        // A plugin could inject ANSI escapes to change terminal color, move cursor, etc.
+        let evil = "\x1b[31mCRITICAL ERROR\x1b[0m";
+        let clean = strip_ansi(evil);
+        assert_eq!(clean, "CRITICAL ERROR",
+            "ANSI color codes should be stripped, got: {:?}", clean);
+    }
+
+    #[test]
+    fn sec_v4_1_strips_cursor_movement_ansi() {
+        let evil = "\x1b[2J\x1b[H\x1b[31mFAKE ERROR\x1b[0m";
+        let clean = strip_ansi(evil);
+        assert_eq!(clean, "FAKE ERROR",
+            "ANSI cursor movement should be stripped, got: {:?}", clean);
+    }
+
+    #[test]
+    fn sec_v4_8_strips_ansi_from_plugin_name() {
+        // A plugin directory named with ANSI escapes
+        let evil_name = "\x1b[32m\x1b[1mmalicious\x1b[0m";
+        let clean = strip_ansi(evil_name);
+        assert_eq!(clean, "malicious",
+            "ANSI in plugin names should be stripped, got: {:?}", clean);
+    }
+
+    #[test]
+    fn strip_ansi_preserves_normal_text() {
+        assert_eq!(strip_ansi("hello world"), "hello world");
+        assert_eq!(strip_ansi("file.ts:42"), "file.ts:42");
+    }
+
+    #[test]
+    fn strip_ansi_strips_control_chars() {
+        let clean = strip_ansi("hello\x07world\x00test");
+        assert_eq!(clean, "helloworldtest",
+            "control chars should be stripped, got: {:?}", clean);
+    }
+
+    #[test]
+    fn strip_ansi_preserves_newlines() {
+        assert_eq!(strip_ansi("hello\nworld"), "hello\nworld");
+    }
+}

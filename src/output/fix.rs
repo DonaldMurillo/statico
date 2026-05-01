@@ -62,14 +62,16 @@ impl OutputFormatter for FixFormatter {
             out.push('\n');
 
             for dc in &dead_files {
+                let safe_path = dc.path.replace('\n', " ").replace('\r', " ");
+                let safe_reason = dc.reason.replace('\n', " ").replace('\r', " ");
                 out.push_str(&format!(
                     "# SAFE TO DELETE: {} ({} LOC, confidence: {:.0}%)\n",
-                    dc.path,
+                    safe_path,
                     dc.lines_of_code,
                     dc.confidence * 100.0,
                 ));
-                out.push_str(&format!("# Reason: {}\n", dc.reason));
-                out.push_str(&format!("# Review: git show HEAD -- {}\n", dc.path));
+                out.push_str(&format!("# Reason: {}\n", safe_reason));
+                out.push_str(&format!("# Review: git show HEAD -- {}\n", safe_path));
                 out.push('\n');
             }
         }
@@ -248,5 +250,54 @@ mod tests {
         let high_pos = result.find("src/high.ts").unwrap();
         let low_pos = result.find("src/low.ts").unwrap();
         assert!(high_pos < low_pos, "Higher confidence file should appear first");
+    }
+
+    // ── V4-2: Newline injection via path field ──
+    #[test]
+    fn sec_v4_2_fix_formatter_strips_newlines_in_path() {
+        let output = make_output(
+            vec![DeadCodeIssue {
+                path: "src/good.ts\nevil-command\n".to_string(),
+                lines_of_code: 10,
+                confidence: 0.95,
+                reason: "unused".to_string(),
+            }],
+            vec![],
+        );
+        let fmt = FixFormatter;
+        let result = fmt.format(&output).unwrap();
+        // A newline in the path should not inject a fake comment line
+        assert!(result.contains("src/good.ts evil-command "),
+            "newlines in path should be replaced with spaces, got:\n{}", result);
+        assert!(!result.contains("\nevil-command\n"),
+            "raw newlines should not appear in path output, got:\n{}", result);
+    }
+
+    // ── V4-3: Newline injection via reason field ──
+    #[test]
+    fn sec_v4_3_fix_formatter_strips_newlines_in_reason() {
+        let output = make_output(
+            vec![DeadCodeIssue {
+                path: "src/dead.ts".to_string(),
+                lines_of_code: 10,
+                confidence: 0.95,
+                reason: "not reachable\n# SAFE TO DELETE: /etc/passwd".to_string(),
+            }],
+            vec![],
+        );
+        let fmt = FixFormatter;
+        let result = fmt.format(&output).unwrap();
+        // The injected text should NOT appear as its own "# SAFE TO DELETE:" line
+        let safe_delete_lines: Vec<_> = result.lines()
+            .filter(|l| l.starts_with("# SAFE TO DELETE:"))
+            .collect();
+        assert_eq!(safe_delete_lines.len(), 1, "should only have one real SAFE TO DELETE line, got:\n{:?}\n{}",
+            safe_delete_lines, result);
+        assert!(safe_delete_lines[0].contains("src/dead.ts"),
+            "the real SAFE TO DELETE should reference the actual file, got:\n{}", result);
+        // Reason content should be on one line with newlines replaced
+        let reason_line = result.lines().find(|l| l.starts_with("# Reason:")).unwrap();
+        assert!(reason_line.contains("not reachable # SAFE TO DELETE: /etc/passwd"),
+            "reason should have newlines replaced with spaces, got:\n{}", reason_line);
     }
 }

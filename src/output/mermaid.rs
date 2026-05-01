@@ -84,7 +84,7 @@ impl OutputFormatter for MermaidFormatter {
         // ── 8. Emit subgraphs ──
         for (dir, paths) in &dir_groups {
             // Mermaid subgraph label: escape quotes if present
-            let label = if dir.is_empty() { "(root)".to_string() } else { dir.clone() };
+            let label = if dir.is_empty() { "(root)".to_string() } else { escape_mermaid_label(dir) };
             buf.push_str(&format!("    subgraph {}\n", label));
             for path in paths {
                 let id = &id_map[path];
@@ -296,11 +296,25 @@ where
     prefix
 }
 
+/// Escape characters that could break Mermaid syntax in subgraph labels
+/// and other structural elements.
+fn escape_mermaid_label(s: &str) -> String {
+    s.replace('"', "&quot;")
+     .replace('[', "&#91;")
+     .replace(']', "&#93;")
+     .replace('{', "&#123;")
+     .replace('}', "&#125;")
+}
+
 /// Return a short display name by stripping the common prefix.
 fn display_name(path: &str, prefix: &str) -> String {
     let raw = if prefix.is_empty() { path.to_string() } else { path.strip_prefix(prefix).unwrap_or(path).to_string() };
     // Escape characters that could break Mermaid node labels
-    raw.replace('"', "&quot;").replace(']', "&#93;").replace('[', "&#91;")
+    raw.replace('"', "&quot;")
+       .replace(']', "&#93;")
+       .replace('[', "&#91;")
+       .replace('{', "&#123;")
+       .replace('}', "&#125;")
 }
 
 /// Group files into directory buckets for Mermaid subgraphs.
@@ -320,6 +334,39 @@ fn group_by_directory(files: &BTreeSet<String>, prefix: &str) -> BTreeMap<String
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::*;
+    use std::path::PathBuf;
+
+    fn make_minimal_output() -> AnalysisOutput {
+        AnalysisOutput {
+            version: None,
+            summary: None,
+            detected_frameworks: None,
+            monorepo: None,
+            structure: Structure {
+                root: PathBuf::from("/project"),
+                entry_points: vec![],
+                implicit_entries: vec![],
+                source_files: vec![],
+                config_files: vec![],
+            },
+            dependencies: Dependencies { imports: vec![], external: vec![] },
+            quality: Quality { files: vec![] },
+            issues: Issues {
+                dead_code: vec![], unused_exports: vec![], duplicate_exports: vec![],
+                duplicate_code: vec![], gotchas: vec![], unused_types: vec![],
+                circular_dependencies: vec![], unused_dependencies: vec![],
+                unresolved_imports: vec![], unlisted_dependencies: vec![], plugin_issues: vec![],
+            },
+            duplication: DuplicationSection {
+                stats: DuplicationStats {
+                    total_lines: 0, duplicated_lines: 0, duplication_percentage: 0.0,
+                    clone_groups: 0, clone_instances: 0, clone_families: 0,
+                },
+                clone_groups: vec![], clone_families: vec![], mirrored_directories: vec![],
+            },
+        }
+    }
 
     #[test]
     fn common_prefix_finds_shared_dir() {
@@ -357,8 +404,6 @@ mod tests {
     #[test]
     fn sec_v5_mermaid_escapes_quotes_in_labels() {
         // File paths with quotes or "] chars could break mermaid syntax
-        use crate::types::*;
-        use std::path::PathBuf;
         let evil_path = "src/evil\"] --> evilNode[\"evil";
         let output = AnalysisOutput {
             version: None,
@@ -408,5 +453,32 @@ mod tests {
         // Raw "] should not appear to close a node label prematurely
         assert!(!result.contains("evil\"] --> evilNode"),
             "mermaid should escape quotes/brackets in node labels, got:\n{}", result);
+    }
+
+    // ── V4-4: Subgraph label injection via directory names with quotes ──
+    #[test]
+    fn sec_v4_4_subgraph_label_escapes_special_chars() {
+        // Directory name containing quotes/brackets should not break Mermaid syntax
+        let evil_dir = "src/evil\"dir";
+        let mut output = make_minimal_output();
+        output.dependencies.imports = vec![FileImports {
+            source: format!("{}/a.ts", evil_dir),
+            targets: vec![format!("{}/b.ts", evil_dir)],
+        }];
+        let formatter = MermaidFormatter;
+        let result = formatter.format(&output).unwrap();
+        // Raw unescaped quote in subgraph label would break mermaid parsing
+        assert!(!result.contains("subgraph src/evil\"dir"),
+            "subgraph label should escape quotes, got:\n{}", result);
+    }
+
+    // ── V4-9: display_name doesn't escape curly braces ──
+    #[test]
+    fn sec_v4_9_display_name_escapes_curly_braces() {
+        let name = display_name("src/file{evil}.ts", "");
+        assert!(!name.contains('{') && !name.contains('}'),
+            "curly braces should be escaped in display names, got: {}", name);
+        assert!(name.contains("&#123;") && name.contains("&#125;"),
+            "should use HTML entities for curly braces, got: {}", name);
     }
 }

@@ -102,7 +102,7 @@ impl OutputFormatter for MarkdownFormatter {
             groups.sort_by(|a, b| b.line_count.cmp(&a.line_count));
             for (i, g) in groups.iter().take(10).enumerate() {
                 let files: Vec<String> =
-                    g.instances.iter().map(|inst| format!("{}:L{}", inst.file, inst.start_line)).collect();
+                    g.instances.iter().map(|inst| format!("{}:L{}", escape_md_cell(&inst.file), inst.start_line)).collect();
                 md.push_str(&format!("| {} | {} | {} |\n", i + 1, files.join(", "), g.line_count));
             }
             md.push('\n');
@@ -110,11 +110,12 @@ impl OutputFormatter for MarkdownFormatter {
             if !output.duplication.clone_families.is_empty() {
                 md.push_str("### Clone Families\n\n");
                 for fam in &output.duplication.clone_families {
+                let escaped_fam_files: Vec<String> = fam.files.iter().map(|f| escape_md_cell(f)).collect();
                     md.push_str(&format!(
                         "- **{} groups, {} lines**: {}\n",
                         fam.group_count,
                         fam.total_duplicated_lines,
-                        fam.files.join(", ")
+                        escaped_fam_files.join(", ")
                     ));
                 }
                 md.push('\n');
@@ -125,7 +126,8 @@ impl OutputFormatter for MarkdownFormatter {
         if !output.issues.circular_dependencies.is_empty() {
             md.push_str("## Circular Dependencies\n\n");
             for cd in &output.issues.circular_dependencies {
-                md.push_str(&format!("- {} → {}\n", cd.files.join(" → "), cd.files[0]));
+                let escaped_files: Vec<String> = cd.files.iter().map(|f| escape_md_cell(f)).collect();
+                md.push_str(&format!("- {} → {}\n", escaped_files.join(" → "), escaped_files[0]));
             }
             md.push('\n');
         }
@@ -146,11 +148,14 @@ fn health_bar(score: f64) -> String {
 }
 
 /// Escape special characters for safe embedding in Markdown table cells.
-/// Prevents injection of links, table breaks, and structural elements.
+/// Prevents injection of links, table breaks, backtick breaks, and structural elements.
 fn escape_md_cell(s: &str) -> String {
     s.replace('|', "\\|")
      .replace('[', "\\[")
      .replace(']', "\\]")
+     .replace('`', "\\`")
+     .replace('<', "&lt;")
+     .replace('>', "&gt;")
      .replace('\n', " ")
      .replace('\r', " ")
 }
@@ -241,5 +246,70 @@ mod tests {
         // Newlines in table cells break the table structure
         assert!(!md.contains("EvilExport\n\n# Headline"),
             "markdown should escape newlines in table cells");
+    }
+
+    // ── V4-5: Backtick injection breaks inline code spans ──
+    #[test]
+    fn sec_v4_5_escapes_backticks_in_cells() {
+        let mut output = make_output_with_evil_path();
+        output.issues.dead_code = vec![DeadCodeIssue {
+            path: "src/evil`code`.ts".to_string(),
+            lines_of_code: 10,
+            confidence: 0.9,
+            reason: "`rm -rf /`".to_string(),
+        }];
+        let md = MarkdownFormatter.format(&output).unwrap();
+        // Raw backticks should be escaped so they don't break table code spans
+        assert!(md.contains("\\`code\\`"), "backticks should be escaped in table cells, got:\n{}", md);
+    }
+
+    // ── V4-6: Circular dependency file names not escaped ──
+    #[test]
+    fn sec_v4_6_escapes_circular_dep_file_names() {
+        let mut output = make_output_with_evil_path();
+        output.issues.dead_code = vec![];
+        output.issues.unused_exports = vec![];
+        output.issues.circular_dependencies = vec![CircularDepIssue {
+            files: vec!["src/[evil](https://evil.com).ts".to_string(), "src/b.ts".to_string()],
+        }];
+        let md = MarkdownFormatter.format(&output).unwrap();
+        assert!(!md.contains("[evil](https://evil.com)"),
+            "circular dep file names should be escaped, got:\n{}", md);
+    }
+
+    // ── V4-7: Duplication instance file names not escaped ──
+    #[test]
+    fn sec_v4_7_escapes_duplication_file_names() {
+        let mut output = make_output_with_evil_path();
+        output.issues.dead_code = vec![];
+        output.issues.unused_exports = vec![];
+        output.duplication.clone_groups = vec![CloneGroup {
+            instances: vec![
+                CloneInstance { file: "src/[evil](https://evil.com).ts".to_string(), start_line: 1, end_line: 10, snippet: "...".to_string() },
+                CloneInstance { file: "src/b.ts".to_string(), start_line: 1, end_line: 10, snippet: "...".to_string() },
+            ],
+            token_count: 60,
+            line_count: 10,
+        }];
+        let md = MarkdownFormatter.format(&output).unwrap();
+        assert!(!md.contains("[evil](https://evil.com)"),
+            "duplication file names should be escaped, got:\n{}", md);
+    }
+
+    // ── V4-10: HTML chars not escaped in markdown cells ──
+    #[test]
+    fn sec_v4_10_escapes_html_chars_in_cells() {
+        let mut output = make_output_with_evil_path();
+        output.issues.dead_code = vec![DeadCodeIssue {
+            path: "src/<script>alert(1)</script>.ts".to_string(),
+            lines_of_code: 10,
+            confidence: 0.9,
+            reason: "<b>bold</b>".to_string(),
+        }];
+        let md = MarkdownFormatter.format(&output).unwrap();
+        assert!(!md.contains("<script>"),
+            "HTML angle brackets should be escaped in markdown, got:\n{}", md);
+        assert!(md.contains("&lt;script&gt;"),
+            "should use HTML entities for angle brackets, got:\n{}", md);
     }
 }

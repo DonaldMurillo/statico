@@ -1700,7 +1700,7 @@ fn run_plugin_build(name: Option<&str>, path: &str) {
     for plugin in &targets {
         match plugin.kind {
             statico::plugin::discovery::PluginKind::Rust => {
-                print!("Building Rust plugin '{}'... ", plugin.name);
+                print!("Building Rust plugin '{}'... ", statico::strip_ansi(&plugin.name));
                 let output = std::process::Command::new("cargo")
                     .args(["build", "--release"])
                     .current_dir(&plugin.path)
@@ -1715,14 +1715,14 @@ fn run_plugin_build(name: Option<&str>, path: &str) {
                 }
             }
             statico::plugin::discovery::PluginKind::TypeScript => {
-                print!("TypeScript plugin '{}' (no build needed with Bun)... ", plugin.name);
+                print!("TypeScript plugin '{}' (no build needed with Bun)... ", statico::strip_ansi(&plugin.name));
                 println!("ok");
             }
             statico::plugin::discovery::PluginKind::Executable => {
-                println!("Skipping executable plugin '{}' (no build step)", plugin.name);
+                println!("Skipping executable plugin '{}' (no build step)", statico::strip_ansi(&plugin.name));
             }
             statico::plugin::discovery::PluginKind::Python => {
-                print!("Python plugin '{}' (no build needed)... ", plugin.name);
+                print!("Python plugin '{}' (no build needed)... ", statico::strip_ansi(&plugin.name));
                 println!("ok");
             }
         }
@@ -1803,7 +1803,7 @@ fn run_plugin_run(name: &str, file: &str, path: &str) {
     println!("\nResults:");
     println!("  Issues: {}", result.issues.len());
     for issue in &result.issues {
-        println!("    [{}] {} ({}:{})", issue.severity.as_ref(), issue.message, issue.file, issue.line);
+        println!("    [{}] {} ({}:{})", issue.severity.as_ref(), statico::strip_ansi(&issue.message), statico::strip_ansi(&issue.file), issue.line);
     }
     println!("  Exports: {}", result.exports.len());
     for exp in &result.exports {
