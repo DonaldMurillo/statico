@@ -35,7 +35,8 @@ impl OutputFormatter for ContextFormatter {
 
         // Line 3: Top risk file
         if let Some(risk) = top_risk {
-            lines.push(format!("Top risk: {} ({} unused exports)", risk.0, risk.1));
+            let safe_path = risk.0.replace('\n', " ").replace('\r', " ");
+            lines.push(format!("Top risk: {} ({} unused exports)", safe_path, risk.1));
         }
 
         // Line 4: Footer
@@ -61,4 +62,68 @@ fn find_top_risk_file(output: &AnalysisOutput) -> Option<(String, usize)> {
     }
 
     counts.into_iter().max_by_key(|(_, c)| *c)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::*;
+    use std::path::PathBuf;
+
+    fn make_output_with_unused_export(path: &str) -> AnalysisOutput {
+        AnalysisOutput {
+            version: None,
+            summary: None,
+            detected_frameworks: None,
+            monorepo: None,
+            structure: Structure {
+                root: PathBuf::from("/tmp/test"),
+                entry_points: vec![],
+                implicit_entries: vec![],
+                source_files: vec![],
+                config_files: vec![],
+            },
+            dependencies: Dependencies { imports: vec![], external: vec![] },
+            quality: Quality { files: vec![] },
+            issues: Issues {
+                unused_exports: vec![UnusedExportIssue {
+                    name: "foo".to_string(),
+                    path: path.to_string(),
+                }],
+                dead_code: vec![],
+                duplicate_exports: vec![],
+                duplicate_code: vec![],
+                gotchas: vec![],
+                unused_types: vec![],
+                circular_dependencies: vec![],
+                unused_dependencies: vec![],
+                unresolved_imports: vec![],
+                unlisted_dependencies: vec![],
+                plugin_issues: vec![],
+            },
+            duplication: DuplicationSection {
+                stats: DuplicationStats {
+                    total_lines: 0, duplicated_lines: 0,
+                    duplication_percentage: 0.0, clone_groups: 0,
+                    clone_instances: 0, clone_families: 0,
+                },
+                clone_groups: vec![], clone_families: vec![],
+                mirrored_directories: vec![],
+            },
+        }
+    }
+
+    // ── V5-6: newline in file path breaks context formatter one-liner ──
+    #[test]
+    fn sec_v5_6_context_newline_in_path_sanitized() {
+        let output = make_output_with_unused_export("src/evil\nINJECTED.ts");
+        let formatter = ContextFormatter;
+        let result = formatter.format(&output).unwrap();
+        // The raw newline should be replaced with a space so "Top risk" stays on one line
+        let top_risk_line = result.lines().find(|l| l.starts_with("Top risk:")).unwrap();
+        assert!(!top_risk_line.contains('\n'),
+            "Top risk line should not contain newline, got: {}", top_risk_line);
+        assert!(top_risk_line.contains("evil INJECTED.ts"),
+            "newline should be replaced with space, got: {}", top_risk_line);
+    }
 }

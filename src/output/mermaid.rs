@@ -310,7 +310,9 @@ fn escape_mermaid_label(s: &str) -> String {
 fn display_name(path: &str, prefix: &str) -> String {
     let raw = if prefix.is_empty() { path.to_string() } else { path.strip_prefix(prefix).unwrap_or(path).to_string() };
     // Escape characters that could break Mermaid node labels
-    raw.replace('"', "&quot;")
+    raw.replace('\n', " ")
+       .replace('\r', " ")
+       .replace('"', "&quot;")
        .replace(']', "&#93;")
        .replace('[', "&#91;")
        .replace('{', "&#123;")
@@ -480,5 +482,15 @@ mod tests {
             "curly braces should be escaped in display names, got: {}", name);
         assert!(name.contains("&#123;") && name.contains("&#125;"),
             "should use HTML entities for curly braces, got: {}", name);
+    }
+
+    // ── V5-10: display_name sanitizes newlines to prevent chart breakage ──
+    #[test]
+    fn sec_v5_10_display_name_escapes_newlines() {
+        let name = display_name("src/evil\nINJECTED.ts", "");
+        assert!(!name.contains('\n'),
+            "newlines should be replaced with spaces, got: {}", name);
+        assert!(name.contains("INJECTED"),
+            "content should be preserved, got: {}", name);
     }
 }

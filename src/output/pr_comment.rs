@@ -14,6 +14,9 @@ fn escape_md_cell(s: &str) -> String {
     s.replace('|', "\\|")
      .replace('[', "\\[")
      .replace(']', "\\]")
+     .replace('`', "\\`")
+     .replace('<', "&lt;")
+     .replace('>', "&gt;")
      .replace('\n', " ")
      .replace('\r', " ")
 }
@@ -300,5 +303,13 @@ mod tests {
         let md = formatter.format(&output).unwrap();
         assert!(!md.contains("[evil](https://x)"),
             "PR comment should escape file names in circular deps");
+    }
+
+    // ── V5-4: escape_md_cell must escape backticks and angle brackets ──
+    #[test]
+    fn sec_v5_4_pr_comment_escapes_backticks_and_angle_brackets() {
+        let cell = escape_md_cell("file`name<evil>.ts");
+        assert_eq!(cell, "file\\`name&lt;evil&gt;.ts",
+            "backticks and angle brackets must be escaped, got: {}", cell);
     }
 }

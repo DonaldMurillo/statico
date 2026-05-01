@@ -219,7 +219,16 @@ pub(super) fn is_example_or_script(path: &str) -> bool {
 
 pub(super) fn truncate_line(line: &str) -> String {
     let trimmed = line.trim();
-    if trimmed.len() > 120 { format!("{}...", &trimmed[..117]) } else { trimmed.to_string() }
+    if trimmed.len() > 120 {
+        // Use char-boundary-safe truncation to avoid panicking on multi-byte UTF-8.
+        let mut end = 117;
+        while !trimmed.is_char_boundary(end) {
+            end -= 1;
+        }
+        format!("{}...", &trimmed[..end])
+    } else {
+        trimmed.to_string()
+    }
 }
 
 
@@ -400,5 +409,16 @@ fs.readFile('a', function(err, data) {
             assert_eq!(issue.rule, "callback-hell");
             assert!(issue.confidence > 0.0 && issue.confidence <= 1.0);
         }
+    }
+
+    // ── V5-1: truncate_line UTF-8 boundary panic ──
+    #[test]
+    fn sec_v5_1_truncate_line_no_panic_on_multibyte() {
+        // A line with multi-byte UTF-8 ending beyond the 120-char truncation point.
+        // The old code sliced at byte offset 117, which could panic.
+        let long_line = format!("{}{}", "α".repeat(60), "extra text here"); // >120 bytes
+        let result = truncate_line(&long_line);
+        assert!(result.len() <= 123, "truncated should be <= 123 chars, got {}", result.len());
+        assert!(result.ends_with("..."), "should end with ellipsis, got: {}", result);
     }
 }

@@ -178,12 +178,52 @@ fn shorten_path(s: &str, max_len: usize) -> String {
     }
     // Keep filename and show "…" prefix.
     let truncate_to = max_len - 1;
-    format!("…{}", &s[s.len() - truncate_to..])
+    // Find a safe char boundary from the end.
+    let mut end = s.len();
+    while end > s.len() - truncate_to && !s.is_char_boundary(end - 1) {
+        end -= 1;
+    }
+    let start = s.len().saturating_sub(truncate_to);
+    // Walk forward to next char boundary.
+    let mut start = start;
+    while start < s.len() && !s.is_char_boundary(start) {
+        start += 1;
+    }
+    format!("…{}", &s[start..])
 }
 
 fn shorten_str(s: &str, max_len: usize) -> String {
     if s.len() <= max_len {
         return s.to_string();
     }
-    format!("{}…", &s[..max_len - 1])
+    // Find a safe char boundary for truncation.
+    let mut end = max_len - 1;
+    while end > 0 && !s.is_char_boundary(end) {
+        end -= 1;
+    }
+    format!("{}…", &s[..end])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── V5-2: shorten_str UTF-8 boundary panic ──
+    #[test]
+    fn sec_v5_2_shorten_str_no_panic_on_multibyte() {
+        // 60 Greek alpha chars = 120 bytes, shorten to 28 bytes
+        let long = "α".repeat(60);
+        let result = shorten_str(&long, 28);
+        assert!(result.ends_with('…'), "should end with ellipsis: {}", result);
+        assert!(result.len() <= 30, "should be <= 30 chars, got {}", result.len());
+    }
+
+    // ── V5-3: shorten_path UTF-8 boundary panic ──
+    #[test]
+    fn sec_v5_3_shorten_path_no_panic_on_multibyte() {
+        let path = format!("src/{}/file.ts", "α".repeat(20));
+        let result = shorten_path(&path, 38);
+        assert!(result.starts_with('…'), "should start with ellipsis: {}", result);
+        assert!(result.len() <= 40, "should be <= 40 chars, got {}", result.len());
+    }
 }

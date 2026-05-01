@@ -135,7 +135,7 @@ impl OutputFormatter for MarkdownFormatter {
         // Framework Info
         md.push_str("## Framework Info\n\n");
         md.push_str(&format!("- **Entry points:** {}\n", output.structure.entry_points.len()));
-        md.push_str(&format!("- **Config files:** {}\n", output.structure.config_files.join(", ")));
+        md.push_str(&format!("- **Config files:** {}\n", output.structure.config_files.iter().map(|f| escape_md_cell(f)).collect::<Vec<_>>().join(", ")));
 
         Ok(md)
     }
@@ -311,5 +311,43 @@ mod tests {
             "HTML angle brackets should be escaped in markdown, got:\n{}", md);
         assert!(md.contains("&lt;script&gt;"),
             "should use HTML entities for angle brackets, got:\n{}", md);
+    }
+
+    // ── V5-9: config_files are escaped in markdown output ──
+    #[test]
+    fn sec_v5_9_config_files_escaped_in_markdown() {
+        let output = AnalysisOutput {
+            version: None,
+            summary: None,
+            detected_frameworks: None,
+            monorepo: None,
+            structure: Structure {
+                root: std::path::PathBuf::from("/tmp/test"),
+                entry_points: vec![],
+                implicit_entries: vec![],
+                source_files: vec![],
+                config_files: vec!["src/[evil](link).toml".to_string()],
+            },
+            dependencies: Dependencies { imports: vec![], external: vec![] },
+            quality: Quality { files: vec![] },
+            issues: Issues {
+                dead_code: vec![], unused_exports: vec![], duplicate_exports: vec![],
+                duplicate_code: vec![], gotchas: vec![], unused_types: vec![],
+                circular_dependencies: vec![], unused_dependencies: vec![],
+                unresolved_imports: vec![], unlisted_dependencies: vec![], plugin_issues: vec![],
+            },
+            duplication: DuplicationSection {
+                stats: DuplicationStats {
+                    total_lines: 0, duplicated_lines: 0,
+                    duplication_percentage: 0.0, clone_groups: 0,
+                    clone_instances: 0, clone_families: 0,
+                },
+                clone_groups: vec![], clone_families: vec![], mirrored_directories: vec![],
+            },
+        };
+        let formatter = MarkdownFormatter;
+        let md = formatter.format(&output).unwrap();
+        assert!(!md.contains("[evil](link)"),
+            "config_files should be escaped, got:\n{}", md);
     }
 }
