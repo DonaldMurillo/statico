@@ -161,7 +161,7 @@ pub fn run_update(dry_run: bool) -> Result<String, String> {
     let data = data_dir();
     let _ = fs::create_dir_all(&data);
     let _ = fs::write(data.join("last-version"), &latest);
-    let _ = fs::write(data.join("last-check"), chrono_now());
+    let _ = fs::write(data.join("last-check"), today_string());
 
     Ok(format!("Updated statico v{} → v{} ✓", current, latest))
 }
@@ -243,16 +243,28 @@ fn replace_binary(current: &Path, new: &Path) -> Result<(), String> {
     Ok(())
 }
 
-/// Get current timestamp as ISO 8601.
-fn chrono_now() -> String {
-    // Simple timestamp without chrono dependency.
-    let output = std::process::Command::new("date")
-        .arg("+%Y-%m-%dT%H:%M:%S")
-        .output();
-    match output {
-        Ok(o) => String::from_utf8_lossy(&o.stdout).trim().to_string(),
-        Err(_) => "unknown".to_string(),
-    }
+/// Get current date as ISO 8601 date string (pure Rust, no subprocess).
+fn today_string() -> String {
+    // Simple approach: use SystemTime and format as date.
+    // We only need the date portion for rate-limiting.
+    use std::time::SystemTime;
+    let duration = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap_or_default();
+    let total_days = duration.as_secs() / 86400;
+    // Compute year/month/day from unix epoch days.
+    // Algorithm from http://howardhinnant.github.io/date_algorithms.html
+    let z = total_days as i64 + 719468;
+    let era = (if z >= 0 { z } else { z - 146096 }) / 146097;
+    let doe = z - era * 146097;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = if m <= 2 { y + 1 } else { y };
+    format!("{:04}-{:02}-{:02}", y, m, d)
 }
 
 /// Check if we should notify about updates (rate-limited to once per day).
@@ -264,10 +276,8 @@ pub fn should_check_update() -> bool {
     }
     let content = fs::read_to_string(&last_check).unwrap_or_default();
     // Very simple: if the date string differs from today, check again.
-    let today = chrono_now();
-    let today_date = today.split('T').next().unwrap_or("");
-    let last_date = content.split('T').next().unwrap_or("");
-    today_date != last_date
+    let today = today_string();
+    today != content.trim()
 }
 
 /// Run a background version check and print a notice if update available.
@@ -296,7 +306,7 @@ pub fn check_and_notify() {
         let data = data_dir();
         let _ = fs::create_dir_all(&data);
         let _ = fs::write(data.join("last-version"), &latest);
-        let _ = fs::write(data.join("last-check"), chrono_now());
+        let _ = fs::write(data.join("last-check"), today_string());
 
         if is_newer(current, &latest) {
             eprintln!(

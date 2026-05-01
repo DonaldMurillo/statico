@@ -42,6 +42,9 @@ fn default_format() -> String {
 fn default_max_file_size() -> u64 {
     1_000_000
 }
+
+/// Maximum allowed file size (50 MB) — prevents OOM from malicious config.
+const MAX_ALLOWED_FILE_SIZE: u64 = 50_000_000;
 fn default_true() -> bool {
     true
 }
@@ -98,8 +101,18 @@ impl StaticoConfig {
                 return Self::default();
             }
         };
-        match toml::from_str(&content) {
-            Ok(c) => c,
+        match toml::from_str::<StaticoConfig>(&content) {
+            Ok(mut c) => {
+                // Clamp max_file_size to prevent OOM from malicious config (S2-08).
+                if c.max_file_size > MAX_ALLOWED_FILE_SIZE {
+                    eprintln!(
+                        "warning: max_file_size ({}) exceeds limit ({}), clamping",
+                        c.max_file_size, MAX_ALLOWED_FILE_SIZE
+                    );
+                    c.max_file_size = MAX_ALLOWED_FILE_SIZE;
+                }
+                c
+            }
             Err(e) => {
                 eprintln!("warning: failed to parse {}: {}", config_path.display(), e);
                 Self::default()

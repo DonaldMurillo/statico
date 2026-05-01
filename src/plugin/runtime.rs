@@ -96,22 +96,21 @@ fn download_bun() -> Result<PathBuf, String> {
 
     eprintln!("Downloading Bun runtime to {}...", target_dir.display());
 
-    // Download to a temp file.
+    // Download to a temp file using ureq (no shell-out, no injection risk).
     let tmp_zip = target_dir.join("bun-download.zip");
-    let status = std::process::Command::new("curl")
-        .args([
-            "-fsSL",
-            "--progress-bar",
-            &url,
-            "-o",
-            &tmp_zip.to_string_lossy(),
-        ])
-        .status()
-        .map_err(|e| format!("Failed to run curl: {}", e))?;
+    let agent = ureq::Agent::new_with_defaults();
+    let resp = agent
+        .get(&url)
+        .header("User-Agent", "statico-runtime-download")
+        .call()
+        .map_err(|e| format!("Failed to download Bun: {}", e))?;
 
-    if !status.success() {
-        let _ = std::fs::remove_file(&tmp_zip);
-        return Err("Failed to download Bun. Check your internet connection.".to_string());
+    {
+        let mut file = std::fs::File::create(&tmp_zip)
+            .map_err(|e| format!("Failed to create temp file: {}", e))?;
+        let mut reader = resp.into_parts().1.into_reader();
+        std::io::copy(&mut reader, &mut file)
+            .map_err(|e| format!("Failed to write Bun download: {}", e))?;
     }
 
     // Extract (unzip moves the bun binary out).
