@@ -602,17 +602,16 @@ fn run_init(shell: Option<&str>) {
     let exe = std::env::current_exe().expect("cannot determine current executable");
     let bin_dir = exe.parent().unwrap_or_else(|| std::path::Path::new("/usr/local/bin"));
     let bin_dir_escaped = shell_escape(&bin_dir.display().to_string());
+    let completion_escaped = shell_escape(&completion_file.display().to_string());
 
     let snippet = if is_fish {
         format!(
-            "\n# statico\nset -gx PATH {bin_dir_escaped} $PATH\nalias st statico\nsource {}\n",
-            completion_file.display()
+            "\n# statico\nset -gx PATH {bin_dir_escaped} $PATH\nalias st statico\nsource {completion_escaped}\n"
         )
     } else {
         // bash and zsh — double-quote the path, escape internal special chars.
         format!(
-            "\n# statico\nexport PATH=\"{bin_dir_escaped}:$PATH\"\nalias st='statico'\nsource {}\n",
-            completion_file.display()
+            "\n# statico\nexport PATH=\"{bin_dir_escaped}:$PATH\"\nalias st='statico'\nsource {completion_escaped}\n"
         )
     };
 
@@ -1134,6 +1133,22 @@ mod shell_escape_tests {
         let result = shell_escape("/usr/local/bin");
         assert_eq!(result, "/usr/local/bin",
             "normal path should be unchanged: got {}", result);
+    }
+
+    // ── V6-6: source path in rc snippet must be shell-escaped ──
+    #[test]
+    fn sec_v6_6_source_path_shell_escaped() {
+        // If the completion file path contains shell-special chars,
+        // the `source` line in the rc snippet must be escaped.
+        // Verify shell_escape handles the dangerous characters.
+        let path_with_dollar = "/home/$USER/.statico/completions/statico.bash";
+        let escaped = shell_escape(path_with_dollar);
+        assert!(escaped.contains("\\$"),
+            "dollar in path should be escaped, got: {}", escaped);
+        let path_with_backtick = "/home/`whoami`/.statico/completions/statico.bash";
+        let escaped2 = shell_escape(path_with_backtick);
+        assert!(escaped2.contains("\\`"),
+            "backtick in path should be escaped, got: {}", escaped2);
     }
 }
 

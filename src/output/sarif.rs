@@ -15,6 +15,15 @@ fn sanitize_uri(path: &str) -> String {
         .replace('\\', "/")
 }
 
+/// Sanitize a message string for SARIF message.text fields.
+/// Strips control characters (except common whitespace) to prevent
+/// injection of misleading content via file paths and names.
+fn sanitize_message(s: &str) -> String {
+    s.chars()
+        .map(|c| if c == '\n' || c == '\r' { ' ' } else if c.is_control() { ' ' } else { c })
+        .collect()
+}
+
 /// SARIF 2.1.0 formatter.
 pub struct SarifFormatter;
 
@@ -29,7 +38,7 @@ impl OutputFormatter for SarifFormatter {
             results.push(json!({
                 "ruleId": "dead_code",
                 "level": if dc.confidence >= 0.8 { "warning" } else { "note" },
-                "message": { "text": dc.reason },
+                "message": { "text": sanitize_message(&dc.reason) },
                 "locations": [{ "physicalLocation": {
                     "artifactLocation": { "uri": sanitize_uri(&dc.path) },
                     "region": { "startLine": 1 }
@@ -44,7 +53,7 @@ impl OutputFormatter for SarifFormatter {
             results.push(json!({
                 "ruleId": "unused_export",
                 "level": "note",
-                "message": { "text": format!("Export '{}' is never imported", ue.name) },
+                "message": { "text": sanitize_message(&format!("Export '{}' is never imported", ue.name)) },
                 "locations": [{ "physicalLocation": {
                     "artifactLocation": { "uri": sanitize_uri(&ue.path) },
                     "region": { "startLine": 1 }
@@ -58,7 +67,7 @@ impl OutputFormatter for SarifFormatter {
             results.push(json!({
                 "ruleId": "unused_type",
                 "level": "note",
-                "message": { "text": format!("{} '{}' is never imported", ut.kind, ut.name) },
+                "message": { "text": sanitize_message(&format!("{} '{}' is never imported", ut.kind, ut.name)) },
                 "locations": [{ "physicalLocation": {
                     "artifactLocation": { "uri": sanitize_uri(&ut.path) },
                     "region": { "startLine": 1 }
@@ -99,7 +108,7 @@ impl OutputFormatter for SarifFormatter {
             results.push(json!({
                 "ruleId": "duplicate_export",
                 "level": "warning",
-                "message": { "text": format!("Export '{}' defined in {} locations", de.name, de.locations.len()) },
+                "message": { "text": sanitize_message(&format!("Export '{}' defined in {} locations", de.name, de.locations.len())) },
             }));
         }
 
@@ -114,7 +123,7 @@ impl OutputFormatter for SarifFormatter {
             results.push(json!({
                 "ruleId": "unresolved_import",
                 "level": "warning",
-                "message": { "text": format!("Unresolved import '{}' in {}", ui.import_spec, ui.source_file) },
+                "message": { "text": sanitize_message(&format!("Unresolved import '{}' in {}", ui.import_spec, ui.source_file)) },
                 "locations": [{ "physicalLocation": {
                     "artifactLocation": { "uri": sanitize_uri(&ui.source_file) },
                     "region": { "startLine": 1 }
@@ -133,7 +142,7 @@ impl OutputFormatter for SarifFormatter {
             results.push(json!({
                 "ruleId": "unused_dependency",
                 "level": "note",
-                "message": { "text": format!("Package '{}' is listed but never imported", ud.package_name) },
+                "message": { "text": sanitize_message(&format!("Package '{}' is listed but never imported", ud.package_name)) },
             }));
         }
 
@@ -147,7 +156,7 @@ impl OutputFormatter for SarifFormatter {
             results.push(json!({
                 "ruleId": "unlisted_dependency",
                 "level": "warning",
-                "message": { "text": format!("'{}' imported by {} but not in package.json", ud.package_name, ud.imported_by) },
+                "message": { "text": sanitize_message(&format!("'{}' imported by {} but not in package.json", ud.package_name, ud.imported_by)) },
             }));
         }
 
@@ -184,11 +193,11 @@ fn append_dup_code_results(results: &mut Vec<Value>, output: &AnalysisOutput) {
         results.push(json!({
             "ruleId": "duplicate_code",
             "level": if dc.confidence >= 0.8 { "warning" } else { "note" },
-            "message": { "text": format!(
+            "message": { "text": sanitize_message(&format!(
                 "Similar code in {} (L{}-L{}) and {} (L{}-L{})",
                 dc.location_a.file, dc.location_a.start_line, dc.location_a.end_line,
                 dc.location_b.file, dc.location_b.start_line, dc.location_b.end_line
-            )},
+            ))},
             "locations": [
                 { "physicalLocation": { "artifactLocation": { "uri": sanitize_uri(&dc.location_a.file) }, "region": { "startLine": dc.location_a.start_line } }},
                 { "physicalLocation": { "artifactLocation": { "uri": sanitize_uri(&dc.location_b.file) }, "region": { "startLine": dc.location_b.start_line } }},
@@ -207,7 +216,7 @@ fn append_gotcha_results(results: &mut Vec<Value>, output: &AnalysisOutput) {
                 "warning" => "warning",
                 _ => "note",
             },
-            "message": { "text": g.message },
+            "message": { "text": sanitize_message(&g.message) },
             "locations": [{ "physicalLocation": {
                 "artifactLocation": { "uri": sanitize_uri(&g.file) },
                 "region": { "startLine": g.line }
@@ -223,7 +232,7 @@ fn append_circular_dep_results(results: &mut Vec<Value>, output: &AnalysisOutput
             results.push(json!({
                 "ruleId": "circular_dependency",
                 "level": "warning",
-                "message": { "text": format!("Circular dependency: {} → {}", cd.files.join(" → "), first) },
+                "message": { "text": sanitize_message(&format!("Circular dependency: {} → {}", cd.files.join(" → "), first)) },
                 "locations": [{ "physicalLocation": {
                     "artifactLocation": { "uri": sanitize_uri(first) },
                     "region": { "startLine": 1 }
@@ -295,5 +304,39 @@ mod tests {
             .as_str().unwrap();
         assert!(!uri.contains('\r'), "SARIF URI should not contain CR: {}", uri);
         assert!(!uri.contains('\n'), "SARIF URI should not contain LF: {}", uri);
+    }
+
+    // ── V6-4: SARIF message.text must not contain control chars from user data ──
+    #[test]
+    fn sec_v6_4_sarif_message_no_control_chars() {
+        let mut output = evil_output();
+        // Inject control chars into gotcha message
+        output.issues.gotchas.push(crate::types::GotchaIssue {
+            rule: "test-rule".into(),
+            message: "evil\x07message\nINJECTION".into(),
+            file: "src/a.ts".into(),
+            line: 1,
+            severity: "warning".into(),
+            confidence: 0.9,
+            snippet: "".into(),
+        });
+        // Inject control chars into circular dep
+        output.issues.circular_dependencies.push(crate::types::CircularDepIssue {
+            files: vec!["src/a\nts".into(), "src/b.ts".into()],
+        });
+        let formatter = SarifFormatter;
+        let json = formatter.format(&output).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        let results = parsed["runs"][0]["results"].as_array().unwrap();
+        // Find the gotcha result
+        let gotcha = results.iter().find(|r| r["ruleId"] == "gotcha").unwrap();
+        let msg = gotcha["message"]["text"].as_str().unwrap();
+        assert!(!msg.contains('\x07'), "BEL should be stripped from message, got: {:?}", msg);
+        assert!(!msg.contains('\n'), "LF should be replaced with space in message, got: {:?}", msg);
+        assert!(msg.contains("INJECTION"), "content should be preserved, got: {:?}", msg);
+        // Find the circular dep result
+        let circ = results.iter().find(|r| r["ruleId"] == "circular_dependency").unwrap();
+        let circ_msg = circ["message"]["text"].as_str().unwrap();
+        assert!(!circ_msg.contains('\n'), "LF should be replaced with space in circular dep message, got: {:?}", circ_msg);
     }
 }

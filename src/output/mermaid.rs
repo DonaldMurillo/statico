@@ -299,11 +299,14 @@ where
 /// Escape characters that could break Mermaid syntax in subgraph labels
 /// and other structural elements.
 fn escape_mermaid_label(s: &str) -> String {
-    s.replace('"', "&quot;")
+    s.replace('\n', " ")
+     .replace('\r', " ")
+     .replace('"', "&quot;")
      .replace('[', "&#91;")
      .replace(']', "&#93;")
      .replace('{', "&#123;")
      .replace('}', "&#125;")
+     .replace('#', "&#35;")
 }
 
 /// Return a short display name by stripping the common prefix.
@@ -492,5 +495,28 @@ mod tests {
             "newlines should be replaced with spaces, got: {}", name);
         assert!(name.contains("INJECTED"),
             "content should be preserved, got: {}", name);
+    }
+
+    // ── V6-1: escape_mermaid_label must escape newlines to prevent subgraph injection ──
+    #[test]
+    fn sec_v6_1_escape_mermaid_label_escapes_newlines() {
+        let evil = "src/evil\nend\nsubgraph fake";
+        let escaped = escape_mermaid_label(evil);
+        assert!(!escaped.contains('\n'),
+            "newlines should be replaced with spaces, got: {:?}", escaped);
+        assert!(escaped.contains("fake"),
+            "content should be preserved, got: {:?}", escaped);
+    }
+
+    // ── V6-7: escape_mermaid_label must escape # to prevent Mermaid entity injection ──
+    #[test]
+    fn sec_v6_7_escape_mermaid_label_escapes_hash() {
+        let evil = "dir#name";
+        let escaped = escape_mermaid_label(evil);
+        // After escaping, the raw '#' should be gone, replaced with entity
+        assert!(!escaped.contains("#n"),
+            "# followed by text should be escaped, got: {:?}", escaped);
+        assert!(escaped.contains("&#35;"),
+            "# should become &#35;, got: {:?}", escaped);
     }
 }

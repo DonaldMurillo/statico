@@ -75,18 +75,29 @@ pub fn latest_version() -> Result<String, String> {
 
 /// Compare two semver-like version strings.
 /// Returns true if `current` is older than `latest`.
+///
+/// Handles pre-release suffixes by comparing them lexicographically
+/// after the numeric parts (e.g., "0.1.0-beta" < "0.1.0").
 pub fn is_newer(current: &str, latest: &str) -> bool {
-    let parse = |v: &str| -> Vec<u32> {
-        v.trim()
+    let parse = |v: &str| -> (Vec<u32>, Option<String>) {
+        let v = v.trim();
+        // Split off any pre-release suffix (first '-' after digits)
+        let (num_part, pre) = if let Some(idx) = v.find('-') {
+            (&v[..idx], Some(v[idx + 1..].to_string()))
+        } else {
+            (v, None)
+        };
+        let nums: Vec<u32> = num_part
             .split('.')
             .filter_map(|p| p.parse().ok())
-            .collect::<Vec<_>>()
+            .collect();
+        (nums, pre)
     };
-    let cur = parse(current);
-    let lat = parse(latest);
-    for i in 0..lat.len().max(cur.len()) {
-        let c = cur.get(i).unwrap_or(&0);
-        let l = lat.get(i).unwrap_or(&0);
+    let (cur_nums, cur_pre) = parse(current);
+    let (lat_nums, lat_pre) = parse(latest);
+    for i in 0..lat_nums.len().max(cur_nums.len()) {
+        let c = cur_nums.get(i).unwrap_or(&0);
+        let l = lat_nums.get(i).unwrap_or(&0);
         if l > c {
             return true;
         }
@@ -94,7 +105,14 @@ pub fn is_newer(current: &str, latest: &str) -> bool {
             return false;
         }
     }
-    false
+    // Numeric parts are equal — pre-release versions are older than release.
+    // "0.1.0-beta" < "0.1.0" because "0.1.0" has no pre-release tag.
+    match (cur_pre, lat_pre) {
+        (Some(_), None) => true,  // current has pre-release, latest doesn't → newer exists
+        (None, Some(_)) => false, // current is release, latest is pre-release → not newer
+        (Some(a), Some(b)) => a < b, // both pre-release, compare lexicographically
+        (None, None) => false,      // both are equal release versions
+    }
 }
 
 /// Detect the current platform triple for download.
@@ -472,5 +490,26 @@ mod tests {
         // find_binary should reject the symlink
         let result = find_binary(tmp.path());
         assert!(result.is_err(), "find_binary should reject symlink, got {:?}", result);
+    }
+
+    // ── V6-5: is_newer must distinguish pre-release from release versions ──
+    #[test]
+    fn sec_v6_5_is_newer_distinguishes_prerelease() {
+        // Pre-release versions should be considered older than the release
+        assert!(is_newer("0.1.0-beta", "0.1.0"),
+            "0.1.0-beta should be older than 0.1.0");
+        assert!(is_newer("0.1.0-alpha", "0.1.0"),
+            "0.1.0-alpha should be older than 0.1.0");
+        assert!(is_newer("1.0.0-rc.1", "1.0.0"),
+            "1.0.0-rc.1 should be older than 1.0.0");
+        // Release is NOT older than pre-release
+        assert!(!is_newer("0.1.0", "0.1.0-beta"),
+            "0.1.0 should NOT be older than 0.1.0-beta");
+        // Both pre-release: lexicographic comparison
+        assert!(is_newer("0.1.0-alpha", "0.1.0-beta"),
+            "0.1.0-alpha should be older than 0.1.0-beta");
+        // Same pre-release: not newer
+        assert!(!is_newer("0.1.0-beta", "0.1.0-beta"),
+            "same pre-release should not be newer");
     }
 }

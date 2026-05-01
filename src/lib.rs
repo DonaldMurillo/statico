@@ -117,12 +117,34 @@ pub fn strip_ansi(s: &str) -> String {
     let mut chars = s.chars().peekable();
     while let Some(c) = chars.next() {
         if c == '\x1b' {
-            // Skip ANSI escape sequence: ESC [ ... (final byte 0x40-0x7E)
-            if chars.peek() == Some(&'[') {
-                chars.next(); // consume '['
-                while let Some(&next) = chars.peek() {
+            match chars.peek() {
+                // CSI sequence: ESC [ ... (final byte 0x40-0x7E)
+                Some('[') => {
+                    chars.next(); // consume '['
+                    while let Some(&next) = chars.peek() {
+                        chars.next();
+                        if next >= '\x40' && next <= '\x7e' { break; }
+                    }
+                }
+                // OSC sequence: ESC ] ... (terminated by BEL/0x07 or ST/ESC\)
+                Some(']') => {
+                    chars.next(); // consume ']'
+                    while let Some(&next) = chars.peek() {
+                        chars.next();
+                        if next == '\x07' { break; } // BEL terminator
+                        if next == '\x1b' {
+                            // ST is ESC backslash
+                            if chars.peek() == Some(&'\\') {
+                                chars.next();
+                                break;
+                            }
+                        }
+                    }
+                }
+                // Other two-character ESC sequences (ESC c, ESC 7, etc.)
+                _ => {
+                    // Consume the single following character
                     chars.next();
-                    if next >= '\x40' && next <= '\x7e' { break; }
                 }
             }
             continue;
@@ -181,5 +203,33 @@ mod strip_ansi_tests {
     #[test]
     fn strip_ansi_preserves_newlines() {
         assert_eq!(strip_ansi("hello\nworld"), "hello\nworld");
+    }
+
+    // ── V6-6: strip_ansi must handle OSC sequences ──
+    #[test]
+    fn sec_v6_6_strip_ansi_handles_osc_sequences() {
+        // OSC sequence: ESC ] 0 ; title BEL — sets terminal title
+        let evil = "\x1b]0;evil-title\x07visible";
+        let clean = strip_ansi(evil);
+        assert_eq!(clean, "visible",
+            "OSC sequence should be fully stripped, got: {:?}", clean);
+    }
+
+    #[test]
+    fn sec_v6_6_strip_ansi_handles_osc_st_terminator() {
+        // OSC sequence with ST terminator: ESC ] 0 ; title ESC \
+        let evil = "\x1b]0;evil-title\x1b\\visible";
+        let clean = strip_ansi(evil);
+        assert_eq!(clean, "visible",
+            "OSC sequence with ST terminator should be fully stripped, got: {:?}", clean);
+    }
+
+    #[test]
+    fn sec_v6_6_strip_ansi_handles_two_char_esc() {
+        // Two-character ESC sequence: ESC c (terminal reset)
+        let evil = "\x1bcremaining";
+        let clean = strip_ansi(evil);
+        assert_eq!(clean, "remaining",
+            "two-char ESC sequence should be fully stripped, got: {:?}", clean);
     }
 }
