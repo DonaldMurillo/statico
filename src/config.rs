@@ -305,4 +305,40 @@ override = true
         assert!(c.plugin[0].enabled);
         assert!(c.plugin[1].r#override);
     }
+
+    // ── Security tests ──────────────────────────────────────────────────
+
+    #[test]
+    fn sec_max_file_size_capped_at_50mb() {
+        let dir = make_temp_dir("cap");
+        std::fs::write(
+            dir.join(".statico.toml"),
+            r#"max_file_size = 999999999999"#,
+        )
+        .unwrap();
+        let c = StaticoConfig::load(&dir);
+        assert_eq!(c.max_file_size, MAX_ALLOWED_FILE_SIZE,
+            "max_file_size should be clamped to {}, got {}", MAX_ALLOWED_FILE_SIZE, c.max_file_size);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn sec_max_file_size_normal_values_pass() {
+        let dir = make_temp_dir("normal");
+        std::fs::write(
+            dir.join(".statico.toml"),
+            r#"max_file_size = 500000"#,
+        )
+        .unwrap();
+        let c = StaticoConfig::load(&dir);
+        assert_eq!(c.max_file_size, 500_000);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn sec_max_file_size_default_is_1mb() {
+        let c = StaticoConfig::default();
+        assert_eq!(c.max_file_size, 1_000_000);
+        assert!(c.max_file_size <= MAX_ALLOWED_FILE_SIZE);
+    }
 }

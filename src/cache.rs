@@ -204,4 +204,35 @@ mod tests {
         }
         let _ = fs::remove_dir_all(&dir);
     }
+
+    // ── Security tests ──────────────────────────────────────────────────
+
+    #[test]
+    fn sec_cache_atomic_write_no_partial_file() {
+        // After save(), the cache file should exist and be valid JSON.
+        // No .json.tmp file should be left behind.
+        let dir = std::env::temp_dir().join("statico_sec_cache_atomic2");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let cache_dir = dir.join(".statico").join("cache");
+        {
+            let mut cache = IncrementalCache::new(&dir);
+            cache.set("src/a.ts", "hash", CachedFileData {
+                exports: vec!["foo".into()],
+                loc: 1, total_lines: 1, functions: 0,
+                classes: 0, complexity: 0, max_nesting_depth: 0,
+            });
+            cache.save();
+        }
+        // The main cache file should exist and be valid
+        let index_path = cache_dir.join("index.json");
+        assert!(index_path.exists(), "index.json should exist after save at {:?}", index_path);
+        let content = fs::read_to_string(&index_path).unwrap();
+        assert!(serde_json::from_str::<serde_json::Value>(&content).is_ok(),
+            "index.json should be valid JSON");
+        // No temp file should be left
+        assert!(!cache_dir.join("index.json.tmp").exists(),
+            "index.json.tmp should not exist after atomic save");
+        let _ = fs::remove_dir_all(&dir);
+    }
 }

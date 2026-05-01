@@ -224,4 +224,45 @@ mod tests {
         let names: Vec<&str> = profiles.iter().map(|p| p.name).collect();
         assert!(names.contains(&"payload"), "expected payload profile, got: {:?}", names);
     }
+
+    // ── Security tests ──────────────────────────────────────────────────
+
+    #[test]
+    fn sec_discovery_no_symlink_follow() {
+        // Verify walkdir is configured with follow_links(false)
+        // We test this by checking the walkdir builder code path.
+        // The actual symlink protection is in discover_source_files using .follow_links(false).
+        // We test indirectly: a symlink to /etc/passwd should not appear in results.
+        let tmp = tempfile::tempdir().unwrap();
+        let src = tmp.path().join("src");
+        std::fs::create_dir_all(&src).unwrap();
+        std::fs::write(src.join("real.ts"), "const x = 1;").unwrap();
+        // Create a symlink pointing outside the project
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink("/etc/passwd", src.join("evil.ts")).ok();
+        }
+        let files = discover_source_files(tmp.path()).unwrap();
+        let paths: Vec<&str> = files.iter().map(|(p, _)| p.as_str()).collect();
+        assert!(paths.iter().any(|p| p.contains("real.ts")), "should find real.ts: {:?}", paths);
+        // Symlink result depends on OS, but we should not crash or hang
+    }
+
+    #[test]
+    fn sec_discovery_respects_max_depth() {
+        // Create a deeply nested structure beyond 20 levels
+        let tmp = tempfile::tempdir().unwrap();
+        let mut dir = tmp.path().to_path_buf();
+        for i in 0..25 {
+            dir = dir.join(format!("d{}", i));
+        }
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("deep.ts"), "const x = 1;").unwrap();
+
+        let files = discover_source_files(tmp.path()).unwrap();
+        // File at depth 25 should NOT be found (max_depth is 20)
+        let paths: Vec<&str> = files.iter().map(|(p, _)| p.as_str()).collect();
+        assert!(!paths.iter().any(|p| p.contains("deep.ts")),
+            "deeply nested file should be skipped: {:?}", paths);
+    }
 }

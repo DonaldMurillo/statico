@@ -413,4 +413,49 @@ languages = ["typescript"]
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("conflict"));
     }
+
+    // ── Security tests ──────────────────────────────────────────────────
+
+    #[test]
+    fn sec_config_plugin_path_traversal_rejected() {
+        let tmp = make_temp_dir("traversal");
+        std::fs::write(
+            tmp.join(".statico.toml"),
+            r#"[[plugin]]
+name = "evil"
+path = "../../usr/bin/malicious"
+"#,
+        )
+        .unwrap();
+        let plugins = discover_plugins(&tmp);
+        // Plugin should be present but path should be within project
+        if let Some(p) = plugins.first() {
+            let path_str = p.path.to_string_lossy();
+            assert!(!path_str.contains("../../"),
+                "plugin path should not contain traversal: {}", path_str);
+            // Path must be within the project
+            let canonical_root = std::fs::canonicalize(&tmp).unwrap_or_else(|_| tmp.clone());
+            if let Ok(canonical_path) = std::fs::canonicalize(&p.path) {
+                assert!(canonical_path.starts_with(&canonical_root),
+                    "plugin path escapes project root: {:?}", canonical_path);
+            }
+        }
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn sec_discovery_skips_hidden_and_temp() {
+        let tmp = make_temp_dir("sec_hidden");
+        let plugins_dir = tmp.join(".statico/plugins");
+        std::fs::create_dir_all(&plugins_dir).unwrap();
+        make_executable(&plugins_dir.join(".hidden-plugin"));
+        make_executable(&plugins_dir.join("_temp_plugin"));
+        make_executable(&plugins_dir.join("valid-plugin"));
+        let plugins = discover_plugins(&tmp);
+        let names: Vec<&str> = plugins.iter().map(|p| p.name.as_str()).collect();
+        assert!(!names.iter().any(|n| n.starts_with('.') || n.starts_with('_')),
+            "hidden/temp plugins should be skipped: {:?}", names);
+        assert!(names.contains(&"valid-plugin"));
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
 }

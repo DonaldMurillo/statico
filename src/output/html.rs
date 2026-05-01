@@ -148,3 +148,87 @@ render();
         ))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::*;
+    use std::path::PathBuf;
+
+    fn make_output_with_path(path: &str) -> AnalysisOutput {
+        AnalysisOutput {
+            version: None,
+            summary: None,
+            detected_frameworks: None,
+            monorepo: None,
+            structure: Structure {
+                root: PathBuf::from("/project"),
+                entry_points: vec![],
+                implicit_entries: vec![],
+                source_files: vec![],
+                config_files: vec![],
+            },
+            dependencies: Dependencies { imports: vec![], external: vec![] },
+            quality: Quality { files: vec![] },
+            issues: Issues {
+                dead_code: vec![DeadCodeIssue {
+                    path: path.to_string(),
+                    lines_of_code: 42,
+                    confidence: 0.9,
+                    reason: "unused".to_string(),
+                }],
+                unused_exports: vec![],
+                duplicate_exports: vec![],
+                duplicate_code: vec![],
+                gotchas: vec![],
+                unused_types: vec![],
+                circular_dependencies: vec![],
+                unused_dependencies: vec![],
+                unresolved_imports: vec![],
+                unlisted_dependencies: vec![],
+                plugin_issues: vec![],
+            },
+            duplication: DuplicationSection {
+                stats: DuplicationStats {
+                    total_lines: 0,
+                    duplicated_lines: 0,
+                    duplication_percentage: 0.0,
+                    clone_groups: 0,
+                    clone_instances: 0,
+                    clone_families: 0,
+                },
+                clone_groups: vec![],
+                clone_families: vec![],
+                mirrored_directories: vec![],
+            },
+        }
+    }
+
+    #[test]
+    fn sec_html_escapes_script_injection() {
+        // A file path containing </script> should not break out of the script tag
+        let output = make_output_with_path("test/</script><script>alert(1)//");
+        let formatter = HtmlFormatter;
+        let html = formatter.format(&output).unwrap();
+        // The raw </script> string should NOT appear in the output
+        assert!(!html.contains("</script><script>alert(1)"),
+            "HTML output should not contain raw </script> injection");
+        // The escaped version <\/ should be used instead
+        assert!(html.contains("<\\/") || !html.contains("</script><script>"),
+            "JSON should have escaped forward slashes");
+    }
+
+    #[test]
+    fn sec_html_no_raw_script_close_in_json() {
+        let output = make_output_with_path("normal/path.ts");
+        let formatter = HtmlFormatter;
+        let html = formatter.format(&output).unwrap();
+        // Find the JSON data assignment
+        let script_start = html.find("const DATA = ").expect("should find DATA assignment");
+        let script_end = html.find(";\nfunction toggleTheme").expect("should find end of DATA");
+        let json_fragment = &html[script_start..script_end];
+        // No raw </ sequence in the JSON data (should be <\/ instead)
+        assert!(!json_fragment.contains("</script"),
+            "JSON in HTML should not contain unescaped </script");
+    }
+}

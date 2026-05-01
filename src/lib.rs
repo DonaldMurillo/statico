@@ -61,3 +61,48 @@ pub mod resolution;
 pub mod tui;
 pub mod types;
 pub mod update;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
+
+    #[test]
+    fn sec_ensure_within_root_allows_child() {
+        let root = Path::new("/project");
+        let child = Path::new("/project/src/index.ts");
+        // These may not exist, so only the lexical path runs
+        assert!(ensure_within_root(child, root).is_ok());
+    }
+
+    #[test]
+    fn sec_ensure_within_root_rejects_parent_traversal() {
+        let root = Path::new("/project");
+        let evil = Path::new("/project/../../../etc/passwd");
+        let result = ensure_within_root(evil, root);
+        assert!(result.is_err(), "should reject parent dir traversal");
+    }
+
+    #[test]
+    fn sec_ensure_within_root_rejects_absolute_escape() {
+        let root = Path::new("/project");
+        let evil = Path::new("/etc/passwd");
+        let result = ensure_within_root(evil, root);
+        assert!(result.is_err(), "should reject absolute path outside root");
+    }
+
+    #[test]
+    fn sec_ensure_within_root_rejects_dotdot_in_middle() {
+        let root = Path::new("/project");
+        let evil = Path::new("/project/src/../../etc/passwd");
+        let result = ensure_within_root(evil, root);
+        assert!(result.is_err(), "should reject ../ in middle");
+    }
+
+    #[test]
+    fn sec_ensure_within_root_allows_valid_subpath() {
+        let root = Path::new("/project");
+        let child = Path::new("/project/.statico/plugins/my-rule/index.ts");
+        assert!(ensure_within_root(child, root).is_ok());
+    }
+}
