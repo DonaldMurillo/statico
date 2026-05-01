@@ -1087,69 +1087,8 @@ When the user asks about code quality:
 
 // ---------------------------------------------------------------------------
 
-/// Shell-escape a string for safe embedding in bash/zsh/fish PATH assignment.
-/// Escapes characters that would be interpreted by the shell: `$`, " `", `"`, `\\`, `` ` ``.
 fn shell_escape(s: &str) -> String {
-    s.replace('\\', "\\\\")
-     .replace('"', "\\\"")
-     .replace('$', "\\$")
-     .replace('`', "\\`")
-}
-
-#[cfg(test)]
-mod shell_escape_tests {
-    use super::*;
-
-    #[test]
-    fn sec_shell_escape_dollar() {
-        let result = shell_escape("/path/$HOME/bin");
-        assert_eq!(result, "/path/\\$HOME/bin",
-            "dollar sign should be escaped: got {}", result);
-    }
-
-    #[test]
-    fn sec_shell_escape_backtick() {
-        let result = shell_escape("/path/`whoami`/bin");
-        assert_eq!(result, "/path/\\`whoami\\`/bin",
-            "backtick should be escaped: got {}", result);
-    }
-
-    #[test]
-    fn sec_shell_escape_double_quote() {
-        let result = shell_escape("/path/\"evil\"/bin");
-        assert_eq!(result, "/path/\\\"evil\\\"/bin",
-            "double quote should be escaped: got {}", result);
-    }
-
-    #[test]
-    fn sec_shell_escape_backslash() {
-        let result = shell_escape("/path/\\evil/bin");
-        assert_eq!(result, "/path/\\\\evil/bin",
-            "backslash should be escaped: got {}", result);
-    }
-
-    #[test]
-    fn sec_shell_escape_normal_path() {
-        let result = shell_escape("/usr/local/bin");
-        assert_eq!(result, "/usr/local/bin",
-            "normal path should be unchanged: got {}", result);
-    }
-
-    // ── V6-6: source path in rc snippet must be shell-escaped ──
-    #[test]
-    fn sec_shell_source_path_escaped() {
-        // If the completion file path contains shell-special chars,
-        // the `source` line in the rc snippet must be escaped.
-        // Verify shell_escape handles the dangerous characters.
-        let path_with_dollar = "/home/$USER/.statico/completions/statico.bash";
-        let escaped = shell_escape(path_with_dollar);
-        assert!(escaped.contains("\\$"),
-            "dollar in path should be escaped, got: {}", escaped);
-        let path_with_backtick = "/home/`whoami`/.statico/completions/statico.bash";
-        let escaped2 = shell_escape(path_with_backtick);
-        assert!(escaped2.contains("\\`"),
-            "backtick in path should be escaped, got: {}", escaped2);
-    }
+    statico::shell::shell_escape(s)
 }
 
 fn run_doctor() {
@@ -1715,7 +1654,7 @@ fn run_plugin_build(name: Option<&str>, path: &str) {
     for plugin in &targets {
         match plugin.kind {
             statico::plugin::discovery::PluginKind::Rust => {
-                print!("Building Rust plugin '{}'... ", statico::strip_ansi(&plugin.name));
+                print!("Building Rust plugin '{}'... ", statico::strip_ansi::strip_ansi(&plugin.name));
                 let output = std::process::Command::new("cargo")
                     .args(["build", "--release"])
                     .current_dir(&plugin.path)
@@ -1730,14 +1669,14 @@ fn run_plugin_build(name: Option<&str>, path: &str) {
                 }
             }
             statico::plugin::discovery::PluginKind::TypeScript => {
-                print!("TypeScript plugin '{}' (no build needed with Bun)... ", statico::strip_ansi(&plugin.name));
+                print!("TypeScript plugin '{}' (no build needed with Bun)... ", statico::strip_ansi::strip_ansi(&plugin.name));
                 println!("ok");
             }
             statico::plugin::discovery::PluginKind::Executable => {
-                println!("Skipping executable plugin '{}' (no build step)", statico::strip_ansi(&plugin.name));
+                println!("Skipping executable plugin '{}' (no build step)", statico::strip_ansi::strip_ansi(&plugin.name));
             }
             statico::plugin::discovery::PluginKind::Python => {
-                print!("Python plugin '{}' (no build needed)... ", statico::strip_ansi(&plugin.name));
+                print!("Python plugin '{}' (no build needed)... ", statico::strip_ansi::strip_ansi(&plugin.name));
                 println!("ok");
             }
         }
@@ -1818,7 +1757,7 @@ fn run_plugin_run(name: &str, file: &str, path: &str) {
     println!("\nResults:");
     println!("  Issues: {}", result.issues.len());
     for issue in &result.issues {
-        println!("    [{}] {} ({}:{})", issue.severity.as_ref(), statico::strip_ansi(&issue.message), statico::strip_ansi(&issue.file), issue.line);
+        println!("    [{}] {} ({}:{})", issue.severity.as_ref(), statico::strip_ansi::strip_ansi(&issue.message), statico::strip_ansi::strip_ansi(&issue.file), issue.line);
     }
     println!("  Exports: {}", result.exports.len());
     for exp in &result.exports {

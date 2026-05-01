@@ -11,6 +11,7 @@ pub mod html;
 pub mod json_enriched;
 pub mod markdown;
 pub mod mermaid;
+pub mod mermaid_escape;
 pub mod pr_comment;
 pub mod sarif;
 

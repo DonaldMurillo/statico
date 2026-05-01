@@ -60,16 +60,7 @@ pub fn collect_nodes<'a>(root: Node<'a>, kinds: &[&str]) -> Vec<Node<'a>> {
 
 /// Remove surrounding quotes from a string literal.
 pub fn unquote(s: &str) -> String {
-    let s = s.trim();
-    if s.len() >= 2
-        && ((s.starts_with('"') && s.ends_with('"'))
-            || (s.starts_with('\'') && s.ends_with('\''))
-            || (s.starts_with('`') && s.ends_with('`')))
-    {
-        s[1..s.len() - 1].to_string()
-    } else {
-        s.to_string()
-    }
+    crate::parse::unquote::unquote(s)
 }
 
 pub mod blocks;
@@ -79,6 +70,7 @@ pub mod exports;
 pub mod imports;
 pub mod metrics;
 pub mod rust;
+pub mod unquote;
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -87,14 +79,6 @@ pub mod rust;
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_unquote() {
-        assert_eq!(unquote("'./foo'"), "./foo");
-        assert_eq!(unquote("\"bar\""), "bar");
-        assert_eq!(unquote("`baz`"), "baz");
-        assert_eq!(unquote("naked"), "naked");
-    }
 
     #[test]
     fn test_parse_simple_typescript() {
@@ -112,28 +96,12 @@ mod tests {
         assert!(result.has_errors);
     }
 
-    // ── V7-1: unquote must not panic on single-char quoted strings ──
-    #[test]
-    fn sec_parse_unquote_no_panic_short_string() {
-        // A single-character string like `"` satisfies starts_with and ends_with
-        // but slicing [1..0] would panic. Verify it returns the string as-is.
-        assert_eq!(unquote("\""), "\"");
-        assert_eq!(unquote("'"), "'");
-        assert_eq!(unquote("`"), "`");
-        // Empty string should also be safe
-        assert_eq!(unquote(""), "");
-    }
-
     // ── V7-2: Parser mutex recovery — test that poisoned mutex doesn't panic ──
     #[test]
     fn sec_parse_recovers_from_poisoned_mutex() {
         let parser = AstParser::new().expect("parser init");
-        // Parse normally first
         let result = parser.parse("const x = 1;", false);
         assert!(result.is_some());
-        // Simulate mutex poisoning by panicking inside a lock, then recovering.
-        // We can't easily force a poison in a single-threaded test, but we can
-        // verify the lock() call succeeds repeatedly (it uses unwrap_or_else).
         let result2 = parser.parse("const y = 2;", false);
         assert!(result2.is_some(), "second parse should succeed");
     }
