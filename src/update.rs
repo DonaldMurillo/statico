@@ -10,6 +10,10 @@ use std::path::{Component, Path, PathBuf};
 /// GitHub repo for releases.
 const GITHUB_REPO: &str = "domvess/statico";
 
+/// Maximum download size for self-update archive (100 MB).
+/// Prevents disk-fill DoS from a malicious update server.
+pub(crate) const MAX_DOWNLOAD_SIZE: u64 = 100 * 1024 * 1024;
+
 /// A GitHub release.
 #[derive(serde::Deserialize)]
 struct Release {
@@ -26,15 +30,32 @@ struct Asset {
 }
 
 /// Base URL for the update API. Defaults to GitHub; overridden in tests.
+/// Only used in debug builds or when explicitly enabled.
 pub fn api_base_url() -> String {
-    std::env::var("STATICO_UPDATE_API_URL")
-        .unwrap_or_else(|_| format!("https://api.github.com/repos/{}", GITHUB_REPO))
+    // V-10: Only allow env var override in debug builds to prevent supply chain attacks
+    #[cfg(debug_assertions)]
+    {
+        std::env::var("STATICO_UPDATE_API_URL")
+            .unwrap_or_else(|_| format!("https://api.github.com/repos/{}", GITHUB_REPO))
+    }
+    #[cfg(not(debug_assertions))]
+    {
+        format!("https://api.github.com/repos/{}", GITHUB_REPO)
+    }
 }
 
 /// Base URL for download. Defaults to GitHub; overridden in tests.
 pub fn download_base_url() -> String {
-    std::env::var("STATICO_UPDATE_DL_URL")
-        .unwrap_or_else(|_| format!("https://github.com/{}", GITHUB_REPO))
+    // V-10: Only allow env var override in debug builds
+    #[cfg(debug_assertions)]
+    {
+        std::env::var("STATICO_UPDATE_DL_URL")
+            .unwrap_or_else(|_| format!("https://github.com/{}", GITHUB_REPO))
+    }
+    #[cfg(not(debug_assertions))]
+    {
+        format!("https://github.com/{}", GITHUB_REPO)
+    }
 }
 
 /// Check GitHub for the latest release version.
@@ -137,8 +158,13 @@ pub fn run_update(dry_run: bool) -> Result<String, String> {
     {
         let mut file = fs::File::create(&archive_path).map_err(|e| format!("failed to create file: {}", e))?;
         let mut reader = resp.into_parts().1.into_reader();
-        io::copy(&mut reader, &mut file)
+        // V-11: Limit download size to prevent disk-fill DoS
+        let mut limited = io::Read::take(&mut reader, MAX_DOWNLOAD_SIZE);
+        let bytes = io::copy(&mut limited, &mut file)
             .map_err(|e| format!("download write failed: {}", e))?;
+        if bytes >= MAX_DOWNLOAD_SIZE {
+            return Err("download exceeded maximum size limit (100 MB)".into());
+        }
     }
 
     // Extract the binary from the tarball.
@@ -203,6 +229,8 @@ fn extract_tar_gz(archive: &Path, dest: &Path) -> Result<(), String> {
 }
 
 /// Find the statico binary in extracted files.
+/// V-12: Rejects symlinks to prevent a malicious tarball from pointing
+/// `statico` at an arbitrary target.
 fn find_binary(dir: &Path) -> Result<PathBuf, String> {
     for entry in fs::read_dir(dir).map_err(|e| format!("failed to read dir: {}", e))? {
         let entry = entry.map_err(|e| format!("failed to read entry: {}", e))?;
@@ -212,6 +240,10 @@ fn find_binary(dir: &Path) -> Result<PathBuf, String> {
                 return Ok(found);
             }
         } else if path.file_name().is_some_and(|n| n == "statico") {
+            // V-12: Reject symlinks — the binary must be a regular file
+            if path.is_symlink() {
+                return Err("statico binary in archive is a symlink (rejected for security)".into());
+            }
             return Ok(path);
         }
     }
@@ -228,18 +260,30 @@ fn replace_binary(current: &Path, new: &Path) -> Result<(), String> {
             .map_err(|e| format!("failed to set permissions: {}", e))?;
     }
 
-    // On Unix, we can't overwrite a running binary directly.
-    // Instead: rename current to .old, copy new to current location, delete .old.
-    let backup = current.with_extension("old");
-    fs::rename(current, &backup).map_err(|e| format!("failed to backup current binary: {}", e))?;
+    // V-7: Atomic replacement — copy new binary next to current, then rename.
+    // This avoids the TOCTOU window where the binary doesn't exist.
+    let staging = current.with_extension("new");
 
-    if let Err(e) = fs::copy(new, current) {
-        // Restore backup on failure.
-        let _ = fs::rename(&backup, current);
+    if let Err(e) = fs::copy(new, &staging) {
+        let _ = fs::remove_file(&staging);
+        return Err(format!("failed to stage new binary: {}", e));
+    }
+
+    // Make the staged binary executable too
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = fs::set_permissions(&staging, fs::Permissions::from_mode(0o755));
+    }
+
+    // Atomic rename (on the same filesystem)
+    if let Err(e) = fs::rename(&staging, current) {
+        let _ = fs::remove_file(&staging);
         return Err(format!("failed to install new binary: {}", e));
     }
 
-    let _ = fs::remove_file(&backup);
+    // Clean up any previous .old backup if it exists
+    let _ = fs::remove_file(current.with_extension("old"));
     Ok(())
 }
 
@@ -401,5 +445,32 @@ mod tests {
         // The real protection is in the extract loop checking for ParentDir components.
         // We verify ensure_within_root separately (in lib.rs tests).
         // extract_tar_gz checks each entry for path traversal components.
+    }
+
+    // ── V-11 RED: download size must be limited ──
+
+    #[test]
+    fn sec_v11_download_size_limit_exists() {
+        // MAX_DOWNLOAD_SIZE constant must be defined and reasonable
+        assert!(MAX_DOWNLOAD_SIZE > 0, "MAX_DOWNLOAD_SIZE should be positive");
+        assert!(MAX_DOWNLOAD_SIZE <= 200 * 1024 * 1024,
+            "MAX_DOWNLOAD_SIZE should be capped at 200MB, got {} bytes",
+            MAX_DOWNLOAD_SIZE);
+    }
+
+    // ── V-12 RED: find_binary must reject symlinks ──
+
+    #[test]
+    fn sec_v12_find_binary_rejects_symlink() {
+        let tmp = tempfile::tempdir().unwrap();
+        // Create a real file and a symlink pointing to it
+        let real = tmp.path().join("real_statico");
+        std::fs::write(&real, b"#!/bin/sh\necho evil").unwrap();
+        let link = tmp.path().join("statico");
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(&real, &link).unwrap();
+        // find_binary should reject the symlink
+        let result = find_binary(tmp.path());
+        assert!(result.is_err(), "find_binary should reject symlink, got {:?}", result);
     }
 }

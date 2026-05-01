@@ -298,7 +298,9 @@ where
 
 /// Return a short display name by stripping the common prefix.
 fn display_name(path: &str, prefix: &str) -> String {
-    if prefix.is_empty() { path.to_string() } else { path.strip_prefix(prefix).unwrap_or(path).to_string() }
+    let raw = if prefix.is_empty() { path.to_string() } else { path.strip_prefix(prefix).unwrap_or(path).to_string() };
+    // Escape characters that could break Mermaid node labels
+    raw.replace('"', "&quot;").replace(']', "&#93;").replace('[', "&#91;")
 }
 
 /// Group files into directory buckets for Mermaid subgraphs.
@@ -350,5 +352,61 @@ mod tests {
         let groups = group_by_directory(&files, "src/");
         assert_eq!(groups.get("").unwrap().len(), 2); // main.rs, utils.rs
         assert_eq!(groups.get("lib").unwrap().len(), 2); // lib/a.rs, lib/b.rs
+    }
+
+    #[test]
+    fn sec_v5_mermaid_escapes_quotes_in_labels() {
+        // File paths with quotes or "] chars could break mermaid syntax
+        use crate::types::*;
+        use std::path::PathBuf;
+        let evil_path = "src/evil\"] --> evilNode[\"evil";
+        let output = AnalysisOutput {
+            version: None,
+            summary: None,
+            detected_frameworks: None,
+            monorepo: None,
+            structure: Structure {
+                root: PathBuf::from("/project"),
+                entry_points: vec![evil_path.to_string()],
+                implicit_entries: vec![],
+                source_files: vec![],
+                config_files: vec![],
+            },
+            dependencies: Dependencies {
+                imports: vec![FileImports {
+                    source: evil_path.to_string(),
+                    targets: vec!["src/other.ts".to_string()],
+                }],
+                external: vec![],
+            },
+            quality: Quality { files: vec![] },
+            issues: Issues {
+                dead_code: vec![],
+                unused_exports: vec![],
+                duplicate_exports: vec![],
+                duplicate_code: vec![],
+                gotchas: vec![],
+                unused_types: vec![],
+                circular_dependencies: vec![],
+                unused_dependencies: vec![],
+                unresolved_imports: vec![],
+                unlisted_dependencies: vec![],
+                plugin_issues: vec![],
+            },
+            duplication: DuplicationSection {
+                stats: DuplicationStats {
+                    total_lines: 0, duplicated_lines: 0,
+                    duplication_percentage: 0.0, clone_groups: 0,
+                    clone_instances: 0, clone_families: 0,
+                },
+                clone_groups: vec![], clone_families: vec![],
+                mirrored_directories: vec![],
+            },
+        };
+        let formatter = MermaidFormatter;
+        let result = formatter.format(&output).unwrap();
+        // Raw "] should not appear to close a node label prematurely
+        assert!(!result.contains("evil\"] --> evilNode"),
+            "mermaid should escape quotes/brackets in node labels, got:\n{}", result);
     }
 }

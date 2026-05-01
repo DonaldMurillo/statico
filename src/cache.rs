@@ -133,8 +133,14 @@ pub fn content_hash(content: &str) -> String {
 }
 
 /// Ensure `.statico/` is in the project's .gitignore.
+/// V-8: Refuses to modify .gitignore if it is a symlink (prevents corruption
+/// of linked files).
 pub fn ensure_gitignore(project_root: &Path) {
     let gitignore_path = project_root.join(".gitignore");
+    // V-8: Don't follow symlinks — could point to important system files
+    if gitignore_path.is_symlink() {
+        return;
+    }
     let existing = fs::read_to_string(&gitignore_path).unwrap_or_default();
     if !existing.contains(".statico")
         && let Ok(mut f) = fs::OpenOptions::new().create(true).append(true).open(&gitignore_path) {
@@ -233,6 +239,27 @@ mod tests {
         // No temp file should be left
         assert!(!cache_dir.join("index.json.tmp").exists(),
             "index.json.tmp should not exist after atomic save");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    // ── V-8 RED: ensure_gitignore must not follow symlinks ──
+
+    #[test]
+    fn sec_v8_gitignore_rejects_symlink() {
+        let dir = std::env::temp_dir().join("statico_sec_v8_gitignore");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        // Create a regular file, and a symlink .gitignore pointing to it
+        let target = dir.join("target_file.txt");
+        fs::write(&target, "important contents\n").unwrap();
+        let link = dir.join(".gitignore");
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(&target, &link).unwrap();
+        // ensure_gitignore should NOT modify a symlinked .gitignore
+        ensure_gitignore(&dir);
+        let contents = fs::read_to_string(&target).unwrap();
+        assert!(!contents.contains(".statico"),
+            "ensure_gitignore should not modify a symlinked .gitignore; contents: {}", contents);
         let _ = fs::remove_dir_all(&dir);
     }
 }

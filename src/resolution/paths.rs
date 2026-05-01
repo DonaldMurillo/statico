@@ -7,7 +7,17 @@ use std::path::{Path, PathBuf};
 pub(crate) const SOURCE_EXTENSIONS: &[&str] = &["ts", "tsx", "js", "jsx", "rs"];
 
 /// Resolve a relative import specifier to an actual file path.
+/// Rejects specifiers containing `..` components or absolute paths to prevent
+/// reading files outside the project.
 pub(super) fn resolve_relative(from_dir: &Path, spec: &str) -> Option<PathBuf> {
+    // V-3: Reject path traversal — no `..` components allowed
+    if spec.split(['/', '\\']).any(|c| c == "..") {
+        return None;
+    }
+    // V-3: Reject absolute paths
+    if Path::new(spec).is_absolute() {
+        return None;
+    }
     let candidate = from_dir.join(spec);
     try_extensions(&candidate)
 }
@@ -57,3 +67,35 @@ pub(crate) fn canonicalize(path: &Path) -> PathBuf {
     std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    #[test]
+    fn sec_v3_resolve_relative_rejects_path_traversal() {
+        // resolve_relative should NOT resolve paths outside the project root
+        let dir = PathBuf::from("/project/src");
+        // A malicious import specifier with ../../.. could escape the project
+        let result = resolve_relative(&dir, "../../etc/passwd");
+        // If it resolves, it should be checked against root — but currently
+        // it happily resolves any relative path.
+        // RED: This should return None or be validated
+        if let Some(resolved) = result {
+            // If it resolves at all (file exists), it must stay under root
+            let project_root = PathBuf::from("/project");
+            assert!(resolved.starts_with(&project_root),
+                "resolve_relative should not escape project root, got: {:?}", resolved);
+        }
+        // Better: the function should reject paths with .. components
+        // For now, this test documents the vulnerability
+    }
+
+    #[test]
+    fn sec_v3_resolve_relative_rejects_absolute_spec() {
+        let dir = PathBuf::from("/project/src");
+        let result = resolve_relative(&dir, "/etc/passwd");
+        assert!(result.is_none(),
+            "resolve_relative should not resolve absolute paths outside project, got: {:?}", result);
+    }
+}

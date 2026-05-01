@@ -58,10 +58,10 @@ impl OutputFormatter for MarkdownFormatter {
             for dc in sorted.iter().take(50) {
                 md.push_str(&format!(
                     "| `{}` | {} | {:.0}% | {} |\n",
-                    dc.path,
+                    escape_md_cell(&dc.path),
                     dc.lines_of_code,
                     dc.confidence * 100.0,
-                    dc.reason
+                    escape_md_cell(&dc.reason)
                 ));
             }
             md.push('\n');
@@ -72,7 +72,7 @@ impl OutputFormatter for MarkdownFormatter {
             md.push_str("## Unused Exports (Top 20)\n\n");
             md.push_str("| Export | File |\n|---|---|\n");
             for ue in output.issues.unused_exports.iter().take(20) {
-                md.push_str(&format!("| `{}` | `{}` |\n", ue.name, ue.path));
+                md.push_str(&format!("| `{}` | `{}` |\n", escape_md_cell(&ue.name), escape_md_cell(&ue.path)));
             }
             md.push('\n');
         }
@@ -82,7 +82,7 @@ impl OutputFormatter for MarkdownFormatter {
             md.push_str("## Unused Types (Top 20)\n\n");
             md.push_str("| Type | Kind | File |\n|---|---|---|\n");
             for ut in output.issues.unused_types.iter().take(20) {
-                md.push_str(&format!("| `{}` | {} | `{}` |\n", ut.name, ut.kind, ut.path));
+                md.push_str(&format!("| `{}` | {} | `{}` |\n", escape_md_cell(&ut.name), ut.kind, escape_md_cell(&ut.path)));
             }
             md.push('\n');
         }
@@ -143,4 +143,103 @@ fn health_bar(score: f64) -> String {
     let filled = (score / 5.0).round() as usize;
     let empty = 20 - filled;
     format!("`[{}{}]`", "#".repeat(filled), "-".repeat(empty))
+}
+
+/// Escape special characters for safe embedding in Markdown table cells.
+/// Prevents injection of links, table breaks, and structural elements.
+fn escape_md_cell(s: &str) -> String {
+    s.replace('|', "\\|")
+     .replace('[', "\\[")
+     .replace(']', "\\]")
+     .replace('\n', " ")
+     .replace('\r', " ")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::*;
+    use std::path::PathBuf;
+
+    fn make_output_with_evil_path() -> AnalysisOutput {
+        AnalysisOutput {
+            version: None,
+            summary: None,
+            detected_frameworks: None,
+            monorepo: None,
+            structure: Structure {
+                root: PathBuf::from("/project"),
+                entry_points: vec![],
+                implicit_entries: vec![],
+                source_files: vec![],
+                config_files: vec![],
+            },
+            dependencies: Dependencies { imports: vec![], external: vec![] },
+            quality: Quality { files: vec![] },
+            issues: Issues {
+                dead_code: vec![DeadCodeIssue {
+                    path: "src/evil | [link](https://evil.com) | ".to_string(),
+                    lines_of_code: 42,
+                    confidence: 0.9,
+                    reason: "unused | [inject](https://evil.com)".to_string(),
+                }],
+                unused_exports: vec![UnusedExportIssue {
+                    name: "EvilExport\n\n# Headline".to_string(),
+                    path: "src/x | [evil](https://evil.com)".to_string(),
+                }],
+                duplicate_exports: vec![],
+                duplicate_code: vec![],
+                gotchas: vec![],
+                unused_types: vec![],
+                circular_dependencies: vec![],
+                unused_dependencies: vec![],
+                unresolved_imports: vec![],
+                unlisted_dependencies: vec![],
+                plugin_issues: vec![],
+            },
+            duplication: DuplicationSection {
+                stats: DuplicationStats {
+                    total_lines: 0,
+                    duplicated_lines: 0,
+                    duplication_percentage: 0.0,
+                    clone_groups: 0,
+                    clone_instances: 0,
+                    clone_families: 0,
+                },
+                clone_groups: vec![],
+                clone_families: vec![],
+                mirrored_directories: vec![],
+            },
+        }
+    }
+
+    #[test]
+    fn sec_v4_markdown_escapes_pipe_in_tables() {
+        // Pipe characters in file paths must be escaped to prevent table injection
+        let output = make_output_with_evil_path();
+        let formatter = MarkdownFormatter;
+        let md = formatter.format(&output).unwrap();
+        // Raw | in table cell values would break markdown table formatting
+        assert!(!md.contains("evil | [link]"),
+            "markdown should escape pipe chars in table cells: {}", md);
+    }
+
+    #[test]
+    fn sec_v4_markdown_escapes_markdown_links() {
+        let output = make_output_with_evil_path();
+        let formatter = MarkdownFormatter;
+        let md = formatter.format(&output).unwrap();
+        assert!(!md.contains("[link](https://evil.com)"),
+            "markdown should escape link injection in cells");
+    }
+
+    #[test]
+    fn sec_v4_markdown_escapes_newlines_in_cells() {
+        let output = make_output_with_evil_path();
+        let formatter = MarkdownFormatter;
+        let md = formatter.format(&output).unwrap();
+        // Newlines in table cells break the table structure
+        assert!(!md.contains("EvilExport\n\n# Headline"),
+            "markdown should escape newlines in table cells");
+    }
 }

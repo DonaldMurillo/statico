@@ -295,7 +295,10 @@ fn main() {
             let root = std::path::Path::new(&path);
             let root = match std::fs::canonicalize(root) {
                 Ok(c) => c,
-                Err(_) => root.to_path_buf(),
+                Err(e) => {
+                    eprintln!("error: cannot resolve path '{}': {}", path, e);
+                    process::exit(1);
+                }
             };
             if let Err(e) = statico::tui::run_tui(&root, min_confidence) {
                 eprintln!("error: {}", e);
@@ -1161,7 +1164,10 @@ fn run_plugin_list(path: &str) {
     let root = std::path::Path::new(path);
     let root = match std::fs::canonicalize(root) {
         Ok(c) => c,
-        Err(_) => root.to_path_buf(),
+        Err(e) => {
+            eprintln!("error: cannot resolve path '{}': {}", path, e);
+            std::process::exit(1);
+        }
     };
 
     let plugins = statico::plugin::discovery::discover_plugins(&root);
@@ -1338,7 +1344,10 @@ fn run_plugin_init(name: &str, lang: &str, path: &str) {
     let root = std::path::Path::new(path);
     let root = match std::fs::canonicalize(root) {
         Ok(c) => c,
-        Err(_) => root.to_path_buf(),
+        Err(e) => {
+            eprintln!("error: cannot resolve path '{}': {}", path, e);
+            std::process::exit(1);
+        }
     };
 
     let plugin_dir = root.join(".statico/plugins").join(name);
@@ -1609,7 +1618,10 @@ fn run_plugin_build(name: Option<&str>, path: &str) {
     let root = std::path::Path::new(path);
     let root = match std::fs::canonicalize(root) {
         Ok(c) => c,
-        Err(_) => root.to_path_buf(),
+        Err(e) => {
+            eprintln!("error: cannot resolve path '{}': {}", path, e);
+            std::process::exit(1);
+        }
     };
 
     let plugins = statico::plugin::discovery::discover_plugins(&root);
@@ -1664,7 +1676,10 @@ fn run_plugin_run(name: &str, file: &str, path: &str) {
     let root = std::path::Path::new(path);
     let root = match std::fs::canonicalize(root) {
         Ok(c) => c,
-        Err(_) => root.to_path_buf(),
+        Err(e) => {
+            eprintln!("error: cannot resolve path '{}': {}", path, e);
+            std::process::exit(1);
+        }
     };
 
     let source_path = root.join(file);
@@ -1749,7 +1764,10 @@ fn run_plugin_doctor(path: &str) {
     let root = std::path::Path::new(path);
     let root = match std::fs::canonicalize(root) {
         Ok(c) => c,
-        Err(_) => root.to_path_buf(),
+        Err(e) => {
+            eprintln!("error: cannot resolve path '{}': {}", path, e);
+            std::process::exit(1);
+        }
     };
 
     println!("statico Plugin Doctor");
