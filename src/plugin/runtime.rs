@@ -97,6 +97,8 @@ fn download_bun() -> Result<PathBuf, String> {
     eprintln!("Downloading Bun runtime to {}...", target_dir.display());
 
     // Download to a temp file using ureq (no shell-out, no injection risk).
+    // Size-limited to 200 MB to prevent disk-fill DoS.
+    const MAX_BUN_DOWNLOAD: u64 = 200 * 1024 * 1024;
     let tmp_zip = target_dir.join("bun-download.zip");
     let agent = ureq::Agent::new_with_defaults();
     let resp = agent
@@ -109,8 +111,13 @@ fn download_bun() -> Result<PathBuf, String> {
         let mut file = std::fs::File::create(&tmp_zip)
             .map_err(|e| format!("Failed to create temp file: {}", e))?;
         let mut reader = resp.into_parts().1.into_reader();
-        std::io::copy(&mut reader, &mut file)
+        let mut limited = std::io::Read::take(&mut reader, MAX_BUN_DOWNLOAD);
+        let bytes = std::io::copy(&mut limited, &mut file)
             .map_err(|e| format!("Failed to write Bun download: {}", e))?;
+        if bytes >= MAX_BUN_DOWNLOAD {
+            let _ = std::fs::remove_file(&tmp_zip);
+            return Err("Bun download exceeded maximum size (200 MB)".to_string());
+        }
     }
 
     // Extract (unzip moves the bun binary out).

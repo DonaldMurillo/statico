@@ -9,6 +9,15 @@ use crate::types::AnalysisOutput;
 /// GitHub-flavored Markdown PR comment formatter (`--format pr-comment`).
 pub struct PrCommentFormatter;
 
+/// Escape special characters for safe embedding in Markdown table cells.
+fn escape_md_cell(s: &str) -> String {
+    s.replace('|', "\\|")
+     .replace('[', "\\[")
+     .replace(']', "\\]")
+     .replace('\n', " ")
+     .replace('\r', " ")
+}
+
 impl OutputFormatter for PrCommentFormatter {
     fn format(&self, output: &AnalysisOutput) -> Result<String, String> {
         let summary = compute_summary(output);
@@ -79,10 +88,10 @@ impl OutputFormatter for PrCommentFormatter {
                 md.push_str(&format!(
                     "| {} | {} | `{}` | {} | {} |\n",
                     i + 1,
-                    issue.category,
-                    issue.file,
-                    issue.impact,
-                    issue.details
+                    escape_md_cell(&issue.category),
+                    escape_md_cell(&issue.file),
+                    escape_md_cell(&issue.impact),
+                    escape_md_cell(&issue.details)
                 ));
             }
             md.push('\n');
@@ -92,8 +101,8 @@ impl OutputFormatter for PrCommentFormatter {
         if !output.issues.circular_dependencies.is_empty() {
             md.push_str("### 🔄 Circular Dependencies\n\n");
             for cd in &output.issues.circular_dependencies {
-                let chain: Vec<String> = cd.files.iter().map(|f| format!("`{}`", f)).collect();
-                md.push_str(&format!("- {} → `{}`\n", chain.join(" → "), cd.files[0]));
+                let chain: Vec<String> = cd.files.iter().map(|f| format!("`{}`", escape_md_cell(f))).collect();
+                md.push_str(&format!("- {} → `{}`\n", chain.join(" → "), escape_md_cell(&cd.files[0])));
             }
             md.push('\n');
         }
@@ -108,10 +117,10 @@ impl OutputFormatter for PrCommentFormatter {
             for dc in sorted.iter().take(10) {
                 md.push_str(&format!(
                     "| `{}` | {} | {:.0}% | {} |\n",
-                    dc.path,
+                    escape_md_cell(&dc.path),
                     dc.lines_of_code,
                     dc.confidence * 100.0,
-                    dc.reason
+                    escape_md_cell(&dc.reason)
                 ));
             }
             md.push('\n');
@@ -199,4 +208,97 @@ fn count_unused_exports_per_file(output: &AnalysisOutput) -> Vec<(String, usize)
     let mut entries: Vec<(String, usize)> = counts.into_iter().collect();
     entries.sort_by(|a, b| b.1.cmp(&a.1));
     entries
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::*;
+    use std::path::PathBuf;
+
+    fn make_evil_output() -> AnalysisOutput {
+        AnalysisOutput {
+            version: None,
+            summary: None,
+            detected_frameworks: None,
+            monorepo: None,
+            structure: Structure {
+                root: PathBuf::from("/project"),
+                entry_points: vec![],
+                implicit_entries: vec![],
+                source_files: vec![],
+                config_files: vec![],
+            },
+            dependencies: Dependencies { imports: vec![], external: vec![] },
+            quality: Quality { files: vec![] },
+            issues: Issues {
+                dead_code: vec![DeadCodeIssue {
+                    path: "src/evil | [click](https://evil.com) | ".to_string(),
+                    lines_of_code: 100,
+                    confidence: 0.95,
+                    reason: "Not reachable | [inject](https://evil.com)".to_string(),
+                }],
+                unused_exports: vec![UnusedExportIssue {
+                    name: "EvilExport\n\n# Headline".to_string(),
+                    path: "src/x | [evil](https://evil.com)".to_string(),
+                }],
+                duplicate_exports: vec![],
+                duplicate_code: vec![],
+                gotchas: vec![],
+                unused_types: vec![],
+                circular_dependencies: vec![CircularDepIssue {
+                    files: vec!["a | [evil](https://x)".to_string(), "b\n\n# inject".to_string()],
+                }],
+                unused_dependencies: vec![],
+                unresolved_imports: vec![],
+                unlisted_dependencies: vec![],
+                plugin_issues: vec![],
+            },
+            duplication: DuplicationSection {
+                stats: DuplicationStats {
+                    total_lines: 0, duplicated_lines: 0,
+                    duplication_percentage: 0.0, clone_groups: 0,
+                    clone_instances: 0, clone_families: 0,
+                },
+                clone_groups: vec![], clone_families: vec![],
+                mirrored_directories: vec![],
+            },
+        }
+    }
+
+    #[test]
+    fn sec_pr_comment_escapes_pipe_in_tables() {
+        let output = make_evil_output();
+        let formatter = PrCommentFormatter;
+        let md = formatter.format(&output).unwrap();
+        assert!(!md.contains("evil | [click](https://evil.com)"),
+            "PR comment should escape pipe chars: {}", md);
+    }
+
+    #[test]
+    fn sec_pr_comment_escapes_markdown_links() {
+        let output = make_evil_output();
+        let formatter = PrCommentFormatter;
+        let md = formatter.format(&output).unwrap();
+        assert!(!md.contains("[inject](https://evil.com)"),
+            "PR comment should escape link injection");
+    }
+
+    #[test]
+    fn sec_pr_comment_escapes_newlines_in_cells() {
+        let output = make_evil_output();
+        let formatter = PrCommentFormatter;
+        let md = formatter.format(&output).unwrap();
+        assert!(!md.contains("\n\n# Headline"),
+            "PR comment should escape newlines in table cells");
+    }
+
+    #[test]
+    fn sec_pr_comment_escapes_circular_dep_files() {
+        let output = make_evil_output();
+        let formatter = PrCommentFormatter;
+        let md = formatter.format(&output).unwrap();
+        assert!(!md.contains("[evil](https://x)"),
+            "PR comment should escape file names in circular deps");
+    }
 }

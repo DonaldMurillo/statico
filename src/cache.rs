@@ -83,6 +83,12 @@ impl IncrementalCache {
         if let Err(e) = {
             let tmp_path = index_path.with_extension("json.tmp");
             let write_result = fs::write(&tmp_path, &json);
+            // Set restrictive permissions on the temp file (owner-only on Unix).
+            #[cfg(unix)]
+            if write_result.is_ok() {
+                use std::os::unix::fs::PermissionsExt;
+                let _ = fs::set_permissions(&tmp_path, fs::Permissions::from_mode(0o600));
+            }
             match write_result {
                 Ok(()) => fs::rename(&tmp_path, &index_path),
                 Err(e) => Err(e),
@@ -121,15 +127,13 @@ impl Drop for IncrementalCache {
     }
 }
 
-/// Compute a fast hash of file contents (using a simple FNV-1a-like approach).
+/// Compute a fast hash of file contents (SHA-256 for collision resistance).
 pub fn content_hash(content: &str) -> String {
-    // Simple hash — not cryptographic, just for cache invalidation.
-    let mut hash: u64 = 0xcbf29ce484222325;
-    for byte in content.bytes() {
-        hash ^= byte as u64;
-        hash = hash.wrapping_mul(0x100000001b3);
-    }
-    format!("{:016x}", hash)
+    use sha2::{Sha256, Digest};
+    let mut hasher = Sha256::new();
+    hasher.update(content.as_bytes());
+    let result = hasher.finalize();
+    format!("{:x}", result)
 }
 
 /// Ensure `.statico/` is in the project's .gitignore.
@@ -260,6 +264,51 @@ mod tests {
         let contents = fs::read_to_string(&target).unwrap();
         assert!(!contents.contains(".statico"),
             "ensure_gitignore should not modify a symlinked .gitignore; contents: {}", contents);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn sec_content_hash_no_trivial_collision() {
+        // SHA-256 should not collide on short, similar inputs.
+        // With the old FNV-1a hash, crafted collisions were trivial.
+        let inputs = vec![
+            ("aaaaaaaaaaaaaaaa", "aaaaaaaaaaaaaaab"),
+            ("foobar\\x00", "foobar\\x01"),
+            ("A", "B"),
+            ("test file 1", "test file 2"),
+        ];
+        for (a, b) in inputs {
+            assert_ne!(content_hash(a), content_hash(b),
+                "SHA-256 should not collide on '{}' vs '{}'", a, b);
+        }
+    }
+
+    #[test]
+    fn sec_cache_file_permissions_restricted() {
+        // Cache files should be readable only by the owner (0600 on Unix).
+        let dir = std::env::temp_dir().join("statico_sec_cache_perms");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        {
+            let mut cache = IncrementalCache::new(&dir);
+            cache.set("src/a.ts", "hash1", CachedFileData {
+                exports: vec!["secret_export".into()],
+                loc: 1, total_lines: 1, functions: 0,
+                classes: 0, complexity: 0, max_nesting_depth: 0,
+            });
+            cache.save();
+        }
+        let cache_file = dir.join(".statico").join("cache").join("index.json");
+        if cache_file.exists() {
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let mode = fs::metadata(&cache_file).unwrap().permissions().mode();
+                let others_perm = mode & 0o007;
+                assert_eq!(others_perm, 0,
+                    "Cache file should not be world-readable: mode={:o}", mode);
+            }
+        }
         let _ = fs::remove_dir_all(&dir);
     }
 }

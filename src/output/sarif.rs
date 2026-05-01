@@ -6,6 +6,15 @@ use crate::output::OutputFormatter;
 use crate::types::AnalysisOutput;
 use serde_json::{Value, json};
 
+/// Sanitize a file path for use as a SARIF artifactLocation URI.
+/// Removes control characters and normalizes backslashes to forward slashes.
+fn sanitize_uri(path: &str) -> String {
+    path.chars()
+        .filter(|c| !c.is_control())
+        .collect::<String>()
+        .replace('\\', "/")
+}
+
 /// SARIF 2.1.0 formatter.
 pub struct SarifFormatter;
 
@@ -22,7 +31,7 @@ impl OutputFormatter for SarifFormatter {
                 "level": if dc.confidence >= 0.8 { "warning" } else { "note" },
                 "message": { "text": dc.reason },
                 "locations": [{ "physicalLocation": {
-                    "artifactLocation": { "uri": dc.path },
+                    "artifactLocation": { "uri": sanitize_uri(&dc.path) },
                     "region": { "startLine": 1 }
                 }}],
                 "properties": { "confidence": dc.confidence, "lines_of_code": dc.lines_of_code }
@@ -37,7 +46,7 @@ impl OutputFormatter for SarifFormatter {
                 "level": "note",
                 "message": { "text": format!("Export '{}' is never imported", ue.name) },
                 "locations": [{ "physicalLocation": {
-                    "artifactLocation": { "uri": ue.path },
+                    "artifactLocation": { "uri": sanitize_uri(&ue.path) },
                     "region": { "startLine": 1 }
                 }}],
             }));
@@ -51,7 +60,7 @@ impl OutputFormatter for SarifFormatter {
                 "level": "note",
                 "message": { "text": format!("{} '{}' is never imported", ut.kind, ut.name) },
                 "locations": [{ "physicalLocation": {
-                    "artifactLocation": { "uri": ut.path },
+                    "artifactLocation": { "uri": sanitize_uri(&ut.path) },
                     "region": { "startLine": 1 }
                 }}],
             }));
@@ -107,7 +116,7 @@ impl OutputFormatter for SarifFormatter {
                 "level": "warning",
                 "message": { "text": format!("Unresolved import '{}' in {}", ui.import_spec, ui.source_file) },
                 "locations": [{ "physicalLocation": {
-                    "artifactLocation": { "uri": ui.source_file },
+                    "artifactLocation": { "uri": sanitize_uri(&ui.source_file) },
                     "region": { "startLine": 1 }
                 }}],
             }));
@@ -181,8 +190,8 @@ fn append_dup_code_results(results: &mut Vec<Value>, output: &AnalysisOutput) {
                 dc.location_b.file, dc.location_b.start_line, dc.location_b.end_line
             )},
             "locations": [
-                { "physicalLocation": { "artifactLocation": { "uri": dc.location_a.file }, "region": { "startLine": dc.location_a.start_line } }},
-                { "physicalLocation": { "artifactLocation": { "uri": dc.location_b.file }, "region": { "startLine": dc.location_b.start_line } }},
+                { "physicalLocation": { "artifactLocation": { "uri": sanitize_uri(&dc.location_a.file) }, "region": { "startLine": dc.location_a.start_line } }},
+                { "physicalLocation": { "artifactLocation": { "uri": sanitize_uri(&dc.location_b.file) }, "region": { "startLine": dc.location_b.start_line } }},
             ],
             "properties": { "confidence": dc.confidence }
         }));
@@ -200,7 +209,7 @@ fn append_gotcha_results(results: &mut Vec<Value>, output: &AnalysisOutput) {
             },
             "message": { "text": g.message },
             "locations": [{ "physicalLocation": {
-                "artifactLocation": { "uri": g.file },
+                "artifactLocation": { "uri": sanitize_uri(&g.file) },
                 "region": { "startLine": g.line }
             }}],
             "properties": { "confidence": g.confidence, "rule": g.rule }
@@ -216,10 +225,75 @@ fn append_circular_dep_results(results: &mut Vec<Value>, output: &AnalysisOutput
                 "level": "warning",
                 "message": { "text": format!("Circular dependency: {} → {}", cd.files.join(" → "), first) },
                 "locations": [{ "physicalLocation": {
-                    "artifactLocation": { "uri": first },
+                    "artifactLocation": { "uri": sanitize_uri(first) },
                     "region": { "startLine": 1 }
                 }}],
             }));
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::*;
+    use std::path::PathBuf;
+
+    fn evil_output() -> AnalysisOutput {
+        AnalysisOutput {
+            version: None,
+            summary: None,
+            detected_frameworks: None,
+            monorepo: None,
+            structure: Structure {
+                root: PathBuf::from("/project"),
+                entry_points: vec![],
+                implicit_entries: vec![],
+                source_files: vec![],
+                config_files: vec![],
+            },
+            dependencies: Dependencies { imports: vec![], external: vec![] },
+            quality: Quality { files: vec![] },
+            issues: Issues {
+                dead_code: vec![DeadCodeIssue {
+                    path: "src/evil\r\nfile.ts".to_string(),
+                    lines_of_code: 100,
+                    confidence: 0.9,
+                    reason: "test".to_string(),
+                }],
+                unused_exports: vec![],
+                duplicate_exports: vec![],
+                duplicate_code: vec![],
+                gotchas: vec![],
+                unused_types: vec![],
+                circular_dependencies: vec![],
+                unused_dependencies: vec![],
+                unresolved_imports: vec![],
+                unlisted_dependencies: vec![],
+                plugin_issues: vec![],
+            },
+            duplication: DuplicationSection {
+                stats: DuplicationStats {
+                    total_lines: 0, duplicated_lines: 0,
+                    duplication_percentage: 0.0, clone_groups: 0,
+                    clone_instances: 0, clone_families: 0,
+                },
+                clone_groups: vec![], clone_families: vec![],
+                mirrored_directories: vec![],
+            },
+        }
+    }
+
+    #[test]
+    fn sec_sarif_uri_no_control_chars() {
+        let output = evil_output();
+        let formatter = SarifFormatter;
+        let json = formatter.format(&output).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        let results = parsed["runs"][0]["results"].as_array().unwrap();
+        let uri = results[0]["locations"][0]["physicalLocation"]["artifactLocation"]["uri"]
+            .as_str().unwrap();
+        assert!(!uri.contains('\r'), "SARIF URI should not contain CR: {}", uri);
+        assert!(!uri.contains('\n'), "SARIF URI should not contain LF: {}", uri);
     }
 }

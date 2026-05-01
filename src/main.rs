@@ -408,8 +408,20 @@ fn run_analyze(
             };
             let language = &file_entry.language;
             let results = plugin_pipeline.analyze_file(rel_path, &source, language);
-            for result in results {
+            for mut result in results {
                 if !result.issues.is_empty() {
+                    // Sanitize plugin issue paths: strip control chars and path traversal.
+                    for issue in &mut result.issues {
+                        issue.file = issue.file.chars()
+                            .filter(|c| !c.is_control())
+                            .collect::<String>();
+                        if issue.file.starts_with('/') || issue.file.starts_with("..") {
+                            issue.file = issue.file
+                                .trim_start_matches('/')
+                            .trim_start_matches("../")
+                            .to_string();
+                        }
+                    }
                     output.issues.plugin_issues.extend(result.issues);
                 }
             }
@@ -667,7 +679,7 @@ fn run_setup(target: &str, path: &str, force: bool) {
 
     // Update .gitignore for user-specific AI config dirs.
     let gitignore = root.join(".gitignore");
-    if gitignore.exists() {
+    if gitignore.exists() && !gitignore.is_symlink() {
         let content = std::fs::read_to_string(&gitignore).unwrap_or_default();
         let mut additions = Vec::new();
         if generate_claude && !content.lines().any(|l| l == ".claude/") {
