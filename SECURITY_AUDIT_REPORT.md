@@ -205,9 +205,9 @@ if expected_hash != actual_hash {
 |---|---|---|
 | **Critical** | 0 | — |
 | **High** | 3 | F-01, F-02, F-11 |
-| **Medium** | 6 | F-03, F-04, F-08, F-09, F-12, F-13, F-16 |
-| **Low** | 5 | F-05, F-10, F-14, F-15, F-17 |
-| **Info** | 4 | F-06, F-07, F-18, F-19 |
+| **Medium** | 12 | F-03, F-04, F-08, F-09, F-12, F-13, F-16, S2-01, S2-02, S2-03, S2-04, S3-01 |
+| **Low** | 9 | F-05, F-10, F-14, F-15, F-17, S2-05, S2-06, S3-02, S3-04 |
+| **Info** | 7 | F-06, F-07, F-18, F-19, S2-07, S2-08, S2-09, S3-03 |
 
 ---
 
@@ -224,6 +224,49 @@ if expected_hash != actual_hash {
 5. **[MEDIUM] Prevent symlink following in file discovery** (F-13) — Either disable symlink following or verify canonical paths.
 
 6. **[LOW] Replace `atty` with `is-terminal`** — Minor maintenance improvement.
+
+---
+
+---
+
+## Round 2 Findings (2026-04-30)
+
+Commit: `f5c5fb3`
+
+| ID | Severity | Description | Status |
+|---|---|---|---|
+| S2-01 | MEDIUM | `ensure_within_root` lexical fallback doesn't handle Windows drive-letter paths | Documented (non-issue on Unix) |
+| S2-02 | MEDIUM | `download_bun()` used `curl` shell-out without SSL pinning | Fixed — replaced with ureq (pure Rust HTTP) |
+| S2-03 | MEDIUM | `run_update()`: no integrity check on downloaded tarball | Documented (matches F-12) |
+| S2-04 | MEDIUM | `.old` backup left if process crashes during update | Mitigated — backup cleaned on success |
+| S2-05 | LOW | `cache.rs` uses FNV-1a (not collision-resistant) | Accepted — cache poisoning requires local file write |
+| S2-06 | LOW | `download_bun()` URL interpolated into shell command | Fixed — replaced curl with ureq |
+| S2-07 | LOW | `post_analysis` sends full output to plugins | Reviewed — AnalysisOutput has no raw sources (FP) |
+| S2-08 | INFO | No limit on `max_file_size` config | Fixed — capped to 50MB |
+| S2-09 | INFO | `chrono_now()` shells out to `date` | Fixed — pure Rust date calculation |
+
+**Fixes applied:**
+- `src/plugin/runtime.rs`: Replaced `curl` subprocess with `ureq` HTTP client
+- `src/update.rs`: Replaced `date` subprocess with pure Rust date algorithm
+- `src/config.rs`: Added `MAX_ALLOWED_FILE_SIZE = 50MB` cap after loading config
+
+---
+
+## Round 3 Findings (2026-04-30)
+
+Commit: `7e25506`
+
+| ID | Severity | Description | Status |
+|---|---|---|---|
+| S3-01 | MEDIUM | HTML report `</script>` injection via JSON-embedded file paths | Fixed — escape `</` in JSON strings |
+| S3-02 | LOW | `discover_source_files` has no `max_depth` | Fixed — added `max_depth(20)` |
+| S3-03 | INFO | `post_analysis` sends full output to plugins | False positive — no raw sources in AnalysisOutput |
+| S3-04 | LOW | Plugin loop reads files without respecting `max_file_size` | Fixed — added metadata size check |
+
+**Fixes applied:**
+- `src/output/html.rs`: Replace `</` with `<\/` in JSON before embedding in `<script>`
+- `src/discovery/mod.rs`: Added `.max_depth(20)` to walkdir
+- `src/main.rs`: Check `file.metadata().len() > config.max_file_size` before reading for plugins
 
 ---
 
