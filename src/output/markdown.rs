@@ -219,7 +219,7 @@ mod tests {
     }
 
     #[test]
-    fn sec_v4_markdown_escapes_pipe_in_tables() {
+    fn sec_markdown_escapes_pipe_in_tables() {
         // Pipe characters in file paths must be escaped to prevent table injection
         let output = make_output_with_evil_path();
         let formatter = MarkdownFormatter;
@@ -230,7 +230,7 @@ mod tests {
     }
 
     #[test]
-    fn sec_v4_markdown_escapes_markdown_links() {
+    fn sec_markdown_escapes_links() {
         let output = make_output_with_evil_path();
         let formatter = MarkdownFormatter;
         let md = formatter.format(&output).unwrap();
@@ -239,7 +239,7 @@ mod tests {
     }
 
     #[test]
-    fn sec_v4_markdown_escapes_newlines_in_cells() {
+    fn sec_markdown_escapes_newlines_in_cells() {
         let output = make_output_with_evil_path();
         let formatter = MarkdownFormatter;
         let md = formatter.format(&output).unwrap();
@@ -250,7 +250,7 @@ mod tests {
 
     // ── V4-5: Backtick injection breaks inline code spans ──
     #[test]
-    fn sec_v4_5_escapes_backticks_in_cells() {
+    fn sec_markdown_escapes_backticks_in_cells() {
         let mut output = make_output_with_evil_path();
         output.issues.dead_code = vec![DeadCodeIssue {
             path: "src/evil`code`.ts".to_string(),
@@ -265,7 +265,7 @@ mod tests {
 
     // ── V4-6: Circular dependency file names not escaped ──
     #[test]
-    fn sec_v4_6_escapes_circular_dep_file_names() {
+    fn sec_markdown_escapes_circular_dep_files() {
         let mut output = make_output_with_evil_path();
         output.issues.dead_code = vec![];
         output.issues.unused_exports = vec![];
@@ -279,7 +279,7 @@ mod tests {
 
     // ── V4-7: Duplication instance file names not escaped ──
     #[test]
-    fn sec_v4_7_escapes_duplication_file_names() {
+    fn sec_markdown_escapes_duplication_files() {
         let mut output = make_output_with_evil_path();
         output.issues.dead_code = vec![];
         output.issues.unused_exports = vec![];
@@ -298,7 +298,7 @@ mod tests {
 
     // ── V4-10: HTML chars not escaped in markdown cells ──
     #[test]
-    fn sec_v4_10_escapes_html_chars_in_cells() {
+    fn sec_markdown_escapes_html_chars_in_cells() {
         let mut output = make_output_with_evil_path();
         output.issues.dead_code = vec![DeadCodeIssue {
             path: "src/<script>alert(1)</script>.ts".to_string(),
@@ -315,7 +315,7 @@ mod tests {
 
     // ── V5-9: config_files are escaped in markdown output ──
     #[test]
-    fn sec_v5_9_config_files_escaped_in_markdown() {
+    fn sec_markdown_config_files_escaped() {
         let output = AnalysisOutput {
             version: None,
             summary: None,

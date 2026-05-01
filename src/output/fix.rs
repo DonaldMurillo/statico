@@ -256,7 +256,7 @@ mod tests {
 
     // ── V4-2: Newline injection via path field ──
     #[test]
-    fn sec_v4_2_fix_formatter_strips_newlines_in_path() {
+    fn sec_fix_strips_newlines_in_path() {
         let output = make_output(
             vec![DeadCodeIssue {
                 path: "src/good.ts\nevil-command\n".to_string(),
@@ -277,7 +277,7 @@ mod tests {
 
     // ── V4-3: Newline injection via reason field ──
     #[test]
-    fn sec_v4_3_fix_formatter_strips_newlines_in_reason() {
+    fn sec_fix_strips_newlines_in_reason() {
         let output = make_output(
             vec![DeadCodeIssue {
                 path: "src/dead.ts".to_string(),
@@ -305,7 +305,7 @@ mod tests {
 
     // ── V6-2: Newline injection via unused export path (group header) ──
     #[test]
-    fn sec_v6_2_fix_formatter_strips_newlines_in_export_path() {
+    fn sec_fix_strips_newlines_in_export_path() {
         let output = make_output(
             vec![],
             vec![
@@ -328,7 +328,7 @@ mod tests {
 
     // ── V6-3: Newline injection via unused export name ──
     #[test]
-    fn sec_v6_3_fix_formatter_strips_newlines_in_export_name() {
+    fn sec_fix_strips_newlines_in_export_name() {
         let output = make_output(
             vec![],
             vec![

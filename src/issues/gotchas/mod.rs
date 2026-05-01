@@ -413,7 +413,7 @@ fs.readFile('a', function(err, data) {
 
     // ── V5-1: truncate_line UTF-8 boundary panic ──
     #[test]
-    fn sec_v5_1_truncate_line_no_panic_on_multibyte() {
+    fn sec_gotchas_truncate_line_no_panic_on_multibyte() {
         // A line with multi-byte UTF-8 ending beyond the 120-char truncation point.
         // The old code sliced at byte offset 117, which could panic.
         let long_line = format!("{}{}", "α".repeat(60), "extra text here"); // >120 bytes

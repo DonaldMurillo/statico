@@ -235,7 +235,7 @@ mod tests {
     }
 
     #[test]
-    fn sec_v3_html_escapes_comment_injection() {
+    fn sec_html_escapes_comment_injection() {
         // A file path containing <!-- should not break out of script tag
         let output = make_output_with_path("test/<!--<script>alert(1)//");
         let formatter = HtmlFormatter;

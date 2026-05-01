@@ -356,7 +356,7 @@ import { qux } from 'lodash';
 
     // ── V7-5: extract_package_name must not return bare "@" ──
     #[test]
-    fn sec_v7_5_extract_package_name_bare_at() {
+    fn sec_imports_bare_at_returns_empty() {
         // A bare "@" is not a valid package specifier.
         // extract_package_name should return empty string, not "@".
         assert_eq!(extract_package_name("@"), "",
@@ -373,7 +373,7 @@ import { qux } from 'lodash';
 
     // ── V7-8: classify_import must not push empty string to external ──
     #[test]
-    fn sec_v7_8_classify_import_no_empty_external() {
+    fn sec_imports_no_empty_external_packages() {
         let mut internal = vec![];
         let mut external = vec![];
         // "@@" → extract_package_name returns empty → should be skipped

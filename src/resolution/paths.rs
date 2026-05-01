@@ -75,7 +75,7 @@ mod tests {
     use std::path::PathBuf;
 
     #[test]
-    fn sec_v3_resolve_relative_rejects_path_traversal() {
+    fn sec_paths_rejects_path_traversal() {
         // resolve_relative now allows `..` (needed for legitimate imports)
         // but the caller (Resolver::resolve) checks root boundaries.
         // At this level, ../../etc/passwd returns None because the file
@@ -92,7 +92,7 @@ mod tests {
     }
 
     #[test]
-    fn sec_v3_resolve_relative_rejects_absolute_spec() {
+    fn sec_paths_rejects_absolute_spec() {
         let dir = PathBuf::from("/project/src");
         let result = resolve_relative(&dir, "/etc/passwd");
         assert!(result.is_none(),

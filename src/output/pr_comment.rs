@@ -307,7 +307,7 @@ mod tests {
 
     // ── V5-4: escape_md_cell must escape backticks and angle brackets ──
     #[test]
-    fn sec_v5_4_pr_comment_escapes_backticks_and_angle_brackets() {
+    fn sec_pr_comment_escapes_backticks_and_angle_brackets() {
         let cell = escape_md_cell("file`name<evil>.ts");
         assert_eq!(cell, "file\\`name&lt;evil&gt;.ts",
             "backticks and angle brackets must be escaped, got: {}", cell);

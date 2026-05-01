@@ -415,7 +415,7 @@ mod tests {
     }
 
     #[test]
-    fn sec_v5_mermaid_escapes_quotes_in_labels() {
+    fn sec_mermaid_escapes_quotes() {
         // File paths with quotes or "] chars could break mermaid syntax
         let evil_path = "src/evil\"] --> evilNode[\"evil";
         let output = AnalysisOutput {
@@ -470,7 +470,7 @@ mod tests {
 
     // ── V4-4: Subgraph label injection via directory names with quotes ──
     #[test]
-    fn sec_v4_4_subgraph_label_escapes_special_chars() {
+    fn sec_mermaid_subgraph_label_escapes_special() {
         // Directory name containing quotes/brackets should not break Mermaid syntax
         let evil_dir = "src/evil\"dir";
         let mut output = make_minimal_output();
@@ -487,7 +487,7 @@ mod tests {
 
     // ── V4-9: display_name doesn't escape curly braces ──
     #[test]
-    fn sec_v4_9_display_name_escapes_curly_braces() {
+    fn sec_mermaid_escapes_curly_braces() {
         let name = display_name("src/file{evil}.ts", "");
         assert!(!name.contains('{') && !name.contains('}'),
             "curly braces should be escaped in display names, got: {}", name);
@@ -497,7 +497,7 @@ mod tests {
 
     // ── V5-10: display_name sanitizes newlines to prevent chart breakage ──
     #[test]
-    fn sec_v5_10_display_name_escapes_newlines() {
+    fn sec_mermaid_escapes_newlines() {
         let name = display_name("src/evil\nINJECTED.ts", "");
         assert!(!name.contains('\n'),
             "newlines should be replaced with spaces, got: {}", name);
@@ -507,7 +507,7 @@ mod tests {
 
     // ── V6-1: escape_mermaid_label must escape newlines to prevent subgraph injection ──
     #[test]
-    fn sec_v6_1_escape_mermaid_label_escapes_newlines() {
+    fn sec_mermaid_label_escapes_newlines() {
         let evil = "src/evil\nend\nsubgraph fake";
         let escaped = escape_mermaid_label(evil);
         assert!(!escaped.contains('\n'),
@@ -518,7 +518,7 @@ mod tests {
 
     // ── V6-7: escape_mermaid_label must escape # to prevent Mermaid entity injection ──
     #[test]
-    fn sec_v6_7_escape_mermaid_label_escapes_hash() {
+    fn sec_mermaid_label_escapes_hash() {
         let evil = "dir#name";
         let escaped = escape_mermaid_label(evil);
         // After escaping, the raw '#' should be gone, replaced with entity
@@ -530,7 +530,7 @@ mod tests {
 
     // ── V7-3: display_name must escape # to prevent Mermaid entity injection ──
     #[test]
-    fn sec_v7_3_display_name_escapes_hash() {
+    fn sec_mermaid_display_name_escapes_hash() {
         // In Mermaid, `#quot;` is interpreted as a literal `"`. A file path
         // containing `#quot;` would inject a quote into the node label, breaking
         // the chart structure and allowing label injection.
@@ -546,7 +546,7 @@ mod tests {
 
     // ── V7-9: display_name and escape_mermaid_label must escape & ──
     #[test]
-    fn sec_v7_9_display_name_escapes_ampersand() {
+    fn sec_mermaid_display_name_escapes_ampersand() {
         // In Mermaid, `&` starts HTML entities. A path like `foo&quot;.ts` would
         // have `&quot;` decoded to `"`, injecting a quote into the node label.
         let name = display_name("src/foo&quot;.ts", "");
@@ -560,7 +560,7 @@ mod tests {
     }
 
     #[test]
-    fn sec_v7_9_escape_mermaid_label_escapes_ampersand() {
+    fn sec_mermaid_label_escapes_ampersand() {
         let escaped = escape_mermaid_label("foo&amp;evil");
         // After escaping, every original `&` should be `&amp;`
         assert!(escaped.contains("&amp;"),

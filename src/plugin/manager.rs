@@ -522,7 +522,7 @@ done
     // ── Security tests ──────────────────────────────────────────────────
 
     #[test]
-    fn sec_v35_python_entry_rejects_traversal() {
+    fn sec_plugin_python_entry_rejects_traversal() {
         let tmp = tempfile::tempdir().unwrap();
         let dir = tmp.path().join("evil-plugin");
         std::fs::create_dir_all(&dir).unwrap();
@@ -539,7 +539,7 @@ done
     }
 
     #[test]
-    fn sec_v35_python_entry_rejects_absolute() {
+    fn sec_plugin_python_entry_rejects_absolute() {
         let tmp = tempfile::tempdir().unwrap();
         let dir = tmp.path().join("abs-plugin");
         std::fs::create_dir_all(&dir).unwrap();
@@ -552,7 +552,7 @@ done
     }
 
     #[test]
-    fn sec_v37_toml_depth_limit() {
+    fn sec_plugin_toml_depth_limit() {
         // Create deeply nested toml that exceeds 32 levels
         let mut toml_str = String::new();
         for _ in 0..40 {
@@ -571,7 +571,7 @@ done
     }
 
     #[test]
-    fn sec_v38_settings_string_size_limit() {
+    fn sec_plugin_settings_string_size_limit() {
         let big_string = "x".repeat(100_000);
         let val = toml::Value::String(big_string);
         let result = toml_to_json_value(&val);
@@ -579,7 +579,7 @@ done
     }
 
     #[test]
-    fn sec_v38_settings_array_size_limit() {
+    fn sec_plugin_settings_array_size_limit() {
         let arr: Vec<toml::Value> = (0..2000).map(|i| toml::Value::Integer(i)).collect();
         let val = toml::Value::Array(arr);
         let result = toml_to_json_value(&val);
@@ -587,7 +587,7 @@ done
     }
 
     #[test]
-    fn sec_v38_settings_table_size_limit() {
+    fn sec_plugin_settings_table_size_limit() {
         let mut table = toml::map::Map::new();
         for i in 0..2000 {
             table.insert(format!("key{}", i), toml::Value::Integer(i));

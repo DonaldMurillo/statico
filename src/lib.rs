@@ -71,7 +71,7 @@ mod tests {
     use std::path::Path;
 
     #[test]
-    fn sec_ensure_within_root_allows_child() {
+    fn sec_path_within_root_allows_child() {
         let root = Path::new("/project");
         let child = Path::new("/project/src/index.ts");
         // These may not exist, so only the lexical path runs
@@ -79,7 +79,7 @@ mod tests {
     }
 
     #[test]
-    fn sec_ensure_within_root_rejects_parent_traversal() {
+    fn sec_path_within_root_rejects_parent_traversal() {
         let root = Path::new("/project");
         let evil = Path::new("/project/../../../etc/passwd");
         let result = ensure_within_root(evil, root);
@@ -87,7 +87,7 @@ mod tests {
     }
 
     #[test]
-    fn sec_ensure_within_root_rejects_absolute_escape() {
+    fn sec_path_within_root_rejects_absolute() {
         let root = Path::new("/project");
         let evil = Path::new("/etc/passwd");
         let result = ensure_within_root(evil, root);
@@ -95,7 +95,7 @@ mod tests {
     }
 
     #[test]
-    fn sec_ensure_within_root_rejects_dotdot_in_middle() {
+    fn sec_path_within_root_rejects_dotdot() {
         let root = Path::new("/project");
         let evil = Path::new("/project/src/../../etc/passwd");
         let result = ensure_within_root(evil, root);
@@ -103,7 +103,7 @@ mod tests {
     }
 
     #[test]
-    fn sec_ensure_within_root_allows_valid_subpath() {
+    fn sec_path_within_root_allows_subpath() {
         let root = Path::new("/project");
         let child = Path::new("/project/.statico/plugins/my-rule/index.ts");
         assert!(ensure_within_root(child, root).is_ok());
@@ -162,7 +162,7 @@ mod strip_ansi_tests {
     use super::*;
 
     #[test]
-    fn sec_v4_1_strips_ansi_escape_from_plugin_message() {
+    fn sec_ansi_strips_escape_from_plugin_message() {
         // A plugin could inject ANSI escapes to change terminal color, move cursor, etc.
         let evil = "\x1b[31mCRITICAL ERROR\x1b[0m";
         let clean = strip_ansi(evil);
@@ -171,7 +171,7 @@ mod strip_ansi_tests {
     }
 
     #[test]
-    fn sec_v4_1_strips_cursor_movement_ansi() {
+    fn sec_ansi_strips_cursor_movement() {
         let evil = "\x1b[2J\x1b[H\x1b[31mFAKE ERROR\x1b[0m";
         let clean = strip_ansi(evil);
         assert_eq!(clean, "FAKE ERROR",
@@ -179,7 +179,7 @@ mod strip_ansi_tests {
     }
 
     #[test]
-    fn sec_v4_8_strips_ansi_from_plugin_name() {
+    fn sec_ansi_strips_from_plugin_name() {
         // A plugin directory named with ANSI escapes
         let evil_name = "\x1b[32m\x1b[1mmalicious\x1b[0m";
         let clean = strip_ansi(evil_name);
@@ -207,7 +207,7 @@ mod strip_ansi_tests {
 
     // ── V6-6: strip_ansi must handle OSC sequences ──
     #[test]
-    fn sec_v6_6_strip_ansi_handles_osc_sequences() {
+    fn sec_ansi_handles_osc_sequences() {
         // OSC sequence: ESC ] 0 ; title BEL — sets terminal title
         let evil = "\x1b]0;evil-title\x07visible";
         let clean = strip_ansi(evil);
@@ -216,7 +216,7 @@ mod strip_ansi_tests {
     }
 
     #[test]
-    fn sec_v6_6_strip_ansi_handles_osc_st_terminator() {
+    fn sec_ansi_handles_osc_st_terminator() {
         // OSC sequence with ST terminator: ESC ] 0 ; title ESC \
         let evil = "\x1b]0;evil-title\x1b\\visible";
         let clean = strip_ansi(evil);
@@ -225,7 +225,7 @@ mod strip_ansi_tests {
     }
 
     #[test]
-    fn sec_v6_6_strip_ansi_handles_two_char_esc() {
+    fn sec_ansi_handles_two_char_esc() {
         // Two-character ESC sequence: ESC c (terminal reset)
         let evil = "\x1bcremaining";
         let clean = strip_ansi(evil);

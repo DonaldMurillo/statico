@@ -284,7 +284,7 @@ mod tests {
 
     // ── V7-7: match_simple_glob * must not cross directory boundaries ──
     #[test]
-    fn sec_v7_7_star_does_not_match_slash() {
+    fn sec_glob_star_does_not_match_slash() {
         // `dist*` should match `dist-old.ts` but NOT `dist/foo.ts`
         assert!(match_simple_glob("dist*", "dist-old.ts"),
             "dist* should match dist-old.ts");

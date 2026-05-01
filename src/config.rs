@@ -319,7 +319,7 @@ override = true
     // ── Security tests ──────────────────────────────────────────────────
 
     #[test]
-    fn sec_max_file_size_capped_at_50mb() {
+    fn sec_config_max_file_size_capped() {
         let dir = make_temp_dir("cap");
         std::fs::write(
             dir.join(".statico.toml"),
@@ -333,7 +333,7 @@ override = true
     }
 
     #[test]
-    fn sec_max_file_size_normal_values_pass() {
+    fn sec_config_max_file_size_normal() {
         let dir = make_temp_dir("normal");
         std::fs::write(
             dir.join(".statico.toml"),
@@ -346,7 +346,7 @@ override = true
     }
 
     #[test]
-    fn sec_max_file_size_default_is_1mb() {
+    fn sec_config_max_file_size_default() {
         let c = StaticoConfig::default();
         assert_eq!(c.max_file_size, 1_000_000);
         assert!(c.max_file_size <= MAX_ALLOWED_FILE_SIZE);
@@ -354,7 +354,7 @@ override = true
 
     // ── V7-10: min_confidence must be clamped to [0.0, 1.0] ──
     #[test]
-    fn sec_v7_10_min_confidence_clamped_nan() {
+    fn sec_config_min_confidence_clamped_nan() {
         // NaN causes ALL issues to be filtered (NaN >= x is always false),
         // giving a false 100/100 health score.
         let merged = StaticoConfig::default().merge_cli(None, Some(f64::NAN), false, false);
@@ -364,14 +364,14 @@ override = true
     }
 
     #[test]
-    fn sec_v7_10_min_confidence_clamped_negative() {
+    fn sec_config_min_confidence_clamped_negative() {
         let merged = StaticoConfig::default().merge_cli(None, Some(-0.5), false, false);
         assert_eq!(merged.min_confidence, 0.0,
             "negative min_confidence should be clamped to 0.0");
     }
 
     #[test]
-    fn sec_v7_10_min_confidence_clamped_above_one() {
+    fn sec_config_min_confidence_clamped_above_one() {
         let merged = StaticoConfig::default().merge_cli(None, Some(2.0), false, false);
         assert_eq!(merged.min_confidence, 1.0,
             "min_confidence > 1.0 should be clamped to 1.0");

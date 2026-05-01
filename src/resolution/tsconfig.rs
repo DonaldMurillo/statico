@@ -200,7 +200,7 @@ mod tests {
     use std::path::Path;
 
     #[test]
-    fn sec_v32_strip_jsonc_unterminated_block_comment() {
+    fn sec_jsonc_handles_unterminated_comment() {
         // Unterminated block comment should not panic or over-read
         let input = "/* this is never closed";
         let result = strip_jsonc(input);
@@ -209,14 +209,14 @@ mod tests {
     }
 
     #[test]
-    fn sec_v32_strip_jsonc_normal_block_comment() {
+    fn sec_jsonc_strips_block_comment() {
         let input = "before /* comment */ after";
         let result = strip_jsonc(input);
         assert_eq!(result, "before  after");
     }
 
     #[test]
-    fn sec_v36_tsconfig_target_traversal_rejected() {
+    fn sec_tsconfig_target_rejects_traversal() {
         let tmp = tempfile::tempdir().unwrap();
         let tsconfig_dir = tmp.path().join("apps/web");
         std::fs::create_dir_all(&tsconfig_dir).unwrap();
@@ -250,7 +250,7 @@ mod tests {
     }
 
     #[test]
-    fn sec_v39_tsconfig_non_relative_target_traversal_rejected() {
+    fn sec_tsconfig_non_relative_rejects_traversal() {
         let tmp = tempfile::tempdir().unwrap();
         std::fs::write(
             tmp.path().join("tsconfig.json"),

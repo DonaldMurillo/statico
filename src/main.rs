@@ -1101,35 +1101,35 @@ mod shell_escape_tests {
     use super::*;
 
     #[test]
-    fn sec_v34_shell_escape_dollar() {
+    fn sec_shell_escape_dollar() {
         let result = shell_escape("/path/$HOME/bin");
         assert_eq!(result, "/path/\\$HOME/bin",
             "dollar sign should be escaped: got {}", result);
     }
 
     #[test]
-    fn sec_v34_shell_escape_backtick() {
+    fn sec_shell_escape_backtick() {
         let result = shell_escape("/path/`whoami`/bin");
         assert_eq!(result, "/path/\\`whoami\\`/bin",
             "backtick should be escaped: got {}", result);
     }
 
     #[test]
-    fn sec_v34_shell_escape_double_quote() {
+    fn sec_shell_escape_double_quote() {
         let result = shell_escape("/path/\"evil\"/bin");
         assert_eq!(result, "/path/\\\"evil\\\"/bin",
             "double quote should be escaped: got {}", result);
     }
 
     #[test]
-    fn sec_v34_shell_escape_backslash() {
+    fn sec_shell_escape_backslash() {
         let result = shell_escape("/path/\\evil/bin");
         assert_eq!(result, "/path/\\\\evil/bin",
             "backslash should be escaped: got {}", result);
     }
 
     #[test]
-    fn sec_v34_shell_escape_normal_path() {
+    fn sec_shell_escape_normal_path() {
         let result = shell_escape("/usr/local/bin");
         assert_eq!(result, "/usr/local/bin",
             "normal path should be unchanged: got {}", result);
@@ -1137,7 +1137,7 @@ mod shell_escape_tests {
 
     // ── V6-6: source path in rc snippet must be shell-escaped ──
     #[test]
-    fn sec_v6_6_source_path_shell_escaped() {
+    fn sec_shell_source_path_escaped() {
         // If the completion file path contains shell-special chars,
         // the `source` line in the rc snippet must be escaped.
         // Verify shell_escape handles the dangerous characters.

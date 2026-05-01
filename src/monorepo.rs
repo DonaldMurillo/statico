@@ -309,7 +309,7 @@ packages:
 
     // ── V7-6: glob_to_prefix must handle double-star patterns ──
     #[test]
-    fn sec_v7_6_glob_to_prefix_double_star() {
+    fn sec_monorepo_glob_to_prefix_double_star() {
         let result = glob_to_prefix(vec![
             "packages/*".to_string(),
             "libs/**".to_string(),
@@ -413,7 +413,7 @@ packages:
     }
 
     #[test]
-    fn sec_v310_workspace_roots_reject_traversal() {
+    fn sec_monorepo_workspace_roots_reject_traversal() {
         let tmp = std::env::temp_dir().join("statico_sec_ws_traversal");
         let _ = std::fs::remove_dir_all(&tmp);
         std::fs::create_dir_all(&tmp).unwrap();
@@ -424,7 +424,7 @@ packages:
     }
 
     #[test]
-    fn sec_v310_workspace_roots_reject_absolute() {
+    fn sec_monorepo_workspace_roots_reject_absolute() {
         let tmp = std::env::temp_dir().join("statico_sec_ws_absolute");
         let _ = std::fs::remove_dir_all(&tmp);
         std::fs::create_dir_all(&tmp).unwrap();

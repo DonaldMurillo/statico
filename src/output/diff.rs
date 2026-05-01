@@ -281,7 +281,7 @@ mod tests {
     }
 
     #[test]
-    fn sec_v31_diff_markdown_escapes_pipe_in_detail() {
+    fn sec_diff_escapes_pipe_in_detail() {
         let old = make_output_with_dead(vec![DeadCodeIssue {
             path: "src/a.ts".into(),
             lines_of_code: 10,
@@ -307,7 +307,7 @@ mod tests {
     }
 
     #[test]
-    fn sec_v31_diff_markdown_escapes_newlines_in_detail() {
+    fn sec_diff_escapes_newlines_in_detail() {
         let old = make_output_with_dead(vec![]);
         let new = make_output_with_dead(vec![DeadCodeIssue {
             path: "src/b.ts".into(),
@@ -324,7 +324,7 @@ mod tests {
 
     // ── V5-7: escape_md_cell must escape backticks and angle brackets ──
     #[test]
-    fn sec_v5_7_diff_escapes_backticks_and_angle_brackets() {
+    fn sec_diff_escapes_backticks_and_angle_brackets() {
         let cell = escape_md_cell("file`code`<evil>.ts");
         assert_eq!(cell, "file\\`code\\`&lt;evil&gt;.ts",
             "backticks and angle brackets must be escaped, got: {}", cell);

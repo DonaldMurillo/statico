@@ -264,8 +264,8 @@ mod tests {
     // ── V-8 RED: ensure_gitignore must not follow symlinks ──
 
     #[test]
-    fn sec_v8_gitignore_rejects_symlink() {
-        let dir = std::env::temp_dir().join("statico_sec_v8_gitignore");
+    fn sec_gitignore_rejects_symlink() {
+        let dir = std::env::temp_dir().join("statico_sec_gitignore_symlink");
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         // Create a regular file, and a symlink .gitignore pointing to it
@@ -329,8 +329,8 @@ mod tests {
 
     // ── V7-4: ensure_gitignore must detect real patterns, not substrings ──
     #[test]
-    fn sec_v7_4_gitignore_adds_entry_when_only_comment_present() {
-        let dir = std::env::temp_dir().join("statico_sec_v7_4_comment");
+    fn sec_gitignore_adds_when_only_comment() {
+        let dir = std::env::temp_dir().join("statico_sec_gitignore_comment");
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         // A .gitignore with a comment mentioning statico should NOT prevent
@@ -344,8 +344,8 @@ mod tests {
     }
 
     #[test]
-    fn sec_v7_4_gitignore_skips_when_real_pattern_present() {
-        let dir = std::env::temp_dir().join("statico_sec_v7_4_exists");
+    fn sec_gitignore_skips_when_pattern_present() {
+        let dir = std::env::temp_dir().join("statico_sec_gitignore_exists");
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         fs::write(dir.join(".gitignore"), ".statico/\nnode_modules/\n").unwrap();

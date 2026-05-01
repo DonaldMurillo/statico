@@ -114,7 +114,7 @@ mod tests {
 
     // ── V7-1: unquote must not panic on single-char quoted strings ──
     #[test]
-    fn sec_v7_1_unquote_no_panic_on_single_char() {
+    fn sec_parse_unquote_no_panic_short_string() {
         // A single-character string like `"` satisfies starts_with and ends_with
         // but slicing [1..0] would panic. Verify it returns the string as-is.
         assert_eq!(unquote("\""), "\"");
@@ -126,7 +126,7 @@ mod tests {
 
     // ── V7-2: Parser mutex recovery — test that poisoned mutex doesn't panic ──
     #[test]
-    fn sec_v7_2_parser_recovers_from_poisoned_mutex() {
+    fn sec_parse_recovers_from_poisoned_mutex() {
         let parser = AstParser::new().expect("parser init");
         // Parse normally first
         let result = parser.parse("const x = 1;", false);

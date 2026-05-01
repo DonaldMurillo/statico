@@ -407,7 +407,7 @@ mod tests {
     // ── Security tests ──────────────────────────────────────────────────
 
     #[test]
-    fn sec_today_string_is_valid_date() {
+    fn sec_update_today_is_valid_date() {
         let today = today_string();
         // Must be YYYY-MM-DD format
         assert_eq!(today.len(), 10, "expected YYYY-MM-DD, got: {}", today);
@@ -422,7 +422,7 @@ mod tests {
     }
 
     #[test]
-    fn sec_today_string_no_shell_out() {
+    fn sec_update_today_no_shell_out() {
         // Verify the function returns quickly (no subprocess spawn)
         let start = std::time::Instant::now();
         let _ = today_string();
@@ -431,7 +431,7 @@ mod tests {
     }
 
     #[test]
-    fn sec_extract_tar_gz_rejects_path_traversal() {
+    fn sec_update_tar_rejects_path_traversal() {
         // Create a tar.gz with a path traversal entry.
         // We write the tar header manually to bypass tar::Builder's validation.
         let tmp = tempfile::tempdir().unwrap();
@@ -468,7 +468,7 @@ mod tests {
     // ── V-11 RED: download size must be limited ──
 
     #[test]
-    fn sec_v11_download_size_limit_exists() {
+    fn sec_update_download_size_limit() {
         // MAX_DOWNLOAD_SIZE constant must be defined and reasonable
         assert!(MAX_DOWNLOAD_SIZE > 0, "MAX_DOWNLOAD_SIZE should be positive");
         assert!(MAX_DOWNLOAD_SIZE <= 200 * 1024 * 1024,
@@ -479,7 +479,7 @@ mod tests {
     // ── V-12 RED: find_binary must reject symlinks ──
 
     #[test]
-    fn sec_v12_find_binary_rejects_symlink() {
+    fn sec_update_binary_rejects_symlink() {
         let tmp = tempfile::tempdir().unwrap();
         // Create a real file and a symlink pointing to it
         let real = tmp.path().join("real_statico");
@@ -494,7 +494,7 @@ mod tests {
 
     // ── V6-5: is_newer must distinguish pre-release from release versions ──
     #[test]
-    fn sec_v6_5_is_newer_distinguishes_prerelease() {
+    fn sec_update_is_newer_distinguishes_prerelease() {
         // Pre-release versions should be considered older than the release
         assert!(is_newer("0.1.0-beta", "0.1.0"),
             "0.1.0-beta should be older than 0.1.0");

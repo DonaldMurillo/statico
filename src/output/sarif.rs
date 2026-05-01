@@ -308,7 +308,7 @@ mod tests {
 
     // ── V6-4: SARIF message.text must not contain control chars from user data ──
     #[test]
-    fn sec_v6_4_sarif_message_no_control_chars() {
+    fn sec_sarif_message_no_control_chars() {
         let mut output = evil_output();
         // Inject control chars into gotcha message
         output.issues.gotchas.push(crate::types::GotchaIssue {

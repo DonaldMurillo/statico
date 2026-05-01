@@ -417,7 +417,7 @@ languages = ["typescript"]
     // ── Security tests ──────────────────────────────────────────────────
 
     #[test]
-    fn sec_config_plugin_path_traversal_rejected() {
+    fn sec_plugin_path_traversal_rejected() {
         let tmp = make_temp_dir("traversal");
         std::fs::write(
             tmp.join(".statico.toml"),

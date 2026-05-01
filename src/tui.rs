@@ -210,7 +210,7 @@ mod tests {
 
     // ── V5-2: shorten_str UTF-8 boundary panic ──
     #[test]
-    fn sec_v5_2_shorten_str_no_panic_on_multibyte() {
+    fn sec_tui_shorten_str_no_panic_on_multibyte() {
         // 60 Greek alpha chars = 120 bytes, shorten to 28 bytes
         let long = "α".repeat(60);
         let result = shorten_str(&long, 28);
@@ -220,7 +220,7 @@ mod tests {
 
     // ── V5-3: shorten_path UTF-8 boundary panic ──
     #[test]
-    fn sec_v5_3_shorten_path_no_panic_on_multibyte() {
+    fn sec_tui_shorten_path_no_panic_on_multibyte() {
         let path = format!("src/{}/file.ts", "α".repeat(20));
         let result = shorten_path(&path, 38);
         assert!(result.starts_with('…'), "should start with ellipsis: {}", result);

@@ -115,7 +115,7 @@ mod tests {
 
     // ── V5-6: newline in file path breaks context formatter one-liner ──
     #[test]
-    fn sec_v5_6_context_newline_in_path_sanitized() {
+    fn sec_context_newline_in_path_sanitized() {
         let output = make_output_with_unused_export("src/evil\nINJECTED.ts");
         let formatter = ContextFormatter;
         let result = formatter.format(&output).unwrap();
