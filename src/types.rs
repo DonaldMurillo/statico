@@ -237,6 +237,9 @@ pub struct DuplicationSection {
     pub clone_groups: Vec<CloneGroup>,
     pub clone_families: Vec<CloneFamily>,
     pub mirrored_directories: Vec<MirroredDirectory>,
+    /// Repetitive token patterns found across multiple files.
+    /// e.g. "const * = useState" appearing in 18 files.
+    pub repetitive_patterns: Vec<RepetitivePattern>,
 }
 
 /// A clone group: one duplicated code block found at 2+ locations.
@@ -294,6 +297,26 @@ pub struct DuplicationStats {
     pub clone_instances: usize,
     /// Number of clone families.
     pub clone_families: usize,
+}
+
+/// A repetitive token pattern found across multiple files.
+///
+/// Unlike block/fragment duplication (which finds exact copied code),
+/// this finds *idioms* — short phrases like `const * = useState` or
+/// `export default function` that repeat across many files.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct RepetitivePattern {
+    /// The pattern text (tokens joined by spaces, `*` for variable slots).
+    pub pattern: String,
+    /// Number of distinct files where this pattern appears.
+    pub file_count: usize,
+    /// Total occurrences across all files.
+    pub occurrences: usize,
+    /// Information content score (0–1): how "surprising" this pattern is.
+    /// High = distinctive idiom ("createAsyncThunk"), Low = boilerplate ("const").
+    pub info_score: f64,
+    /// Example files where this pattern was found (up to 5).
+    pub example_files: Vec<String>,
 }
 
 /// Monorepo/workspace information detected during analysis.

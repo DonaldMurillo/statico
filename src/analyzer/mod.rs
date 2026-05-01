@@ -121,7 +121,15 @@ pub fn analyze_with_options(root: &Path, exclude: &[String], no_cache: bool) -> 
 
     // Use total lines (including blanks/comments) for dup % — matches jscpd/fallow methodology.
     let total_source_lines: usize = file_total_lines.values().sum();
-    let duplication = crate::duplication::build_duplication_section(&issues.duplicate_code, total_source_lines);
+
+    // Detect repetitive token patterns across files.
+    let repetitive_patterns = crate::duplication::patterns::detect_patterns(&file_sources);
+
+    let duplication = crate::duplication::build_duplication_section(
+        &issues.duplicate_code,
+        total_source_lines,
+        repetitive_patterns,
+    );
 
     // Detect monorepo setup.
     let monorepo = crate::monorepo::detect_monorepo(root)

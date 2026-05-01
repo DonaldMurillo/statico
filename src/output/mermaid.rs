@@ -329,6 +329,7 @@ mod tests {
                     clone_groups: 0, clone_instances: 0, clone_families: 0,
                 },
                 clone_groups: vec![], clone_families: vec![], mirrored_directories: vec![],
+                repetitive_patterns: vec![],
             },
         }
     }
@@ -391,6 +392,7 @@ mod tests {
                 },
                 clone_groups: vec![], clone_families: vec![],
                 mirrored_directories: vec![],
+                repetitive_patterns: vec![],
             },
         };
         let formatter = MermaidFormatter;

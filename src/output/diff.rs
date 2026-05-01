@@ -276,6 +276,7 @@ mod tests {
                 clone_groups: vec![],
                 clone_families: vec![],
                 mirrored_directories: vec![],
+                repetitive_patterns: vec![],
             },
         }
     }
