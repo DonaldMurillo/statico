@@ -183,21 +183,50 @@ pub fn discover_config_files(root: &Path) -> Vec<String> {
 }
 
 /// Directories to skip during file traversal.
+///
+/// Covers VCS internals, language/framework caches, package manager state,
+/// and common build outputs. Without these, `statico analyze` floods first-run
+/// users with noise from generated files (audit D2.1).
 pub fn is_skipped_dir(path: &Path) -> bool {
     let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
     matches!(
         name,
-        "node_modules"
-            | ".git"
+        // VCS
+        ".git"
+            | ".hg"
+            | ".svn"
+            // Build outputs
             | "dist"
             | "build"
             | "out"
+            | "target"
+            // Coverage / test output
+            | "coverage"
+            // Package managers
+            | "node_modules"
+            | "bower_components"
+            | "vendor"
+            | ".yarn"
+            // Language/framework caches & generated state
+            | ".cache"
             | ".next"
             | ".nuxt"
-            | "coverage"
-            | ".cache"
-            | "target"
             | ".turbo"
+            | ".angular"
+            | ".svelte-kit"
+            | ".vite"
+            | ".parcel-cache"
+            | ".astro"
+            | ".docusaurus"
+            | ".expo"
+            | ".vercel"
+            | ".serverless"
+            | ".output"
+            | "__pycache__"
+            | ".pytest_cache"
+            | ".mypy_cache"
+            | ".ruff_cache"
+            | ".terraform"
     )
 }
 

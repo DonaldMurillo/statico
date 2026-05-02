@@ -61,12 +61,17 @@ pub fn run_init(shell: Option<&str>, cli_command: &mut clap::Command) {
     let completion_escaped = statico::shell::shell_escape(&completion_file.display().to_string());
 
     let snippet = if is_fish {
+        // Fish does not interpret `\$` / `\\`` inside double quotes the way bash does;
+        // single-quote the escaped value so paths containing spaces or shell metachars
+        // survive intact (audit S4.4).
+        let bin_dir_fish = fish_single_quote(&bin_dir.display().to_string());
+        let completion_fish = fish_single_quote(&completion_file.display().to_string());
         format!(
-            "\n# statico\nset -gx PATH {bin_dir_escaped} $PATH\nalias st statico\nsource {completion_escaped}\n"
+            "\n# statico\nset -gx PATH {bin_dir_fish} $PATH\nalias st statico\nsource {completion_fish}\n"
         )
     } else {
         format!(
-            "\n# statico\nexport PATH=\"{bin_dir_escaped}:$PATH\"\nalias st='statico'\nsource {completion_escaped}\n"
+            "\n# statico\nexport PATH=\"{bin_dir_escaped}:$PATH\"\nalias st='statico'\nsource \"{completion_escaped}\"\n"
         )
     };
 
@@ -97,6 +102,45 @@ pub fn run_init(shell: Option<&str>, cli_command: &mut clap::Command) {
         println!("  source {}", rc_file.display());
     } else {
         println!("  source {}", rc_file.display());
+    }
+}
+
+/// Wrap a string in fish single-quotes, escaping `\` and `'`.
+///
+/// Inside fish single-quotes only `\\` and `\'` are special — every other
+/// character is literal, which makes single-quote wrapping the safest way to
+/// embed user-supplied paths in a fish script.
+fn fish_single_quote(s: &str) -> String {
+    let escaped = s.replace('\\', "\\\\").replace('\'', "\\'");
+    format!("'{}'", escaped)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sec_fish_single_quote_wraps_normal_path() {
+        assert_eq!(fish_single_quote("/usr/local/bin"), "'/usr/local/bin'");
+    }
+
+    #[test]
+    fn sec_fish_single_quote_handles_path_with_space() {
+        assert_eq!(
+            fish_single_quote("/Users/Alice Smith/.statico/bin"),
+            "'/Users/Alice Smith/.statico/bin'"
+        );
+    }
+
+    #[test]
+    fn sec_fish_single_quote_escapes_single_quote() {
+        // path contains a literal single quote (yes, this is legal on POSIX)
+        assert_eq!(fish_single_quote("/tmp/o'reilly/bin"), "'/tmp/o\\'reilly/bin'");
+    }
+
+    #[test]
+    fn sec_fish_single_quote_escapes_backslash() {
+        assert_eq!(fish_single_quote(r"C:\stat\bin"), r"'C:\\stat\\bin'");
     }
 }
 

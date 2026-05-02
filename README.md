@@ -122,6 +122,7 @@ statico analyze <PATH> [OPTIONS]
 | `--format` | `string` | `json` (or config file value) | Output format: `json`, `sarif`, `markdown`, `html`, `ai`, `context`, `mermaid`, `pr-comment`, `fix` |
 | `--min-confidence` | `float` | `0.0` (or config file value) | Minimum confidence threshold (0.0–1.0) for filtering issues |
 | `--exit-code` | `flag` | `false` | Exit with code 1 if issues are found above `--min-confidence` |
+| `--no-cache` | `flag` | `false` | Disable the incremental cache and force a full re-parse of all files |
 
 ### `statico tui`
 

@@ -17,7 +17,6 @@ use std::path::Path;
 /// Spawns plugins on creation, dispatches hooks, and shuts down on drop.
 pub struct PluginPipeline {
     plugins: Vec<(DiscoveredPlugin, ActivePlugin)>,
-    root: std::path::PathBuf,
 }
 
 impl PluginPipeline {
@@ -43,10 +42,7 @@ impl PluginPipeline {
             }
         }
 
-        PluginPipeline {
-            plugins: active,
-            root: root.to_path_buf(),
-        }
+        PluginPipeline { plugins: active }
     }
 
     /// Number of active plugins.

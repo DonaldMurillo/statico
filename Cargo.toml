@@ -2,7 +2,7 @@
 name = "statico"
 version = "0.1.0"
 edition = "2024"
-description = "Static code analyzer for TypeScript projects"
+description = "Static code analyzer for TypeScript and Rust projects"
 
 [features]
 default = []

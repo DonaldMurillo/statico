@@ -83,8 +83,8 @@ All protocol types use `#[serde(rename_all = "camelCase")]` — JSON fields are 
 
 ## Key Dependencies
 
-- `oxc` — TypeScript/JSX AST parsing
-- `syn` — Rust AST parsing
+- `tree-sitter` + `tree-sitter-typescript` + `tree-sitter-rust` — primary AST parsing for TS/Rust
+- `oxc_resolver` — optional, gated behind the `deep-resolution` cargo feature for tsconfig path resolution; the default build does not pull it in
 - `rayon` — parallel file analysis
 - `serde_json` — all I/O is JSON
 - `clap` — CLI argument parsing
