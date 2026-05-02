@@ -1,0 +1,46 @@
+{
+  "name": "@statico/cli",
+  "version": "0.1.0",
+  "description": "Static code analyzer for TypeScript and Rust projects.",
+  "license": "(MIT OR Apache-2.0)",
+  "homepage": "https://github.com/domvess/statico",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/domvess/statico.git"
+  },
+  "bugs": {
+    "url": "https://github.com/domvess/statico/issues"
+  },
+  "keywords": [
+    "static-analysis",
+    "dead-code",
+    "typescript",
+    "rust",
+    "linter",
+    "sarif"
+  ],
+  "bin": {
+    "statico": "bin/statico.js"
+  },
+  "files": [
+    "bin/statico.js",
+    "scripts/install.js",
+    "scripts/sha256.js",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "postinstall": "node scripts/install.js"
+  },
+  "engines": {
+    "node": ">=16"
+  },
+  "os": [
+    "darwin",
+    "linux"
+  ],
+  "cpu": [
+    "x64",
+    "arm64"
+  ]
+}

@@ -2,6 +2,7 @@
 
 use std::process;
 
+#[allow(clippy::too_many_arguments)]
 pub fn run_analyze(
     path: &str,
     format: Option<&str>,
@@ -9,6 +10,9 @@ pub fn run_analyze(
     exit_code: bool,
     quiet: bool,
     no_cache: bool,
+    baseline: Option<&str>,
+    update_baseline: Option<&str>,
+    watch: bool,
 ) {
     let root = std::path::Path::new(path);
     let root = match std::fs::canonicalize(root) {
@@ -19,14 +23,157 @@ pub fn run_analyze(
         }
     };
 
+    if watch && update_baseline.is_some() {
+        eprintln!("error: --watch is incompatible with --update-baseline");
+        process::exit(1);
+    }
+
+    if watch {
+        run_watch_loop(
+            &root,
+            path,
+            format,
+            min_confidence,
+            exit_code,
+            quiet,
+            no_cache,
+            baseline,
+        );
+        return;
+    }
+
+    run_analyze_inner(
+        &root,
+        format,
+        min_confidence,
+        exit_code,
+        quiet,
+        no_cache,
+        baseline,
+        update_baseline,
+    );
+}
+
+/// Watch loop: re-run `run_analyze_once` whenever a source file under `root`
+/// changes. Debounces bursts (e.g. saves from editors that touch many files)
+/// to ~150ms.
+#[allow(clippy::too_many_arguments)]
+fn run_watch_loop(
+    root: &std::path::Path,
+    raw_path: &str,
+    format: Option<&str>,
+    min_confidence: Option<f64>,
+    exit_code: bool,
+    quiet: bool,
+    no_cache: bool,
+    baseline: Option<&str>,
+) {
+    use notify::{RecommendedWatcher, RecursiveMode, Watcher};
+    use std::sync::mpsc;
+    use std::time::{Duration, Instant};
+
+    eprintln!("statico: watching {} (Ctrl-C to exit)", root.display());
+
+    // Run once up front so users see the initial state.
+    run_analyze_inner(
+        root, format, min_confidence, exit_code, quiet, no_cache, baseline, None,
+    );
+
+    let (tx, rx) = mpsc::channel();
+    let mut watcher: RecommendedWatcher = match notify::recommended_watcher(move |res| {
+        let _ = tx.send(res);
+    }) {
+        Ok(w) => w,
+        Err(e) => {
+            eprintln!("error: cannot start file watcher: {}", e);
+            process::exit(1);
+        }
+    };
+    if let Err(e) = watcher.watch(root, RecursiveMode::Recursive) {
+        eprintln!("error: cannot watch {}: {}", root.display(), e);
+        process::exit(1);
+    }
+
+    let debounce = Duration::from_millis(150);
+    loop {
+        let event = match rx.recv() {
+            Ok(Ok(ev)) => ev,
+            Ok(Err(e)) => {
+                eprintln!("watch error: {}", e);
+                continue;
+            }
+            Err(_) => break, // sender dropped
+        };
+        if !event_is_relevant(&event, root) {
+            continue;
+        }
+
+        // Debounce: drain any further events that arrive within the window.
+        let deadline = Instant::now() + debounce;
+        loop {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                break;
+            }
+            match rx.recv_timeout(remaining) {
+                Ok(_) => continue,
+                Err(_) => break,
+            }
+        }
+
+        eprintln!("\nstatico: change detected in {} — re-analyzing…", raw_path);
+        run_analyze_inner(
+            root, format, min_confidence, exit_code, quiet, no_cache, baseline, None,
+        );
+    }
+}
+
+/// Filter notify events to those that should trigger a re-analyze.
+/// Skips events inside skipped dirs (node_modules, .git, etc) and non-source
+/// extensions to keep CPU low on busy projects.
+fn event_is_relevant(event: &notify::Event, root: &std::path::Path) -> bool {
+    use notify::EventKind;
+    match event.kind {
+        EventKind::Create(_) | EventKind::Modify(_) | EventKind::Remove(_) => {}
+        _ => return false,
+    }
+    for path in &event.paths {
+        // Skip events under any directory we don't analyze.
+        let mut skipped = false;
+        for ancestor in path.ancestors().take_while(|a| *a != root) {
+            if statico::discovery::is_skipped_dir(ancestor) {
+                skipped = true;
+                break;
+            }
+        }
+        if skipped {
+            continue;
+        }
+        let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+        if matches!(ext, "ts" | "tsx" | "js" | "jsx" | "rs" | "py" | "json" | "toml") {
+            return true;
+        }
+    }
+    false
+}
+
+/// Inner body of `run_analyze` minus the watch / update-baseline branches.
+/// Extracted so the watch loop can call it without duplicating logic.
+#[allow(clippy::too_many_arguments)]
+fn run_analyze_inner(
+    root: &std::path::Path,
+    format: Option<&str>,
+    min_confidence: Option<f64>,
+    exit_code: bool,
+    quiet: bool,
+    no_cache: bool,
+    baseline: Option<&str>,
+    update_baseline: Option<&str>,
+) {
     // Load config from project root and merge with CLI args.
     let mut config =
-        statico::config::StaticoConfig::load(&root).merge_cli(format, min_confidence, exit_code, quiet);
+        statico::config::StaticoConfig::load(root).merge_cli(format, min_confidence, exit_code, quiet);
 
-    // Audit D2.3: when neither --format nor a config value asked for a specific
-    // format and stdout is a terminal, default to a human-readable format.
-    // Only apply this when both the CLI and config left format at the built-in
-    // default of "json" — we don't want to override an explicit choice.
     if format.is_none() && config.format == "json" && std::io::IsTerminal::is_terminal(&std::io::stdout()) {
         config.format = "markdown".to_string();
     }
@@ -38,27 +185,24 @@ pub fn run_analyze(
         eprintln!("info: include patterns: {:?}", config.include);
     }
 
-    // Initialize plugin pipeline.
-    let mut plugin_pipeline = statico::plugin::PluginPipeline::new(&root);
+    let mut plugin_pipeline = statico::plugin::PluginPipeline::new(root);
     if !config.quiet && !plugin_pipeline.is_empty() {
         eprintln!("info: {} plugin(s) active", plugin_pipeline.len());
     }
 
-    let mut output = match statico::analyzer::analyze_with_options(&root, &config.exclude, no_cache) {
+    let mut output = match statico::analyzer::analyze_with_options(root, &config.exclude, no_cache) {
         Ok(o) => o,
         Err(msg) => {
             eprintln!("error: {}", msg);
-            process::exit(1);
+            return; // in watch mode we want to keep the loop alive
         }
     };
 
-    // Plugin per-file analysis: analyze_file hook.
     if !plugin_pipeline.is_empty() {
         let source_files = &output.structure.source_files;
-        let root_path = std::path::Path::new(&root);
         for file_entry in source_files {
             let rel_path = &file_entry.path;
-            let abs_path = root_path.join(rel_path);
+            let abs_path = root.join(rel_path);
             let file_size = match std::fs::metadata(&abs_path) {
                 Ok(m) => m.len(),
                 Err(_) => continue,
@@ -75,14 +219,12 @@ pub fn run_analyze(
             for mut result in results {
                 if !result.issues.is_empty() {
                     for issue in &mut result.issues {
-                        issue.file = issue.file.chars()
-                            .filter(|c| !c.is_control())
-                            .collect::<String>();
+                        issue.file = issue.file.chars().filter(|c| !c.is_control()).collect::<String>();
                         if issue.file.starts_with('/') || issue.file.starts_with("..") {
                             issue.file = issue.file
                                 .trim_start_matches('/')
-                            .trim_start_matches("../")
-                            .to_string();
+                                .trim_start_matches("../")
+                                .to_string();
                         }
                     }
                     output.issues.plugin_issues.extend(result.issues);
@@ -91,7 +233,6 @@ pub fn run_analyze(
         }
     }
 
-    // Plugin post_analysis hook.
     if !plugin_pipeline.is_empty() {
         let plugin_results = plugin_pipeline.post_analysis(&output);
         if !config.quiet && !plugin_results.is_empty() {
@@ -99,14 +240,44 @@ pub fn run_analyze(
         }
     }
 
-    // Apply confidence filter if threshold > 0.
+    if let Some(out_path) = update_baseline {
+        let pre_baseline = if config.min_confidence > 0.0 {
+            statico::output::filter_by_confidence(&output, config.min_confidence)
+        } else {
+            output.clone()
+        };
+        let bl = statico::baseline::Baseline::from_output(&pre_baseline);
+        if let Err(e) = bl.write(std::path::Path::new(out_path)) {
+            eprintln!("error: {}", e);
+            return;
+        }
+        if !config.quiet {
+            eprintln!("info: wrote baseline with {} fingerprints to {}", bl.len(), out_path);
+        }
+        return;
+    }
+
+    if let Some(in_path) = baseline {
+        match statico::baseline::Baseline::load(std::path::Path::new(in_path)) {
+            Ok(bl) => {
+                let suppressed = bl.apply(&mut output);
+                if !config.quiet {
+                    eprintln!("info: baseline {} suppressed {} known issue(s)", in_path, suppressed);
+                }
+            }
+            Err(e) => {
+                eprintln!("error: {}", e);
+                return;
+            }
+        }
+    }
+
     let filtered = if config.min_confidence > 0.0 {
         statico::output::filter_by_confidence(&output, config.min_confidence)
     } else {
         output
     };
 
-    // Plugin format_output hook — if any plugin handles it, skip built-in formatting.
     if let Some(plugin_output) = plugin_pipeline.format_output(&filtered, &config.format) {
         println!("{}", plugin_output);
     } else {
@@ -137,7 +308,6 @@ pub fn run_analyze(
         }
     }
 
-    // Exit code logic: exit 1 if there are issues above threshold.
     if config.exit_code && has_issues_above_confidence(&filtered, config.min_confidence) {
         process::exit(1);
     }

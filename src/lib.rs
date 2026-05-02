@@ -1,4 +1,5 @@
 pub mod analyzer;
+pub mod baseline;
 pub mod cache;
 pub mod config;
 pub mod discovery;

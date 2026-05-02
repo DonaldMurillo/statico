@@ -43,6 +43,7 @@ zip = { version = "2", default-features = false, features = ["deflate"] }
 sha2 = "0.10"
 dirs = "6"
 tempfile = "3"
+notify = { version = "6", default-features = false, features = ["macos_kqueue"] }
 
 [[bench]]
 name = "analysis_benchmarks"

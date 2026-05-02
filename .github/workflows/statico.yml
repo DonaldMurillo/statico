@@ -1,0 +1,35 @@
+name: statico
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  analyze:
+    name: Analyze with statico
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run statico
+        uses: ./.github/actions/statico
+        with:
+          path: .
+          format: sarif
+          output-file: statico-results.sarif
+          min-confidence: '0.5'
+          exit-code: 'false'
+          upload-sarif: 'true'
+
+      - name: Upload SARIF artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: statico-sarif
+          path: statico-results.sarif
+          if-no-files-found: warn

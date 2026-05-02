@@ -96,6 +96,26 @@ enum Commands {
         /// warm analysis ~5-10x faster than cold.
         #[arg(long)]
         no_cache: bool,
+
+        /// Filter out issues whose fingerprints are listed in this baseline file.
+        ///
+        /// Use --update-baseline to write a new baseline. Combined with --exit-code
+        /// this lets teams ratchet down issues over time without each PR drowning in
+        /// pre-existing noise.
+        #[arg(long, value_name = "PATH")]
+        baseline: Option<String>,
+
+        /// Write the current set of issues as a baseline file at this path,
+        /// then exit. Existing baselines at that path are overwritten atomically.
+        #[arg(long, value_name = "PATH", conflicts_with = "baseline")]
+        update_baseline: Option<String>,
+
+        /// Re-run analysis whenever a source file changes. Press Ctrl-C to exit.
+        ///
+        /// Uses the existing incremental cache so successive runs only re-parse
+        /// files that actually changed. Ignored when used with --update-baseline.
+        #[arg(long)]
+        watch: bool,
     },
 
     /// Show an interactive terminal dashboard for exploring analysis results.
@@ -292,8 +312,21 @@ fn main() {
             min_confidence,
             exit_code,
             no_cache,
+            baseline,
+            update_baseline,
+            watch,
         } => {
-            commands::analyze::run_analyze(&path, format.as_deref(), min_confidence, exit_code, quiet, no_cache);
+            commands::analyze::run_analyze(
+                &path,
+                format.as_deref(),
+                min_confidence,
+                exit_code,
+                quiet,
+                no_cache,
+                baseline.as_deref(),
+                update_baseline.as_deref(),
+                watch,
+            );
         }
         Commands::Tui {
             path,

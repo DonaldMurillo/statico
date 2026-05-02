@@ -1,0 +1,101 @@
+name: 'statico'
+description: 'Run statico static code analysis and (optionally) upload SARIF to GitHub code scanning.'
+author: 'statico contributors'
+
+branding:
+  icon: 'search'
+  color: 'orange'
+
+inputs:
+  version:
+    description: 'statico release tag to install (e.g. "v0.1.0"). "latest" pulls the most recent release.'
+    required: false
+    default: 'latest'
+  path:
+    description: 'Project path to analyze.'
+    required: false
+    default: '.'
+  format:
+    description: 'Output format passed to `statico analyze`. Defaults to "sarif" so the result can be uploaded to code scanning.'
+    required: false
+    default: 'sarif'
+  output-file:
+    description: 'File to write the analysis output to.'
+    required: false
+    default: 'statico-results.sarif'
+  min-confidence:
+    description: 'Minimum confidence threshold (0.0–1.0).'
+    required: false
+    default: '0.0'
+  exit-code:
+    description: 'If "true", fail the step when issues are found above min-confidence.'
+    required: false
+    default: 'false'
+  upload-sarif:
+    description: 'If "true" (and format is sarif), upload the result to GitHub code scanning. Requires `security-events: write` permission.'
+    required: false
+    default: 'true'
+
+outputs:
+  output-file:
+    description: 'Path to the analysis output file.'
+    value: ${{ steps.run.outputs.output-file }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install statico
+      shell: bash
+      env:
+        STATICO_VERSION: ${{ inputs.version }}
+      run: |
+        set -euo pipefail
+        os="$(uname -s | tr '[:upper:]' '[:lower:]')"
+        arch="$(uname -m)"
+        case "$os" in
+          darwin) os=macos ;;
+          linux)  os=linux ;;
+          *) echo "::error::unsupported OS: $os"; exit 1 ;;
+        esac
+        case "$arch" in
+          arm64|aarch64) arch=aarch64 ;;
+          x86_64|amd64)  arch=x86_64 ;;
+          *) echo "::error::unsupported arch: $arch"; exit 1 ;;
+        esac
+        version="${STATICO_VERSION#v}"
+        if [ "$version" = "latest" ]; then
+          tag_path="latest/download"
+        else
+          tag_path="download/v${version}"
+        fi
+        url="https://github.com/domvess/statico/releases/${tag_path}/statico-${os}-${arch}.tar.gz"
+        echo "Downloading $url"
+        curl -fsSL "$url" -o /tmp/statico.tar.gz
+        tar -xzf /tmp/statico.tar.gz -C /tmp
+        sudo install -m 0755 /tmp/statico /usr/local/bin/statico
+        statico --version
+
+    - name: Run statico analyze
+      id: run
+      shell: bash
+      env:
+        STATICO_PATH: ${{ inputs.path }}
+        STATICO_FORMAT: ${{ inputs.format }}
+        STATICO_OUTPUT: ${{ inputs.output-file }}
+        STATICO_MIN_CONF: ${{ inputs.min-confidence }}
+        STATICO_EXIT_CODE: ${{ inputs.exit-code }}
+      run: |
+        set -euo pipefail
+        args=(analyze "$STATICO_PATH" --format "$STATICO_FORMAT" --min-confidence "$STATICO_MIN_CONF")
+        if [ "$STATICO_EXIT_CODE" = "true" ]; then
+          args+=(--exit-code)
+        fi
+        statico "${args[@]}" >"$STATICO_OUTPUT"
+        echo "output-file=$STATICO_OUTPUT" >>"$GITHUB_OUTPUT"
+
+    - name: Upload SARIF to code scanning
+      if: ${{ inputs.upload-sarif == 'true' && inputs.format == 'sarif' }}
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: ${{ steps.run.outputs.output-file }}
+        category: statico
