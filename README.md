@@ -45,15 +45,60 @@ statico performs whole-project static analysis by parsing your source files, res
 
 ## Installation
 
+### Cargo
+
+```bash
+cargo install statico
+```
+
+### npm (macOS / Linux × x86_64 / aarch64)
+
+```bash
+npm install -D @statico/cli
+npx statico analyze .
+```
+
+### Prebuilt release
+
+Download a tarball from the [latest release](https://github.com/DonaldMurillo/statico/releases/latest) and extract:
+
+```bash
+# Example: macOS arm64
+curl -fsSL https://github.com/DonaldMurillo/statico/releases/latest/download/statico-macos-aarch64.tar.gz \
+  | tar -xz
+sudo install -m 0755 statico /usr/local/bin/statico
+```
+
+> **macOS quarantine note:** if you downloaded the tarball with a browser
+> (Safari/Chrome/Firefox) the binary is marked unsigned and Gatekeeper
+> refuses to run it with an "unidentified developer" dialog. Clear the
+> quarantine flag once with:
+>
+> ```bash
+> xattr -d com.apple.quarantine /usr/local/bin/statico
+> ```
+>
+> The `npx`, `cargo install`, and `curl | tar` paths above do not set the
+> quarantine attribute, so they don't hit this dialog.
+
+### GitHub Action
+
+```yaml
+- uses: DonaldMurillo/statico/.github/actions/statico@main
+  with:
+    format: sarif
+    min-confidence: '0.5'
+```
+
 ### From source
 
 ```bash
-git clone https://github.com/domvrt/statico.git
+git clone https://github.com/DonaldMurillo/statico.git
 cd statico
 cargo install --path .
 ```
 
-### Prerequisites
+### Prerequisites (build from source only)
 
 - [Rust](https://rustup.rs/) 1.85+ (Edition 2024)
 
@@ -325,7 +370,7 @@ The `--format context` flag produces an ultra-compact (~100 token) plain-text su
 
 ### Pi Skills
 
-The project includes [Pi](https://github.com/domvrt/pi) skills for common workflows:
+The project includes [Pi](https://github.com/DonaldMurillo/pi) skills for common workflows:
 
 | Skill | Description |
 |---|---|

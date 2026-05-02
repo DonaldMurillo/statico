@@ -1,0 +1,129 @@
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to build (e.g. v0.1.0). Required for manual runs.'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: linux-x86_64
+            rust-target: x86_64-unknown-linux-gnu
+            runner: ubuntu-latest
+          - target: linux-aarch64
+            rust-target: aarch64-unknown-linux-gnu
+            runner: ubuntu-24.04-arm
+          - target: macos-x86_64
+            rust-target: x86_64-apple-darwin
+            runner: macos-13
+          - target: macos-aarch64
+            rust-target: aarch64-apple-darwin
+            runner: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust-target }}
+
+      - name: Cargo cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Build release
+        run: cargo build --release --target ${{ matrix.rust-target }}
+
+      - name: Strip binary
+        if: runner.os == 'macOS' || runner.os == 'Linux'
+        run: strip target/${{ matrix.rust-target }}/release/statico
+
+      - name: Package tarball
+        id: package
+        shell: bash
+        run: |
+          set -euo pipefail
+          name="statico-${{ matrix.target }}.tar.gz"
+          stage="$(mktemp -d)"
+          cp target/${{ matrix.rust-target }}/release/statico "$stage/statico"
+          cp LICENSE-MIT LICENSE-APACHE README.md "$stage/"
+          tar -C "$stage" -czf "$name" .
+          # Per-asset checksum file makes it easy for the GitHub Action /
+          # npm postinstall to verify a single download without pulling
+          # SHASUMS256.txt.
+          shasum -a 256 "$name" > "$name.sha256"
+          echo "name=$name" >>"$GITHUB_OUTPUT"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: statico-${{ matrix.target }}
+          path: |
+            ${{ steps.package.outputs.name }}
+            ${{ steps.package.outputs.name }}.sha256
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Build SHASUMS256.txt
+        working-directory: dist
+        run: |
+          set -euo pipefail
+          : >SHASUMS256.txt
+          for f in statico-*.tar.gz; do
+            shasum -a 256 "$f" >>SHASUMS256.txt
+          done
+          cat SHASUMS256.txt
+
+      - name: Resolve tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            echo "tag=${GITHUB_REF#refs/tags/}" >>"$GITHUB_OUTPUT"
+          else
+            echo "tag=${{ inputs.tag }}" >>"$GITHUB_OUTPUT"
+          fi
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: ${{ steps.tag.outputs.tag }}
+          body_path: .github/release-notes.md
+          fail_on_unmatched_files: true
+          files: |
+            dist/statico-*.tar.gz
+            dist/statico-*.tar.gz.sha256
+            dist/SHASUMS256.txt

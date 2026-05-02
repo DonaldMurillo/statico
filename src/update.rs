@@ -8,7 +8,7 @@ use std::io;
 use std::path::{Component, Path, PathBuf};
 
 /// GitHub repo for releases.
-const GITHUB_REPO: &str = "domvess/statico";
+const GITHUB_REPO: &str = "DonaldMurillo/statico";
 
 /// Maximum download size for self-update archive (100 MB).
 /// Prevents disk-fill DoS from a malicious update server.

@@ -68,7 +68,7 @@ runs:
         else
           tag_path="download/v${version}"
         fi
-        url="https://github.com/domvess/statico/releases/${tag_path}/statico-${os}-${arch}.tar.gz"
+        url="https://github.com/DonaldMurillo/statico/releases/${tag_path}/statico-${os}-${arch}.tar.gz"
         echo "Downloading $url"
         curl -fsSL "$url" -o /tmp/statico.tar.gz
         tar -xzf /tmp/statico.tar.gz -C /tmp

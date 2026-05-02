@@ -2,7 +2,32 @@
 name = "statico"
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.85"
 description = "Static code analyzer for TypeScript and Rust projects"
+authors = ["Donald Murillo <donald.murillo07@gmail.com>"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/DonaldMurillo/statico"
+homepage = "https://github.com/DonaldMurillo/statico"
+documentation = "https://github.com/DonaldMurillo/statico#readme"
+readme = "README.md"
+keywords = ["static-analysis", "dead-code", "linter", "typescript", "rust"]
+categories = ["development-tools", "command-line-utilities"]
+exclude = [
+    "/website",
+    "/benchmarks",
+    "/fixtures",
+    "/examples",
+    "/docs",
+    "/.github",
+    "/.claude",
+    "/.cursor",
+    "/.pi",
+    "/.statico",
+    "/__pycache__",
+    "/target",
+    "*.md",
+    "!README.md",
+]
 
 [features]
 default = []

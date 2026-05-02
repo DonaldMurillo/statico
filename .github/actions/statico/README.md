@@ -1,6 +1,6 @@
 # statico GitHub Action
 
-Run [statico](https://github.com/domvess/statico) inside a GitHub Actions workflow and (optionally) upload the SARIF result to GitHub Code Scanning.
+Run [statico](https://github.com/DonaldMurillo/statico) inside a GitHub Actions workflow and (optionally) upload the SARIF result to GitHub Code Scanning.
 
 ## Quick start
 
@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: domvess/statico/.github/actions/statico@main
+      - uses: DonaldMurillo/statico/.github/actions/statico@main
         with:
           format: sarif
           min-confidence: '0.5'

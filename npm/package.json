@@ -3,13 +3,13 @@
   "version": "0.1.0",
   "description": "Static code analyzer for TypeScript and Rust projects.",
   "license": "(MIT OR Apache-2.0)",
-  "homepage": "https://github.com/domvess/statico",
+  "homepage": "https://github.com/DonaldMurillo/statico",
   "repository": {
     "type": "git",
-    "url": "https://github.com/domvess/statico.git"
+    "url": "https://github.com/DonaldMurillo/statico.git"
   },
   "bugs": {
-    "url": "https://github.com/domvess/statico/issues"
+    "url": "https://github.com/DonaldMurillo/statico/issues"
   },
   "keywords": [
     "static-analysis",

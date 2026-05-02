@@ -1,6 +1,6 @@
 # @statico/cli
 
-[statico](https://github.com/domvess/statico) — a static code analyzer for TypeScript and Rust — distributed as an npm package.
+[statico](https://github.com/DonaldMurillo/statico) — a static code analyzer for TypeScript and Rust — distributed as an npm package.
 
 ```bash
 npm install -D @statico/cli
@@ -18,4 +18,4 @@ Supported targets:
 | macOS | aarch64, x86_64 |
 | Linux | aarch64, x86_64 |
 
-For other platforms, install via `cargo install --git https://github.com/domvess/statico` instead.
+For other platforms, install via `cargo install --git https://github.com/DonaldMurillo/statico` instead.

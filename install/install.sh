@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # statico installer — curl | sh
-# Usage: curl -fsSL https://github.com/domvess/statico/raw/main/install/install.sh | sh
-#        curl -fsSL https://github.com/domvess/statico/raw/main/install/install.sh | sh -s -- --uninstall
+# Usage: curl -fsSL https://github.com/DonaldMurillo/statico/raw/main/install/install.sh | sh
+#        curl -fsSL https://github.com/DonaldMurillo/statico/raw/main/install/install.sh | sh -s -- --uninstall
 set -euo pipefail
 
-readonly REPO="domvess/statico"
+readonly REPO="DonaldMurillo/statico"
 readonly INSTALL_DIR="${HOME}/.statico"
 readonly BIN_DIR="${INSTALL_DIR}/bin"
 readonly COMPLETIONS_DIR="${INSTALL_DIR}/completions"

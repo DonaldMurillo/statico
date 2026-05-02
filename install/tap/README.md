@@ -1,11 +1,11 @@
-# domvess/homebrew-statico
+# DonaldMurillo/homebrew-statico
 
-Homebrew tap for [statico](https://github.com/domvess/statico) — a static code analyzer for TypeScript and Rust projects.
+Homebrew tap for [statico](https://github.com/DonaldMurillo/statico) — a static code analyzer for TypeScript and Rust projects.
 
 ## Install
 
 ```bash
-brew tap domvess/statico
+brew tap DonaldMurillo/statico
 brew install statico
 ```
 
@@ -19,7 +19,7 @@ brew upgrade statico
 
 ```bash
 brew uninstall statico
-brew untap domvess/statico
+brew untap DonaldMurillo/statico
 ```
 
 ## Shell completions
@@ -61,11 +61,11 @@ Fish completions are loaded automatically from `$(brew --prefix)/share/fish/vend
 If you prefer not to use Homebrew:
 
 ```bash
-curl -fsSL https://github.com/domvess/statico/raw/main/install/install.sh | sh
+curl -fsSL https://github.com/DonaldMurillo/statico/raw/main/install/install.sh | sh
 ```
 
 To uninstall:
 
 ```bash
-curl -fsSL https://github.com/domvess/statico/raw/main/install/install.sh | sh -s -- --uninstall
+curl -fsSL https://github.com/DonaldMurillo/statico/raw/main/install/install.sh | sh -s -- --uninstall
 ```
