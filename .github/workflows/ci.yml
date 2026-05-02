@@ -93,8 +93,16 @@ jobs:
       - name: Build release binary
         run: cargo build --release --bin statico
 
-      - name: statico analyze . --min-confidence 0.7 --exit-code
-        # 0.7 is the threshold below which the gotcha detector is mostly
-        # noise (per docs/audit-2026-05.md). Anything found at >=0.7 is a
-        # signal worth blocking on.
-        run: ./target/release/statico analyze . --min-confidence 0.7 --exit-code --format markdown
+      - name: statico analyze . (baseline-gated)
+        # `statico-baseline.json` records the current set of harmless
+        # findings on this repo (4 circular deps from the output/mod.rs
+        # re-export pattern, 1 from languages/, plus a few duplicate
+        # exports and test-helper unused exports). With `--baseline`, only
+        # *new* issues above confidence 0.7 fail the build. Regenerate with:
+        #   statico analyze . --update-baseline statico-baseline.json
+        run: |
+          ./target/release/statico analyze . \
+            --baseline statico-baseline.json \
+            --min-confidence 0.7 \
+            --exit-code \
+            --format markdown

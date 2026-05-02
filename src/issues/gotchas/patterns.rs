@@ -237,7 +237,17 @@ pub fn detect_in_file(rel_path: &str, source: &str, issues: &mut Vec<GotchaIssue
         }
 
         // `panic!()` in non-test code.
-        if lang.is_rust() && !is_test && !is_comment_line(line) && calls_rust_macro(line, "panic") {
+        // Skip the deferred-panic idiom — `unwrap_or_else(|...| panic!(...))`
+        // is the clippy-recommended way to attach a formatted message to
+        // an unwrap (since `.expect(&format!(...))` triggers the
+        // `expect_fun_call` lint). The error case still aborts, but the
+        // rule's "use a Result" advice doesn't apply at this call site.
+        if lang.is_rust()
+            && !is_test
+            && !is_comment_line(line)
+            && calls_rust_macro(line, "panic")
+            && !is_deferred_panic(line)
+        {
             issues.push(GotchaIssue {
                 file: rel_path.to_string(),
                 line: line_num,
@@ -320,6 +330,19 @@ pub fn detect_in_file(rel_path: &str, source: &str, issues: &mut Vec<GotchaIssue
 /// gotcha rule definitions and unit tests in *this* file embed strings
 /// like `"todo!("` — a naive `line.contains("todo!(")` would happily flag
 /// the rule definition itself.
+/// True if `line` looks like the deferred-panic idiom — `panic!(...)`
+/// inside the closure passed to `unwrap_or_else` / `unwrap_or_else_with` /
+/// `expect_or` / similar. Heuristic: the line has `unwrap_or_else(` *before*
+/// the `panic!(` call. Doesn't try to span multiple lines because
+/// rustfmt normally keeps the closure on one line.
+fn is_deferred_panic(line: &str) -> bool {
+    let Some(panic_at) = line.find("panic!(") else {
+        return false;
+    };
+    let prefix = &line[..panic_at];
+    prefix.contains("unwrap_or_else(") || prefix.contains("ok_or_else(")
+}
+
 pub(super) fn calls_rust_macro(line: &str, name: &str) -> bool {
     let needle = format!("{}!(", name);
     let needle_bytes = needle.as_bytes();
@@ -451,5 +474,44 @@ mod calls_rust_macro_tests {
         assert!(!calls_rust_macro(r####"let s = r##"unimplemented!()"##;"####, "unimplemented"));
         // But a real call after a closing raw string still matches.
         assert!(calls_rust_macro(r#"let s = r"x"; todo!();"#, "todo"));
+    }
+}
+
+#[cfg(test)]
+mod is_deferred_panic_tests {
+    use super::is_deferred_panic;
+
+    #[test]
+    fn matches_unwrap_or_else_panic() {
+        // The exact idiom we're whitelisting.
+        assert!(is_deferred_panic(
+            r#"std::fs::create_dir_all(dir).unwrap_or_else(|_| panic!("create {} dir", dir.display()));"#
+        ));
+        assert!(is_deferred_panic(
+            r#"        for e in std::fs::read_dir(&runtime_dir).unwrap_or_else(|_| panic!("read_dir")).flatten() {"#
+        ));
+    }
+
+    #[test]
+    fn matches_ok_or_else_panic() {
+        assert!(is_deferred_panic(r#"let v = opt.ok_or_else(|| panic!("missing")).unwrap();"#));
+    }
+
+    #[test]
+    fn does_not_match_top_level_panic() {
+        // The real anti-pattern the rule should still catch.
+        assert!(!is_deferred_panic(r#"    panic!("unrecoverable: {}", err);"#));
+        assert!(!is_deferred_panic(r#"if bad { panic!("nope"); }"#));
+    }
+
+    #[test]
+    fn does_not_match_panic_with_unrelated_method_chain() {
+        // `.unwrap_or_else(...)` *after* a separate `panic!(...)` should still flag.
+        assert!(!is_deferred_panic(r#"panic!("first"); something.unwrap_or_else(|_| 0);"#));
+    }
+
+    #[test]
+    fn returns_false_when_no_panic() {
+        assert!(!is_deferred_panic("let x = foo.unwrap_or_else(|_| 0);"));
     }
 }
