@@ -921,7 +921,7 @@ fn test_plugin_build_empty() {
 #[test]
 fn test_plugin_run_discovers_console_log() {
     let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/fixtures/plugin-demo");
+        .join("fixtures/plugin-demo");
 
     // Check bun is available (skip test if not).
     let has_bun = std::process::Command::new("which")
@@ -964,7 +964,7 @@ fn test_plugin_run_discovers_console_log() {
 #[test]
 fn test_plugin_run_clean_file_no_issues() {
     let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/fixtures/plugin-demo");
+        .join("fixtures/plugin-demo");
 
     let has_bun = std::process::Command::new("which")
         .arg("bun")
@@ -1001,7 +1001,7 @@ fn test_plugin_run_clean_file_no_issues() {
 #[test]
 fn test_python_plugin_detects_bare_excepts() {
     let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/fixtures/python-demo");
+        .join("fixtures/python-demo");
 
     let has_python = std::process::Command::new("which")
         .arg("python3")
@@ -1043,7 +1043,7 @@ fn test_python_plugin_detects_bare_excepts() {
 #[test]
 fn test_python_plugin_clean_file_no_issues() {
     let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/fixtures/python-demo");
+        .join("fixtures/python-demo");
 
     let has_python = std::process::Command::new("which")
         .arg("python3")

@@ -1,4 +1,4 @@
-import { Plugin, Issue } from "../../../../../../sdks/typescript/src/index";
+import { Plugin, Issue } from "../../../../../sdks/typescript/src/index";
 
 const plugin = Plugin.create("no-console-log", {
   hooks: { analyze_file: "add" },

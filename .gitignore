@@ -37,6 +37,15 @@ tmp-plugin-test/
 
 # statico cache
 .statico/
+# …but the test plugin fixtures need their .statico/plugins content tracked.
+!fixtures/plugin-demo/.statico/
+!fixtures/plugin-demo/.statico/**
+!fixtures/python-demo/.statico/
+!fixtures/python-demo/.statico/**
+
+# fallow's cache files dropped into project roots when its CLI is run
+# against fixtures. We do not want them tracked.
+.fallow/
 
 # Website (Angular)
 website/dist/
