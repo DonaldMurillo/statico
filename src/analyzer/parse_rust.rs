@@ -267,7 +267,7 @@ fn resolve_rust_use_path(root: &Path, current_rel: &str, use_path: &str) -> Opti
     let is_crate_name = crate_name.as_ref().is_some_and(|cn| cn == parts[0]);
 
     match parts[0] {
-        "crate" | _ if is_crate_name => {
+        _ if parts[0] == "crate" || is_crate_name => {
             // Absolute from crate root: crate::foo::bar → {crate_src}/foo/bar
             let skip = if parts[0] == "crate" || is_crate_name { 1 } else { 0 };
             let mod_parts = &parts[skip..];
@@ -411,14 +411,13 @@ fn read_crate_name(root: &Path, rel_path: &str) -> Option<String> {
     let contents = std::fs::read_to_string(&cargo_path).ok()?;
     for line in contents.lines() {
         let trimmed = line.trim();
-        if trimmed.starts_with("name") {
-            if let Some(eq) = trimmed.find('=') {
+        if trimmed.starts_with("name")
+            && let Some(eq) = trimmed.find('=') {
                 let val = trimmed[eq + 1..].trim().trim_matches('"').trim_matches('\'');
                 if !val.is_empty() {
                     return Some(val.to_string());
                 }
             }
-        }
         // Stop at the end of [package] section
         if trimmed.starts_with('[') && !trimmed.starts_with("[package") {
             break;

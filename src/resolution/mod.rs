@@ -417,7 +417,7 @@ mod tests {
         let _ = std::fs::remove_file(&tmp);
 
         let aliases = resolver.aliases();
-        assert!(aliases.len() >= 1, "should have at least 1 alias");
+        assert!(!aliases.is_empty(), "should have at least 1 alias");
 
         // Check that @/ prefix was parsed.
         let at_alias = aliases.iter().find(|a| a.prefix == "@/");

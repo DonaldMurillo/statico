@@ -172,7 +172,7 @@ fn prop_confidence_scores_in_range() {
 proptest! {
     #[test]
     fn fuzz_extract_imports_no_panic(s in ".*") {
-        let mut parser = statico::parse::AstParser::new().expect("parser init");
+        let parser = statico::parse::AstParser::new().expect("parser init");
         if let Some(result) = parser.parse(&s, false) {
             let root = result.tree.root_node();
             let _ = statico::parse::imports::extract_imports(root, &s);
@@ -181,7 +181,7 @@ proptest! {
 
     #[test]
     fn fuzz_extract_exports_no_panic(s in ".*") {
-        let mut parser = statico::parse::AstParser::new().expect("parser init");
+        let parser = statico::parse::AstParser::new().expect("parser init");
         if let Some(result) = parser.parse(&s, false) {
             let root = result.tree.root_node();
             let _ = statico::parse::exports::extract_exports(root, &s);

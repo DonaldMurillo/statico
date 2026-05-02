@@ -154,8 +154,7 @@ fn escape_md_cell(s: &str) -> String {
      .replace('`', "\\`")
      .replace('<', "&lt;")
      .replace('>', "&gt;")
-     .replace('\n', " ")
-     .replace('\r', " ")
+     .replace(['\n', '\r'], " ")
 }
 
 /// Format diff result as Markdown.
@@ -227,14 +226,6 @@ mod tests {
     use super::*;
     use crate::types::*;
     use std::path::PathBuf;
-
-    fn make_diff_entry(category: &str, key: &str, detail: &str) -> DiffEntry {
-        DiffEntry {
-            category: category.to_string(),
-            key: key.to_string(),
-            detail: detail.to_string(),
-        }
-    }
 
     fn make_output_with_dead(dead: Vec<DeadCodeIssue>) -> AnalysisOutput {
         AnalysisOutput {

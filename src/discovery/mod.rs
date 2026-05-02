@@ -148,11 +148,10 @@ fn match_simple_glob(pattern: &str, path: &str) -> bool {
         }
         // V7-7: If the pattern ends with `*` (last segment is empty),
         // check the tail gap from last match to end of path.
-        if segments.last() == Some(&"") {
-            if path[idx..].contains('/') {
+        if segments.last() == Some(&"")
+            && path[idx..].contains('/') {
                 return false;
             }
-        }
         return true;
     }
     path == pattern

@@ -196,8 +196,8 @@ pub fn detect_in_file(rel_path: &str, source: &str, issues: &mut Vec<GotchaIssue
         }
 
         // process.env.VAR without fallback — JS/TS-only.
-        if lang.is_js_family() {
-            if let Some(idx) = line.find("process.env.")
+        if lang.is_js_family()
+            && let Some(idx) = line.find("process.env.")
                 && !is_comment_line(line) {
                     let after = &line[idx..];
                     if !after.contains("||") && !after.contains("??") && !after.contains("?.") && !after.contains("? ") {
@@ -213,7 +213,6 @@ pub fn detect_in_file(rel_path: &str, source: &str, issues: &mut Vec<GotchaIssue
                         });
                     }
                 }
-        }
 
         // ── Rust-specific rules ────────────────────────────────────────
         // Rust uses `//` comments too, so unresolved-comment detection works.

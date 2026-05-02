@@ -15,12 +15,11 @@ fn main() {
     let mut file_sources: Vec<(String, String)> = Vec::new();
     for entry in walkdir::WalkDir::new("src").into_iter().filter_map(|e| e.ok()) {
         let path = entry.path();
-        if path.extension().and_then(|e| e.to_str()) == Some("rs") {
-            if let Ok(content) = std::fs::read_to_string(path) {
+        if path.extension().and_then(|e| e.to_str()) == Some("rs")
+            && let Ok(content) = std::fs::read_to_string(path) {
                 let rel = path.to_string_lossy().to_string();
                 file_sources.push((rel, content));
             }
-        }
     }
     println!("Loaded {} source files", file_sources.len());
 
@@ -54,7 +53,7 @@ fn main() {
     let ncd_pairs: HashSet<(String, String)> = ncd_candidates
         .iter()
         .map(|c| {
-            let mut pair = vec![c.path_a.clone(), c.path_b.clone()];
+            let mut pair = [c.path_a.clone(), c.path_b.clone()];
             pair.sort();
             (pair[0].clone(), pair[1].clone())
         })

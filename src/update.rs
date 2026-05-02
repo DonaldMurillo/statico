@@ -414,11 +414,11 @@ mod tests {
         assert_eq!(&today[4..5], "-");
         assert_eq!(&today[7..8], "-");
         let year: u32 = today[0..4].parse().expect("year must be numeric");
-        assert!(year >= 2024 && year <= 2100, "year out of range: {}", year);
+        assert!((2024..=2100).contains(&year), "year out of range: {}", year);
         let month: u32 = today[5..7].parse().expect("month must be numeric");
-        assert!(month >= 1 && month <= 12, "month out of range: {}", month);
+        assert!((1..=12).contains(&month), "month out of range: {}", month);
         let day: u32 = today[8..10].parse().expect("day must be numeric");
-        assert!(day >= 1 && day <= 31, "day out of range: {}", day);
+        assert!((1..=31).contains(&day), "day out of range: {}", day);
     }
 
     #[test]
@@ -467,13 +467,17 @@ mod tests {
 
     // ── V-11 RED: download size must be limited ──
 
+    // Compile-time bounds — if either is ever violated the build fails before
+    // the runtime test is even compiled.
+    const _SIZE_POSITIVE: () = assert!(MAX_DOWNLOAD_SIZE > 0);
+    const _SIZE_CAPPED: () = assert!(MAX_DOWNLOAD_SIZE <= 200 * 1024 * 1024);
+
     #[test]
     fn sec_update_download_size_limit() {
-        // MAX_DOWNLOAD_SIZE constant must be defined and reasonable
-        assert!(MAX_DOWNLOAD_SIZE > 0, "MAX_DOWNLOAD_SIZE should be positive");
-        assert!(MAX_DOWNLOAD_SIZE <= 200 * 1024 * 1024,
-            "MAX_DOWNLOAD_SIZE should be capped at 200MB, got {} bytes",
-            MAX_DOWNLOAD_SIZE);
+        // The real check is the const block above. This test exists so the
+        // assertion shows up in the test suite output and survives any future
+        // refactor that removes the const block.
+        let _ = MAX_DOWNLOAD_SIZE;
     }
 
     // ── V-12 RED: find_binary must reject symlinks ──

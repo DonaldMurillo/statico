@@ -468,13 +468,13 @@ pub fn run_plugin_build(name: Option<&str>, path: &str) {
 
     let plugins = statico::plugin::discovery::discover_plugins(&root);
     let targets: Vec<_> = match name {
-        Some(n) => plugins.into_iter().filter(|p| &p.name == n).collect(),
+        Some(n) => plugins.into_iter().filter(|p| p.name == n).collect(),
         None => plugins,
     };
 
     if targets.is_empty() {
-        if name.is_some() {
-            eprintln!("Plugin '{}' not found.", name.unwrap());
+        if let Some(n) = name {
+            eprintln!("Plugin '{}' not found.", n);
             process::exit(1);
         } else {
             println!("No plugins found to build.");
@@ -631,13 +631,11 @@ pub fn run_plugin_doctor(path: &str) {
         "bun (TypeScript plugins)"
     };
     super::doctor::print_status(bun_label, bun_ok);
-    if bun_ok {
-        if let Some(bun_path) = statico::plugin::runtime::find_bun() {
-            if let Ok(ver) = statico::plugin::runtime::check_bun_version(&bun_path) {
+    if bun_ok
+        && let Some(bun_path) = statico::plugin::runtime::find_bun()
+            && let Ok(ver) = statico::plugin::runtime::check_bun_version(&bun_path) {
                 println!("    version: {}", ver);
             }
-        }
-    }
 
     let cargo_ok = super::doctor::which_exists("cargo");
     super::doctor::print_status("cargo (Rust plugins)", cargo_ok);
@@ -655,10 +653,8 @@ pub fn run_plugin_doctor(path: &str) {
         .join(".statico/runtimes");
     println!("\nRuntime directory: {}", runtime_dir.display());
     if runtime_dir.exists() {
-        for entry in std::fs::read_dir(&runtime_dir).unwrap_or_else(|_| panic!("read_dir")) {
-            if let Ok(e) = entry {
-                println!("  {}", e.file_name().to_string_lossy());
-            }
+        for e in std::fs::read_dir(&runtime_dir).unwrap_or_else(|_| panic!("read_dir")).flatten() {
+            println!("  {}", e.file_name().to_string_lossy());
         }
     } else {
         println!("  (not created yet)");

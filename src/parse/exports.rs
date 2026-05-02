@@ -335,7 +335,7 @@ mod tests {
 
     #[test]
     fn named_functions() {
-        let mut p = AstParser::new().unwrap();
+        let p = AstParser::new().unwrap();
         let code = "export function foo() {}\nexport function bar() {}";
         let r = p.parse(code, false).unwrap();
         let e = extract_exports(r.tree.root_node(), code);
@@ -345,7 +345,7 @@ mod tests {
 
     #[test]
     fn const_exports() {
-        let mut p = AstParser::new().unwrap();
+        let p = AstParser::new().unwrap();
         let code = "export const A = 1;\nexport const B = 2, C = 3;";
         let r = p.parse(code, false).unwrap();
         let e = extract_exports(r.tree.root_node(), code);
@@ -356,7 +356,7 @@ mod tests {
 
     #[test]
     fn class_export() {
-        let mut p = AstParser::new().unwrap();
+        let p = AstParser::new().unwrap();
         let code = "export class MyClass {}";
         let r = p.parse(code, false).unwrap();
         let e = extract_exports(r.tree.root_node(), code);
@@ -365,7 +365,7 @@ mod tests {
 
     #[test]
     fn type_and_interface() {
-        let mut p = AstParser::new().unwrap();
+        let p = AstParser::new().unwrap();
         let code = "export type Result<T> = { ok: T } | { err: string };\nexport interface Config { debug: boolean }";
         let r = p.parse(code, false).unwrap();
         let e = extract_exports(r.tree.root_node(), code);
@@ -375,7 +375,7 @@ mod tests {
 
     #[test]
     fn named_list() {
-        let mut p = AstParser::new().unwrap();
+        let p = AstParser::new().unwrap();
         let code = "export { foo, bar, baz };";
         let r = p.parse(code, false).unwrap();
         let e = extract_exports(r.tree.root_node(), code);
@@ -386,7 +386,7 @@ mod tests {
 
     #[test]
     fn default_function() {
-        let mut p = AstParser::new().unwrap();
+        let p = AstParser::new().unwrap();
         let code = "export default function main() {}";
         let r = p.parse(code, false).unwrap();
         let e = extract_exports(r.tree.root_node(), code);
@@ -396,7 +396,7 @@ mod tests {
 
     #[test]
     fn default_expression() {
-        let mut p = AstParser::new().unwrap();
+        let p = AstParser::new().unwrap();
         let code = "export default 42;";
         let r = p.parse(code, false).unwrap();
         let e = extract_exports(r.tree.root_node(), code);
@@ -405,7 +405,7 @@ mod tests {
 
     #[test]
     fn reexport_star_ignored() {
-        let mut p = AstParser::new().unwrap();
+        let p = AstParser::new().unwrap();
         let code = "export * from './utils';\nexport function local() {}";
         let r = p.parse(code, false).unwrap();
         let e = extract_exports(r.tree.root_node(), code);
@@ -415,7 +415,7 @@ mod tests {
 
     #[test]
     fn alias() {
-        let mut p = AstParser::new().unwrap();
+        let p = AstParser::new().unwrap();
         let code = "export { foo as bar };";
         let r = p.parse(code, false).unwrap();
         let e = extract_exports(r.tree.root_node(), code);
@@ -425,7 +425,7 @@ mod tests {
 
     #[test]
     fn reexport_type_only() {
-        let mut p = AstParser::new().unwrap();
+        let p = AstParser::new().unwrap();
         let code = "export type { Foo, Bar } from './utils';";
         let r = p.parse(code, false).unwrap();
         let types = extract_reexport_types(r.tree.root_node(), code);
@@ -436,7 +436,7 @@ mod tests {
 
     #[test]
     fn reexport_mixed() {
-        let mut p = AstParser::new().unwrap();
+        let p = AstParser::new().unwrap();
         // PascalCase names from non-type-only re-exports are included
         let code = "export { ImageItem, TagOption, helperFn } from './types';";
         let r = p.parse(code, false).unwrap();
@@ -448,7 +448,7 @@ mod tests {
 
     #[test]
     fn reexport_with_alias() {
-        let mut p = AstParser::new().unwrap();
+        let p = AstParser::new().unwrap();
         let code = "export { default as MyDefault } from './mod';";
         let r = p.parse(code, false).unwrap();
         let types = extract_reexport_types(r.tree.root_node(), code);
@@ -458,7 +458,7 @@ mod tests {
 
     #[test]
     fn reexport_star_specs() {
-        let mut p = AstParser::new().unwrap();
+        let p = AstParser::new().unwrap();
         let code = "export * from './utils';\nexport * from '../types';\nexport { Foo } from './bar';";
         let r = p.parse(code, false).unwrap();
         let specs = extract_star_reexport_specs(r.tree.root_node(), code);
@@ -467,7 +467,7 @@ mod tests {
 
     #[test]
     fn reexport_no_from_ignored() {
-        let mut p = AstParser::new().unwrap();
+        let p = AstParser::new().unwrap();
         // export { Foo } without 'from' is a regular re-export, not from another module
         let code = "const Foo = 1;\nexport { Foo };";
         let r = p.parse(code, false).unwrap();
@@ -477,7 +477,7 @@ mod tests {
 
     #[test]
     fn type_exports_extraction() {
-        let mut p = AstParser::new().unwrap();
+        let p = AstParser::new().unwrap();
         let code = "export type Result<T> = { ok: T } | { err: string };\nexport interface Config { debug: boolean }\nexport function foo() {}";
         let r = p.parse(code, false).unwrap();
         let type_exports = extract_type_exports(r.tree.root_node(), code);

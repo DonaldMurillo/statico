@@ -20,8 +20,16 @@ pub fn run_analyze(
     };
 
     // Load config from project root and merge with CLI args.
-    let config =
+    let mut config =
         statico::config::StaticoConfig::load(&root).merge_cli(format, min_confidence, exit_code, quiet);
+
+    // Audit D2.3: when neither --format nor a config value asked for a specific
+    // format and stdout is a terminal, default to a human-readable format.
+    // Only apply this when both the CLI and config left format at the built-in
+    // default of "json" — we don't want to override an explicit choice.
+    if format.is_none() && config.format == "json" && std::io::IsTerminal::is_terminal(&std::io::stdout()) {
+        config.format = "markdown".to_string();
+    }
 
     if !config.quiet && !config.exclude.is_empty() {
         eprintln!("info: exclude patterns: {:?}", config.exclude);

@@ -65,7 +65,7 @@ fn test_enriched_json_health_score_range() {
     let json: serde_json::Value = serde_json::from_str(&result).expect("Valid JSON");
 
     let score = json["summary"]["health_score"].as_f64().unwrap();
-    assert!(score >= 0.0 && score <= 100.0, "health_score should be 0-100, got {}", score);
+    assert!((0.0..=100.0).contains(&score), "health_score should be 0-100, got {}", score);
 }
 
 #[test]

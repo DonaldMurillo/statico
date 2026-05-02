@@ -90,7 +90,7 @@ mod tests {
 
     #[test]
     fn test_simple_function() {
-        let mut p = AstParser::new().unwrap();
+        let p = AstParser::new().unwrap();
         let code = "function foo() { return 1; }";
         let r = p.parse(code, false).unwrap();
         assert_eq!(compute_complexity(r.tree.root_node(), code.as_bytes()), 1);
@@ -98,7 +98,7 @@ mod tests {
 
     #[test]
     fn test_if_else() {
-        let mut p = AstParser::new().unwrap();
+        let p = AstParser::new().unwrap();
         let code = "function foo(x) { if (x > 0) { return 1; } else { return -1; } }";
         let r = p.parse(code, false).unwrap();
         assert_eq!(compute_complexity(r.tree.root_node(), code.as_bytes()), 3);
@@ -106,7 +106,7 @@ mod tests {
 
     #[test]
     fn test_switch() {
-        let mut p = AstParser::new().unwrap();
+        let p = AstParser::new().unwrap();
         let code = "function foo(x) { switch(x) { case 1: break; case 2: break; default: break; } }";
         let r = p.parse(code, false).unwrap();
         // 1 base + 2 cases + 1 default = 4
@@ -115,7 +115,7 @@ mod tests {
 
     #[test]
     fn test_logical_operators() {
-        let mut p = AstParser::new().unwrap();
+        let p = AstParser::new().unwrap();
         let code = "function foo(a, b, c) { return a && b || c; }";
         let r = p.parse(code, false).unwrap();
         // 1 base + && + ||
@@ -124,7 +124,7 @@ mod tests {
 
     #[test]
     fn test_loops_and_catch() {
-        let mut p = AstParser::new().unwrap();
+        let p = AstParser::new().unwrap();
         let code = r#"
 function foo(items) {
     for (const item of items) { console.log(item); }
@@ -138,7 +138,7 @@ function foo(items) {
 
     #[test]
     fn test_nesting_depth_flat() {
-        let mut p = AstParser::new().unwrap();
+        let p = AstParser::new().unwrap();
         let code = "function foo() { return 1; }";
         let r = p.parse(code, false).unwrap();
         let m = compute_metrics(r.tree.root_node(), code.as_bytes());
@@ -147,7 +147,7 @@ function foo(items) {
 
     #[test]
     fn test_nesting_depth_nested_loops() {
-        let mut p = AstParser::new().unwrap();
+        let p = AstParser::new().unwrap();
         let code = "function foo(items) { for (const a of items) { for (const b of a) { if (b) {} } } }";
         let r = p.parse(code, false).unwrap();
         let m = compute_metrics(r.tree.root_node(), code.as_bytes());
@@ -159,7 +159,7 @@ function foo(items) {
 
     #[test]
     fn test_nesting_depth_deep_if_chain() {
-        let mut p = AstParser::new().unwrap();
+        let p = AstParser::new().unwrap();
         let code = "function foo(a,b,c,d) { if(a){if(b){if(c){if(d){}}}}}";
         let r = p.parse(code, false).unwrap();
         let m = compute_metrics(r.tree.root_node(), code.as_bytes());

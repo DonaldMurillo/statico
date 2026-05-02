@@ -40,7 +40,7 @@ mod tests {
 
     #[test]
     fn test_no_errors() {
-        let mut p = AstParser::new().unwrap();
+        let p = AstParser::new().unwrap();
         let code = "const x: number = 1;";
         let r = p.parse(code, false).unwrap();
         let errs = collect_errors(r.tree.root_node(), code.as_bytes());
@@ -49,7 +49,7 @@ mod tests {
 
     #[test]
     fn test_with_errors() {
-        let mut p = AstParser::new().unwrap();
+        let p = AstParser::new().unwrap();
         let code = "function ( { } } }";
         let r = p.parse(code, false).unwrap();
         let errs = collect_errors(r.tree.root_node(), code.as_bytes());

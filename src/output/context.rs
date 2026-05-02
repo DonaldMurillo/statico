@@ -35,7 +35,7 @@ impl OutputFormatter for ContextFormatter {
 
         // Line 3: Top risk file
         if let Some(risk) = top_risk {
-            let safe_path = risk.0.replace('\n', " ").replace('\r', " ");
+            let safe_path = risk.0.replace(['\n', '\r'], " ");
             lines.push(format!("Top risk: {} ({} unused exports)", safe_path, risk.1));
         }
 

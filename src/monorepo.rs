@@ -389,7 +389,7 @@ packages:
 
     #[test]
     fn test_is_workspace_package_file() {
-        let mut packages = vec!["packages/".to_string(), "apps/".to_string()];
+        let packages = vec!["packages/".to_string(), "apps/".to_string()];
         assert!(is_workspace_package_file("packages/ui/src/button.tsx", &packages));
         assert!(is_workspace_package_file("apps/web/src/page.tsx", &packages));
         assert!(!is_workspace_package_file("src/index.ts", &packages));

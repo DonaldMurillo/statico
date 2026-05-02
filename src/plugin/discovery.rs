@@ -55,8 +55,8 @@ pub fn discover_plugins(root: &Path) -> Vec<DiscoveredPlugin> {
     let plugins_dir = root.join(".statico/plugins");
 
     // Auto-discover from directory.
-    if plugins_dir.is_dir() {
-        if let Ok(entries) = std::fs::read_dir(&plugins_dir) {
+    if plugins_dir.is_dir()
+        && let Ok(entries) = std::fs::read_dir(&plugins_dir) {
             for entry in entries.flatten() {
                 let path = entry.path();
                 if let Some(name) = path.file_name().map(|n| n.to_string_lossy().to_string()) {
@@ -77,7 +77,6 @@ pub fn discover_plugins(root: &Path) -> Vec<DiscoveredPlugin> {
                 }
             }
         }
-    }
 
     // Merge config from .statico.toml.
     merge_config(root, &mut plugins);
@@ -93,9 +92,9 @@ fn detect_plugin_kind(path: &Path) -> PluginKind {
         // Check package.json for statico.runtime hint first.
         let pkg_path = path.join("package.json");
         if pkg_path.exists() {
-            if let Ok(contents) = std::fs::read_to_string(&pkg_path) {
-                if let Ok(pkg) = serde_json::from_str::<serde_json::Value>(&contents) {
-                    if let Some(runtime) = pkg
+            if let Ok(contents) = std::fs::read_to_string(&pkg_path)
+                && let Ok(pkg) = serde_json::from_str::<serde_json::Value>(&contents)
+                    && let Some(runtime) = pkg
                         .get("statico")
                         .and_then(|s| s.get("runtime"))
                         .and_then(|r| r.as_str())
@@ -107,8 +106,6 @@ fn detect_plugin_kind(path: &Path) -> PluginKind {
                             _ => PluginKind::Executable,
                         };
                     }
-                }
-            }
             // Default: package.json without statico.runtime = TypeScript
             PluginKind::TypeScript
         } else if path.join("Cargo.toml").exists() {
@@ -300,7 +297,7 @@ mod tests {
     fn discover_rust_plugin_directory() {
         let tmp = make_temp_dir("rust");
         let dir = tmp.join(".statico/plugins/my-rule");
-        std::fs::create_dir_all(&dir.join("src")).unwrap();
+        std::fs::create_dir_all(dir.join("src")).unwrap();
         std::fs::write(dir.join("Cargo.toml"), "[package]\nname=\"my-rule\"\n").unwrap();
         std::fs::write(dir.join("src/main.rs"), "fn main(){}").unwrap();
 

@@ -13,7 +13,7 @@ pub fn strip_ansi(s: &str) -> String {
                     chars.next(); // consume '['
                     while let Some(&next) = chars.peek() {
                         chars.next();
-                        if next >= '\x40' && next <= '\x7e' { break; }
+                        if ('\x40'..='\x7e').contains(&next) { break; }
                     }
                 }
                 // OSC sequence: ESC ] ... (terminated by BEL/0x07 or ST/ESC\)

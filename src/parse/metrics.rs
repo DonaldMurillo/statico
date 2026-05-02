@@ -56,7 +56,7 @@ mod tests {
 
     #[test]
     fn count_functions_simple() {
-        let mut p = AstParser::new().unwrap();
+        let p = AstParser::new().unwrap();
         let code = "function foo() {} const bar = () => {};";
         let r = p.parse(code, false).unwrap();
         assert_eq!(count_functions(r.tree.root_node()), 2);
@@ -64,7 +64,7 @@ mod tests {
 
     #[test]
     fn count_classes_simple() {
-        let mut p = AstParser::new().unwrap();
+        let p = AstParser::new().unwrap();
         let code = "class Foo {} class Bar {}";
         let r = p.parse(code, false).unwrap();
         assert_eq!(count_classes(r.tree.root_node()), 2);
@@ -72,7 +72,7 @@ mod tests {
 
     #[test]
     fn count_functions_empty() {
-        let mut p = AstParser::new().unwrap();
+        let p = AstParser::new().unwrap();
         let code = "const x = 1;";
         let r = p.parse(code, false).unwrap();
         assert_eq!(count_functions(r.tree.root_node()), 0);

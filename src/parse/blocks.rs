@@ -176,7 +176,7 @@ mod tests {
         let src = "class Foo {\n  bar(x: number): number {\n    const y = x * 2;\n    const z = y + 1;\n    return z;\n  }\n}";
         let blocks = parse_blocks(src);
         // Should get class + method
-        assert!(blocks.len() >= 1, "expected at least 1 block, got {}", blocks.len());
+        assert!(!blocks.is_empty(), "expected at least 1 block, got {}", blocks.len());
         let methods: Vec<_> = blocks.iter().filter(|b| b.kind == BlockKind::Method).collect();
         assert_eq!(methods.len(), 1);
         assert_eq!(methods[0].name, "bar");

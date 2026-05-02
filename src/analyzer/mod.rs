@@ -250,10 +250,8 @@ fn parse_all_files_plugin(
         .collect();
 
     let mut pipeline = PipelineResults::new();
-    for res in results {
-        if let Some(fa) = res {
-            pipeline.merge(fa);
-        }
+    for fa in results.into_iter().flatten() {
+        pipeline.merge(fa);
     }
     pipeline.sort();
     pipeline

@@ -241,7 +241,7 @@ fn payload_detects_unused_exports() {
     let unused_names: Vec<&str> = unused.iter().filter_map(|u| u["name"].as_str()).collect();
 
     assert!(
-        unused_names.iter().any(|n| *n == "standaloneHelper"),
+        unused_names.contains(&"standaloneHelper"),
         "expected standaloneHelper in unused exports, got: {:?}",
         unused_names
     );
@@ -536,11 +536,11 @@ fn cli_update_downloads_and_extracts_from_mock_server() {
                 if path.contains("/releases/latest") && !path.contains("download") {
                     let resp = tiny_http::Response::from_string(&release_json_clone)
                         .with_header(tiny_http::Header::from_bytes(&b"Content-Type"[..], &b"application/json"[..]).expect("header"));
-                    let _ = req.respond(resp);
+                    req.respond(resp);
                 } else {
                     let resp = tiny_http::Response::from_data(tarball_bytes_clone.clone())
                         .with_header(tiny_http::Header::from_bytes(&b"Content-Type"[..], &b"application/gzip"[..]).expect("header"));
-                    let _ = req.respond(resp);
+                    req.respond(resp);
                 }
             }
         }

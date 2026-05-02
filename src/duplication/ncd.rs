@@ -209,8 +209,7 @@ mod tests {
         assert!(candidates.iter().any(|c| c.path_a == "a.rs" && c.path_b == "b.rs"),
             "identical pair should be flagged");
         assert!(!candidates.iter().any(|c|
-            (c.path_a == "a.rs" && c.path_b == "c.rs") ||
-            (c.path_a == "b.rs" && c.path_b == "c.rs")),
+            (c.path_a == "a.rs" || c.path_a == "b.rs") && c.path_b == "c.rs"),
             "unrelated pairs should not be flagged");
     }
 

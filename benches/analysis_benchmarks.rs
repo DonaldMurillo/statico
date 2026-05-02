@@ -76,14 +76,14 @@ fn bench_analyze_payload_project(c: &mut Criterion) {
 // ---------------------------------------------------------------------------
 
 fn bench_extract_imports(c: &mut Criterion) {
-    let mut parser = AstParser::new().expect("parser init");
+    let parser = AstParser::new().expect("parser init");
     let result = parser.parse(SAMPLE_TS, false).expect("parse");
     let root_node = result.tree.root_node();
     c.bench_function("extract_imports", |b| b.iter(|| extract_imports(black_box(root_node), black_box(SAMPLE_TS))));
 }
 
 fn bench_extract_exports(c: &mut Criterion) {
-    let mut parser = AstParser::new().expect("parser init");
+    let parser = AstParser::new().expect("parser init");
     let result = parser.parse(SAMPLE_TS, false).expect("parse");
     let root_node = result.tree.root_node();
     c.bench_function("extract_exports", |b| b.iter(|| extract_exports(black_box(root_node), black_box(SAMPLE_TS))));
@@ -94,7 +94,7 @@ fn bench_count_loc(c: &mut Criterion) {
 }
 
 fn bench_ast_parse(c: &mut Criterion) {
-    let mut parser = AstParser::new().expect("parser init");
+    let parser = AstParser::new().expect("parser init");
     c.bench_function("ast_parse_ts", |b| b.iter(|| parser.parse(black_box(SAMPLE_TS), false)));
 }
 

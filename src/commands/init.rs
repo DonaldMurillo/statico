@@ -98,11 +98,7 @@ pub fn run_init(shell: Option<&str>, cli_command: &mut clap::Command) {
     println!("  Complete: {}", completion_file.display());
     println!();
     println!("Restart your shell or run:");
-    if is_fish {
-        println!("  source {}", rc_file.display());
-    } else {
-        println!("  source {}", rc_file.display());
-    }
+    println!("  source {}", rc_file.display());
 }
 
 /// Wrap a string in fish single-quotes, escaping `\` and `'`.
@@ -113,35 +109,6 @@ pub fn run_init(shell: Option<&str>, cli_command: &mut clap::Command) {
 fn fish_single_quote(s: &str) -> String {
     let escaped = s.replace('\\', "\\\\").replace('\'', "\\'");
     format!("'{}'", escaped)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn sec_fish_single_quote_wraps_normal_path() {
-        assert_eq!(fish_single_quote("/usr/local/bin"), "'/usr/local/bin'");
-    }
-
-    #[test]
-    fn sec_fish_single_quote_handles_path_with_space() {
-        assert_eq!(
-            fish_single_quote("/Users/Alice Smith/.statico/bin"),
-            "'/Users/Alice Smith/.statico/bin'"
-        );
-    }
-
-    #[test]
-    fn sec_fish_single_quote_escapes_single_quote() {
-        // path contains a literal single quote (yes, this is legal on POSIX)
-        assert_eq!(fish_single_quote("/tmp/o'reilly/bin"), "'/tmp/o\\'reilly/bin'");
-    }
-
-    #[test]
-    fn sec_fish_single_quote_escapes_backslash() {
-        assert_eq!(fish_single_quote(r"C:\stat\bin"), r"'C:\\stat\\bin'");
-    }
 }
 
 pub fn run_setup(target: &str, path: &str, force: bool) {
@@ -243,7 +210,7 @@ fn write_skill(dir: &std::path::Path, _name: &str, content: String, force: bool)
 }
 
 fn generate_claude_md() -> String {
-    format!(r#"# statico
+    r#"# statico
 
 ## Project Overview
 
@@ -317,7 +284,7 @@ statico plugin docs                            # Protocol reference
 - Rust plugins compile via system cargo
 - Plugin SDKs: `sdks/typescript/` and `sdks/rust/`
 - 5 pipeline hooks: `analyze_file`, `discover_entries`, `resolve_import`, `post_analysis`, `format_output`
-"#)
+"#.to_string()
 }
 
 fn generate_skill_analyze() -> String {
@@ -522,7 +489,7 @@ Run `statico plugin schema --format json` for the JSON schema.
 }
 
 fn generate_cursor_rules() -> String {
-    format!(r#"---
+    r#"---
 description: statico code analysis rules and patterns for the AI assistant
 ---
 
@@ -560,5 +527,34 @@ When the user asks about code quality:
 - 80–100: Good shape
 - 60–79: Needs attention (plan cleanup)
 - 0–59: Critical (prioritize fixes)
-"#)
+"#.to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sec_fish_single_quote_wraps_normal_path() {
+        assert_eq!(fish_single_quote("/usr/local/bin"), "'/usr/local/bin'");
+    }
+
+    #[test]
+    fn sec_fish_single_quote_handles_path_with_space() {
+        assert_eq!(
+            fish_single_quote("/Users/Alice Smith/.statico/bin"),
+            "'/Users/Alice Smith/.statico/bin'"
+        );
+    }
+
+    #[test]
+    fn sec_fish_single_quote_escapes_single_quote() {
+        // path contains a literal single quote (yes, this is legal on POSIX)
+        assert_eq!(fish_single_quote("/tmp/o'reilly/bin"), "'/tmp/o\\'reilly/bin'");
+    }
+
+    #[test]
+    fn sec_fish_single_quote_escapes_backslash() {
+        assert_eq!(fish_single_quote(r"C:\stat\bin"), r"'C:\\stat\\bin'");
+    }
 }

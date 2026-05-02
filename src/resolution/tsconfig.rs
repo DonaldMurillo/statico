@@ -197,7 +197,7 @@ pub(super) fn resolve_scoped(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::Path;
+    
 
     #[test]
     fn sec_jsonc_handles_unterminated_comment() {

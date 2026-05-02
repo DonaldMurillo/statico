@@ -116,6 +116,20 @@ impl PipelineResults {
 
     /// Create empty results.
     pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Sort all collections for deterministic output.
+    pub fn sort(&mut self) {
+        self.dependencies.imports.sort_by(|a, b| a.source.cmp(&b.source));
+        self.dependencies.external.sort();
+        self.quality.files.sort_by(|a, b| a.path.cmp(&b.path));
+        self.file_sources.sort_by(|a, b| a.0.cmp(&b.0));
+    }
+}
+
+impl Default for PipelineResults {
+    fn default() -> Self {
         Self {
             dependencies: Dependencies { imports: vec![], external: vec![] },
             quality: Quality { files: vec![] },
@@ -127,14 +141,6 @@ impl PipelineResults {
             file_sources: vec![],
             imported_names: BTreeMap::new(),
         }
-    }
-
-    /// Sort all collections for deterministic output.
-    pub fn sort(&mut self) {
-        self.dependencies.imports.sort_by(|a, b| a.source.cmp(&b.source));
-        self.dependencies.external.sort();
-        self.quality.files.sort_by(|a, b| a.path.cmp(&b.path));
-        self.file_sources.sort_by(|a, b| a.0.cmp(&b.0));
     }
 }
 

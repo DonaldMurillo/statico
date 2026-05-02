@@ -62,8 +62,8 @@ impl OutputFormatter for FixFormatter {
             out.push('\n');
 
             for dc in &dead_files {
-                let safe_path = dc.path.replace('\n', " ").replace('\r', " ");
-                let safe_reason = dc.reason.replace('\n', " ").replace('\r', " ");
+                let safe_path = dc.path.replace(['\n', '\r'], " ");
+                let safe_reason = dc.reason.replace(['\n', '\r'], " ");
                 out.push_str(&format!(
                     "# SAFE TO DELETE: {} ({} LOC, confidence: {:.0}%)\n",
                     safe_path,
@@ -83,10 +83,10 @@ impl OutputFormatter for FixFormatter {
 
             let by_file = group_unused_exports_by_file(unused_exports);
             for (path, exports) in &by_file {
-                let safe_path = path.replace('\n', " ").replace('\r', " ");
+                let safe_path = path.replace(['\n', '\r'], " ");
                 out.push_str(&format!("# File: {}\n", safe_path));
                 for name in exports {
-                    let safe_name = name.replace('\n', " ").replace('\r', " ");
+                    let safe_name = name.replace(['\n', '\r'], " ");
                     out.push_str(&format!("# REMOVE EXPORT: {} from {}\n", safe_name, safe_path));
                     out.push_str("# This export is defined but never imported by any file\n");
                 }

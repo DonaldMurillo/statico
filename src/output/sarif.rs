@@ -20,7 +20,7 @@ fn sanitize_uri(path: &str) -> String {
 /// injection of misleading content via file paths and names.
 fn sanitize_message(s: &str) -> String {
     s.chars()
-        .map(|c| if c == '\n' || c == '\r' { ' ' } else if c.is_control() { ' ' } else { c })
+        .map(|c| if c.is_control() { ' ' } else { c })
         .collect()
 }
 

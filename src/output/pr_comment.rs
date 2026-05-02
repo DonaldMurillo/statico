@@ -17,8 +17,7 @@ fn escape_md_cell(s: &str) -> String {
      .replace('`', "\\`")
      .replace('<', "&lt;")
      .replace('>', "&gt;")
-     .replace('\n', " ")
-     .replace('\r', " ")
+     .replace(['\n', '\r'], " ")
 }
 
 impl OutputFormatter for PrCommentFormatter {

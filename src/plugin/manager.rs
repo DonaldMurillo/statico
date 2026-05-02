@@ -311,10 +311,10 @@ fn find_ts_entry(dir: &Path) -> Result<String, String> {
 /// Find the Python entry point in a plugin directory.
 fn find_python_entry(dir: &Path) -> Result<String, String> {
     let pkg_path = dir.join("package.json");
-    if pkg_path.exists() {
-        if let Ok(contents) = std::fs::read_to_string(&pkg_path) {
-            if let Ok(pkg) = serde_json::from_str::<serde_json::Value>(&contents) {
-                if let Some(entry) = pkg
+    if pkg_path.exists()
+        && let Ok(contents) = std::fs::read_to_string(&pkg_path)
+            && let Ok(pkg) = serde_json::from_str::<serde_json::Value>(&contents)
+                && let Some(entry) = pkg
                     .get("statico")
                     .and_then(|s| s.get("entry"))
                     .and_then(|e| e.as_str())
@@ -356,9 +356,6 @@ fn find_python_entry(dir: &Path) -> Result<String, String> {
                         return Ok(candidate.to_string_lossy().to_string());
                     }
                 }
-            }
-        }
-    }
     for name in &["plugin.py", "main.py", "index.py", "src/main.py"] {
         let candidate = dir.join(name);
         if candidate.exists() {
@@ -559,7 +556,7 @@ done
             toml_str.push_str("[a");
         }
         for _ in 0..40 {
-            toml_str.push_str("]");
+            toml_str.push(']');
         }
         toml_str.push_str("\nval = 1");
         // Try to parse as toml
@@ -580,7 +577,7 @@ done
 
     #[test]
     fn sec_plugin_settings_array_size_limit() {
-        let arr: Vec<toml::Value> = (0..2000).map(|i| toml::Value::Integer(i)).collect();
+        let arr: Vec<toml::Value> = (0..2000).map(toml::Value::Integer).collect();
         let val = toml::Value::Array(arr);
         let result = toml_to_json_value(&val);
         assert!(result.is_err(), "should reject oversized array, got: {:?}", result);

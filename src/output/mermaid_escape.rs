@@ -37,8 +37,7 @@ pub fn common_path_prefix<'a>(paths: impl Iterator<Item = &'a String>) -> String
 /// Escape characters that could break Mermaid syntax in subgraph labels
 /// and other structural elements.
 pub fn escape_mermaid_label(s: &str) -> String {
-    s.replace('\n', " ")
-     .replace('\r', " ")
+    s.replace(['\n', '\r'], " ")
      .replace('&', "&amp;")
      .replace('#', "&#35;")
      .replace('"', "&quot;")
@@ -51,8 +50,7 @@ pub fn escape_mermaid_label(s: &str) -> String {
 /// Return a short display name by stripping the common prefix.
 pub fn display_name(path: &str, prefix: &str) -> String {
     let raw = if prefix.is_empty() { path.to_string() } else { path.strip_prefix(prefix).unwrap_or(path).to_string() };
-    raw.replace('\n', " ")
-       .replace('\r', " ")
+    raw.replace(['\n', '\r'], " ")
        .replace('&', "&amp;")
        .replace('#', "&#35;")
        .replace('"', "&quot;")
@@ -68,14 +66,14 @@ mod tests {
 
     #[test]
     fn common_prefix_finds_shared_dir() {
-        let files = vec!["src/main.rs".to_string(), "src/utils.rs".to_string(), "src/lib/mod.rs".to_string()];
+        let files = ["src/main.rs".to_string(), "src/utils.rs".to_string(), "src/lib/mod.rs".to_string()];
         let prefix = common_path_prefix(files.iter());
         assert_eq!(prefix, "src/");
     }
 
     #[test]
     fn common_prefix_no_common() {
-        let files = vec!["a.rs".to_string(), "b.rs".to_string()];
+        let files = ["a.rs".to_string(), "b.rs".to_string()];
         let prefix = common_path_prefix(files.iter());
         assert_eq!(prefix, "");
     }
