@@ -15,8 +15,20 @@ benchmarks/rust-repos/
 benchmarks/rust-results/
 benchmarks/results/
 
-.claude/
 tmp-plugin-test/
+
+# .claude/ is tracked (project skills, CLAUDE.md). Only ignore transient
+# runtime state inside it.
+.claude/scheduled_tasks.lock
+.claude/**/*.tmp
 
 # statico cache
 .statico/
+
+# Website (Angular)
+website/dist/
+website/node_modules/
+website/screenshots/
+website/test-results/
+website/playwright-report/
+website/.angular/
