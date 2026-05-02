@@ -32,15 +32,15 @@ Out of scope:
 - Vulnerabilities in third-party plugins (please report to the plugin author)
 - Vulnerabilities in user code that statico happens to *parse* (not our bug)
 - Findings that require an attacker who already has write access to
-  `.statico.toml` or `.statico/plugins/` — that boundary is documented as the
-  trust root in `SECURITY_AUDIT_REPORT.md`
+  `.statico.toml` or `.statico/plugins/` — see the **Plugin trust model**
+  section below for the explicit trust boundary
 
 ## Hardening history
 
-The repository has gone through eight rounds of security review. The full
-report is in `SECURITY_AUDIT_REPORT.md` and a 2026-05 follow-up audit lives
-in `docs/audit-2026-05.md`. Both are public — they describe issues that have
-already been fixed.
+The repository has gone through eight rounds of security review. A public
+2026-05 follow-up audit lives in `docs/audit-2026-05.md`; it describes
+issues that have already been fixed and the threat model that informs new
+work. Internal red-team working notes are kept locally to the maintainer.
 
 ## Self-update integrity
 

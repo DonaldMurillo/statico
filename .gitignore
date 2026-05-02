@@ -6,6 +6,15 @@ pi-agent/plugins/*
 # Added by cargo
 /target
 
+# Internal-only docs (planning, design drafts, security audit working notes,
+# generated debug reports). Kept locally for the maintainer; not part of the
+# public repo.
+/docs/internal/
+
+# Python bytecode caches from the benchmark scripts
+__pycache__/
+*.pyc
+
 # Test output
 test-output/
 
