@@ -181,6 +181,44 @@ enum Commands {
     /// Checks PATH, shell integration, binary location, and version.
     Doctor,
 
+    /// Apply safe automated fixes to a project.
+    ///
+    /// Supported transforms (each opt-in via flags, all on by default):
+    ///   --unused-exports  Drop the `export` keyword from declarations whose
+    ///                     export is unused (only well-formed
+    ///                     const/let/var/function/class/type/interface).
+    ///   --unused-deps     Remove unused entries from package.json
+    ///                     dependencies / devDependencies / peerDependencies
+    ///                     / optionalDependencies.
+    ///
+    /// Default mode is dry-run; pass --apply to actually edit files.
+    Fix {
+        /// Project path (defaults to current directory).
+        #[arg(default_value = ".")]
+        path: String,
+
+        /// Actually rewrite files. Without this flag, statico prints the
+        /// fixes it *would* make and exits 0.
+        #[arg(long)]
+        apply: bool,
+
+        /// Apply the unused-exports fix.
+        #[arg(long, default_value_t = true)]
+        unused_exports: bool,
+
+        /// Skip the unused-exports fix (overrides --unused-exports).
+        #[arg(long, conflicts_with = "unused_exports")]
+        no_unused_exports: bool,
+
+        /// Apply the unused-deps fix.
+        #[arg(long, default_value_t = true)]
+        unused_deps: bool,
+
+        /// Skip the unused-deps fix (overrides --unused-deps).
+        #[arg(long, conflicts_with = "unused_deps")]
+        no_unused_deps: bool,
+    },
+
     /// Set up AI integration for the current project.
     ///
     /// Generates skills for Claude Code, pi, and Cursor so AI assistants
@@ -363,6 +401,20 @@ fn main() {
         }
         Commands::Doctor => {
             commands::doctor::run_doctor();
+        }
+        Commands::Fix {
+            path,
+            apply,
+            unused_exports,
+            no_unused_exports,
+            unused_deps,
+            no_unused_deps,
+        } => {
+            let selection = commands::fix::FixSelection {
+                unused_exports: unused_exports && !no_unused_exports,
+                unused_deps: unused_deps && !no_unused_deps,
+            };
+            commands::fix::run_fix(&path, apply, selection);
         }
         Commands::Setup {
             target,
