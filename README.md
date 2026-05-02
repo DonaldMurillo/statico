@@ -100,7 +100,7 @@ cargo install --path .
 
 ### Prerequisites (build from source only)
 
-- [Rust](https://rustup.rs/) 1.85+ (Edition 2024)
+- [Rust](https://rustup.rs/) 1.91+ (Edition 2024)
 
 ## Quick Start
 

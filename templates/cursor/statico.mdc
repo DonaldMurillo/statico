@@ -1,0 +1,38 @@
+---
+description: statico code analysis rules and patterns for the AI assistant
+---
+
+# statico Code Quality
+
+## Commands
+
+- `statico analyze . --format ai` — Analyze project (AI-optimized output)
+- `statico analyze . --format fix` — Get fix suggestions
+- `statico analyze . --format mermaid` — Dependency graph
+- `statico diff before.json after.json` — Compare analyses
+- `statico plugin init <name> --lang typescript` — Create a plugin
+- `statico plugin run <name> --file <path>` — Test a plugin
+- `statico plugin doctor` — Check runtime readiness
+- `statico plugin docs` — Full protocol reference
+
+## Issue Types
+
+1. **Dead code**: Files nothing imports. Safe to delete after verification.
+2. **Unused exports**: Exports never imported. Make internal or remove.
+3. **Circular dependencies**: Files importing each other. Break with extraction.
+4. **Code duplication**: Duplicated blocks. Extract shared utilities.
+5. **Framework gotchas**: Next.js, Payload, Angular anti-patterns.
+
+## Workflow
+
+When the user asks about code quality:
+1. Run `statico analyze . --format ai`
+2. Summarize the health score and top issues
+3. For each issue category, explain what to fix and why
+4. After fixes, re-run to verify improvement
+
+## Health Score Guide
+
+- 80–100: Good shape
+- 60–79: Needs attention (plan cleanup)
+- 0–59: Critical (prioritize fixes)

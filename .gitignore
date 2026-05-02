@@ -1,5 +1,9 @@
-# pi agent state (auto-added)
-.pi/
+# pi: track skills (project content) + plugins, ignore the transient
+# runtime state (manager config, missions, tasks, subagent failures).
+.pi/agent-manager/
+.pi/missions/
+.pi/tasks/
+.pi/subagent-failures/
 pi-agent/plugins/*
 !pi-agent/plugins/registry.json
 
