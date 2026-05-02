@@ -137,7 +137,13 @@ impl StaticoConfig {
         }
         if let Some(c) = min_confidence {
             // V7-10: Clamp min_confidence to [0.0, 1.0] — same as load().
-            merged.min_confidence = if c.is_nan() || c < 0.0 { 0.0 } else if c > 1.0 { 1.0 } else { c };
+            merged.min_confidence = if c.is_nan() || c < 0.0 {
+                0.0
+            } else if c > 1.0 {
+                1.0
+            } else {
+                c
+            };
         }
         if exit_code {
             merged.exit_code = true;
@@ -321,25 +327,20 @@ override = true
     #[test]
     fn sec_config_max_file_size_capped() {
         let dir = make_temp_dir("cap");
-        std::fs::write(
-            dir.join(".statico.toml"),
-            r#"max_file_size = 999999999999"#,
-        )
-        .unwrap();
+        std::fs::write(dir.join(".statico.toml"), r#"max_file_size = 999999999999"#).unwrap();
         let c = StaticoConfig::load(&dir);
-        assert_eq!(c.max_file_size, MAX_ALLOWED_FILE_SIZE,
-            "max_file_size should be clamped to {}, got {}", MAX_ALLOWED_FILE_SIZE, c.max_file_size);
+        assert_eq!(
+            c.max_file_size, MAX_ALLOWED_FILE_SIZE,
+            "max_file_size should be clamped to {}, got {}",
+            MAX_ALLOWED_FILE_SIZE, c.max_file_size
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn sec_config_max_file_size_normal() {
         let dir = make_temp_dir("normal");
-        std::fs::write(
-            dir.join(".statico.toml"),
-            r#"max_file_size = 500000"#,
-        )
-        .unwrap();
+        std::fs::write(dir.join(".statico.toml"), r#"max_file_size = 500000"#).unwrap();
         let c = StaticoConfig::load(&dir);
         assert_eq!(c.max_file_size, 500_000);
         let _ = std::fs::remove_dir_all(&dir);
@@ -358,22 +359,19 @@ override = true
         // NaN causes ALL issues to be filtered (NaN >= x is always false),
         // giving a false 100/100 health score.
         let merged = StaticoConfig::default().merge_cli(None, Some(f64::NAN), false, false);
-        assert!(!merged.min_confidence.is_nan(),
-            "NaN min_confidence should be clamped to 0.0");
+        assert!(!merged.min_confidence.is_nan(), "NaN min_confidence should be clamped to 0.0");
         assert_eq!(merged.min_confidence, 0.0);
     }
 
     #[test]
     fn sec_config_min_confidence_clamped_negative() {
         let merged = StaticoConfig::default().merge_cli(None, Some(-0.5), false, false);
-        assert_eq!(merged.min_confidence, 0.0,
-            "negative min_confidence should be clamped to 0.0");
+        assert_eq!(merged.min_confidence, 0.0, "negative min_confidence should be clamped to 0.0");
     }
 
     #[test]
     fn sec_config_min_confidence_clamped_above_one() {
         let merged = StaticoConfig::default().merge_cli(None, Some(2.0), false, false);
-        assert_eq!(merged.min_confidence, 1.0,
-            "min_confidence > 1.0 should be clamped to 1.0");
+        assert_eq!(merged.min_confidence, 1.0, "min_confidence > 1.0 should be clamped to 1.0");
     }
 }

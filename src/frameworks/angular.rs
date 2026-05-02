@@ -6,7 +6,6 @@
 
 use super::{FrameworkProfile, PathMatcher};
 
-
 pub const PROFILE: FrameworkProfile = FrameworkProfile {
     name: "angular",
 

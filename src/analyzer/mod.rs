@@ -11,7 +11,7 @@ use std::path::Path;
 use crate::types::*;
 
 use crate::discovery::{discover_config_files, discover_entry_points, discover_source_files};
-use crate::issues::{detect_issues, IssueContext};
+use crate::issues::{IssueContext, detect_issues};
 use crate::languages::{FileAnalysis, LanguagePlugin, PipelineResults, all_plugins, plugin_for_extension};
 
 /// Run the full analysis on a project directory.
@@ -125,11 +125,8 @@ pub fn analyze_with_options(root: &Path, exclude: &[String], no_cache: bool) -> 
     // Detect repetitive token patterns across files.
     let repetitive_patterns = crate::duplication::patterns::detect_patterns(&file_sources);
 
-    let duplication = crate::duplication::build_duplication_section(
-        &issues.duplicate_code,
-        total_source_lines,
-        repetitive_patterns,
-    );
+    let duplication =
+        crate::duplication::build_duplication_section(&issues.duplicate_code, total_source_lines, repetitive_patterns);
 
     // Detect monorepo setup.
     let monorepo = crate::monorepo::detect_monorepo(root)
@@ -207,13 +204,12 @@ fn parse_all_files_plugin(
 
             // Cache miss — parse the file.
             // Use the static plugin registry (compile-time known, no allocation)
-            let plugin = plugin_for_extension(ext)
-                .or_else(|| {
-                    // Try matching by language name
-                    static PLUGINS: std::sync::OnceLock<Vec<Box<dyn LanguagePlugin>>> = std::sync::OnceLock::new();
-                    let plugins = PLUGINS.get_or_init(all_plugins);
-                    plugins.iter().find(|p| p.name() == lang).map(|p| p.as_ref())
-                });
+            let plugin = plugin_for_extension(ext).or_else(|| {
+                // Try matching by language name
+                static PLUGINS: std::sync::OnceLock<Vec<Box<dyn LanguagePlugin>>> = std::sync::OnceLock::new();
+                let plugins = PLUGINS.get_or_init(all_plugins);
+                plugins.iter().find(|p| p.name() == lang).map(|p| p.as_ref())
+            });
 
             let result = if let Some(plugin) = plugin {
                 plugin.analyze_file(&root, rel_path, &source)

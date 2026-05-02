@@ -2,27 +2,19 @@
 
 use std::path::Path;
 
+use crate::languages::FileAnalysis;
 use crate::parse::blocks::extract_blocks;
 use crate::parse::metrics::count_loc;
-use crate::languages::FileAnalysis;
 
 /// Parse a Rust file and return its result as a `FileAnalysis` (plugin interface).
 ///
 /// This is the standalone version used by the `RustPlugin` language plugin.
 /// It does not need a `Resolver` because Rust has its own module resolution.
-pub fn parse_rust_file_standalone(
-    root: &Path,
-    rel_path: &str,
-    source: &str,
-) -> Option<FileAnalysis> {
+pub fn parse_rust_file_standalone(root: &Path, rel_path: &str, source: &str) -> Option<FileAnalysis> {
     parse_rust_file_inner(root, rel_path, source)
 }
 
-fn parse_rust_file_inner(
-    root: &Path,
-    rel_path: &str,
-    source: &str,
-) -> Option<FileAnalysis> {
+fn parse_rust_file_inner(root: &Path, rel_path: &str, source: &str) -> Option<FileAnalysis> {
     use crate::parse::rust::{
         RustAstParser, extract_exports as rust_extract_exports, extract_imports as rust_extract_imports,
         extract_mod_decls as rust_extract_mod_decls,
@@ -83,9 +75,10 @@ fn parse_rust_file_inner(
                 continue;
             }
             if let Some(name) = extract_mod_name_from_line(trimmed)
-                && !ts_names.contains(&name) {
-                    mod_decls.push(crate::parse::rust::RustModDecl { name, is_inline: false, path_override: None });
-                }
+                && !ts_names.contains(&name)
+            {
+                mod_decls.push(crate::parse::rust::RustModDecl { name, is_inline: false, path_override: None });
+            }
         }
         // Also scan referenced macro definition files for mod declarations
         let updated_names: std::collections::HashSet<String> = mod_decls.iter().map(|m| m.name.clone()).collect();
@@ -403,21 +396,19 @@ fn read_crate_name(root: &Path, rel_path: &str) -> Option<String> {
     let crate_src = find_crate_src_root(root, rel_path);
     // crate_src is like "src" — go up one level for Cargo.toml
     let cargo_dir = crate_src.rsplit_once('/').map(|(d, _)| d).unwrap_or("");
-    let cargo_path = if cargo_dir.is_empty() {
-        root.join("Cargo.toml")
-    } else {
-        root.join(format!("{}/Cargo.toml", cargo_dir))
-    };
+    let cargo_path =
+        if cargo_dir.is_empty() { root.join("Cargo.toml") } else { root.join(format!("{}/Cargo.toml", cargo_dir)) };
     let contents = std::fs::read_to_string(&cargo_path).ok()?;
     for line in contents.lines() {
         let trimmed = line.trim();
         if trimmed.starts_with("name")
-            && let Some(eq) = trimmed.find('=') {
-                let val = trimmed[eq + 1..].trim().trim_matches('"').trim_matches('\'');
-                if !val.is_empty() {
-                    return Some(val.to_string());
-                }
+            && let Some(eq) = trimmed.find('=')
+        {
+            let val = trimmed[eq + 1..].trim().trim_matches('"').trim_matches('\'');
+            if !val.is_empty() {
+                return Some(val.to_string());
             }
+        }
         // Stop at the end of [package] section
         if trimmed.starts_with('[') && !trimmed.starts_with("[package") {
             break;
@@ -427,8 +418,12 @@ fn read_crate_name(root: &Path, rel_path: &str) -> Option<String> {
 }
 
 fn is_module_root_file(rel_path: &str) -> bool {
-    rel_path.ends_with("/mod.rs") || rel_path.ends_with("/lib.rs") || rel_path.ends_with("/main.rs")
-        || rel_path == "lib.rs" || rel_path == "main.rs" || rel_path == "mod.rs"
+    rel_path.ends_with("/mod.rs")
+        || rel_path.ends_with("/lib.rs")
+        || rel_path.ends_with("/main.rs")
+        || rel_path == "lib.rs"
+        || rel_path == "main.rs"
+        || rel_path == "mod.rs"
 }
 
 /// Check if a file is a crate root (lib.rs, main.rs).

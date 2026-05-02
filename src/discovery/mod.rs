@@ -18,7 +18,12 @@ const SOURCE_EXTENSIONS: &[&str] = &["ts", "tsx", "js", "jsx", "rs", "py"];
 pub fn discover_source_files(root: &Path) -> Result<Vec<(String, String)>, String> {
     let mut files: Vec<(String, String)> = Vec::new();
 
-    for entry in walkdir::WalkDir::new(root).follow_links(false).max_depth(20).into_iter().filter_entry(|e| !is_skipped_dir(e.path())) {
+    for entry in walkdir::WalkDir::new(root)
+        .follow_links(false)
+        .max_depth(20)
+        .into_iter()
+        .filter_entry(|e| !is_skipped_dir(e.path()))
+    {
         let entry = match entry {
             Ok(e) => e,
             Err(_) => continue,
@@ -148,10 +153,9 @@ fn match_simple_glob(pattern: &str, path: &str) -> bool {
         }
         // V7-7: If the pattern ends with `*` (last segment is empty),
         // check the tail gap from last match to end of path.
-        if segments.last() == Some(&"")
-            && path[idx..].contains('/') {
-                return false;
-            }
+        if segments.last() == Some(&"") && path[idx..].contains('/') {
+            return false;
+        }
         return true;
     }
     path == pattern
@@ -306,26 +310,23 @@ mod tests {
         let files = discover_source_files(tmp.path()).unwrap();
         // File at depth 25 should NOT be found (max_depth is 20)
         let paths: Vec<&str> = files.iter().map(|(p, _)| p.as_str()).collect();
-        assert!(!paths.iter().any(|p| p.contains("deep.ts")),
-            "deeply nested file should be skipped: {:?}", paths);
+        assert!(!paths.iter().any(|p| p.contains("deep.ts")), "deeply nested file should be skipped: {:?}", paths);
     }
 
     // ── V7-7: match_simple_glob * must not cross directory boundaries ──
     #[test]
     fn sec_glob_star_does_not_match_slash() {
         // `dist*` should match `dist-old.ts` but NOT `dist/foo.ts`
-        assert!(match_simple_glob("dist*", "dist-old.ts"),
-            "dist* should match dist-old.ts");
-        assert!(!match_simple_glob("dist*", "dist/foo.ts"),
-            "dist* should NOT match dist/foo.ts — * must not cross /");
+        assert!(match_simple_glob("dist*", "dist-old.ts"), "dist* should match dist-old.ts");
+        assert!(!match_simple_glob("dist*", "dist/foo.ts"), "dist* should NOT match dist/foo.ts — * must not cross /");
         // `*.spec.ts` should match `foo.spec.ts` but NOT `src/foo.spec.ts`
-        assert!(match_simple_glob("*.spec.ts", "foo.spec.ts"),
-            "*.spec.ts should match foo.spec.ts");
-        assert!(!match_simple_glob("*.spec.ts", "src/foo.spec.ts"),
-            "*.spec.ts should NOT match src/foo.spec.ts — * must not cross /");
+        assert!(match_simple_glob("*.spec.ts", "foo.spec.ts"), "*.spec.ts should match foo.spec.ts");
+        assert!(
+            !match_simple_glob("*.spec.ts", "src/foo.spec.ts"),
+            "*.spec.ts should NOT match src/foo.spec.ts — * must not cross /"
+        );
         // `test_*` should match `test_foo.ts` but NOT `foo/test_bar.ts`
         assert!(match_simple_glob("test_*", "test_foo.ts"));
-        assert!(!match_simple_glob("test_*", "foo/test_bar.ts"),
-            "test_* should NOT match foo/test_bar.ts");
+        assert!(!match_simple_glob("test_*", "foo/test_bar.ts"), "test_* should NOT match foo/test_bar.ts");
     }
 }

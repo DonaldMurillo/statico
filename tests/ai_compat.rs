@@ -39,9 +39,7 @@ fn run(args: &[&str]) -> (Option<i32>, String, String, std::time::Duration) {
 }
 
 fn fixture(name: &str) -> PathBuf {
-    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("fixtures")
-        .join(name)
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures").join(name)
 }
 
 // ---------------------------------------------------------------------------
@@ -82,7 +80,8 @@ fn quiet_version_completes() {
 
 #[test]
 fn analyze_json_completes_without_tty() {
-    let (code, stdout, stderr, elapsed) = run(&["analyze", fixture("minimal-ts-project").to_str().unwrap(), "--format", "json"]);
+    let (code, stdout, stderr, elapsed) =
+        run(&["analyze", fixture("minimal-ts-project").to_str().unwrap(), "--format", "json"]);
 
     assert!(elapsed.as_secs() < 30, "analyze --format json took {:?}", elapsed);
     assert_eq!(code, Some(0), "analyze should exit 0, stderr: {}", stderr);
@@ -99,7 +98,8 @@ fn analyze_json_completes_without_tty() {
 
 #[test]
 fn analyze_markdown_completes_without_tty() {
-    let (code, stdout, stderr, elapsed) = run(&["analyze", fixture("minimal-ts-project").to_str().unwrap(), "--format", "markdown"]);
+    let (code, stdout, stderr, elapsed) =
+        run(&["analyze", fixture("minimal-ts-project").to_str().unwrap(), "--format", "markdown"]);
 
     assert!(elapsed.as_secs() < 30, "analyze --format markdown took {:?}", elapsed);
     assert_eq!(code, Some(0), "analyze markdown should exit 0, stderr: {}", stderr);
@@ -108,20 +108,21 @@ fn analyze_markdown_completes_without_tty() {
 
 #[test]
 fn analyze_no_cache_completes_without_tty() {
-    let (code, stdout, stderr, elapsed) = run(&["analyze", fixture("minimal-ts-project").to_str().unwrap(), "--format", "json", "--no-cache"]);
+    let (code, stdout, stderr, elapsed) =
+        run(&["analyze", fixture("minimal-ts-project").to_str().unwrap(), "--format", "json", "--no-cache"]);
 
     assert!(elapsed.as_secs() < 30, "analyze --no-cache took {:?}", elapsed);
     assert_eq!(code, Some(0), "analyze --no-cache should exit 0, stderr: {}", stderr);
 
-    let json: serde_json::Value = serde_json::from_str(&stdout)
-        .expect("stdout should be valid JSON");
+    let json: serde_json::Value = serde_json::from_str(&stdout).expect("stdout should be valid JSON");
     assert!(json.get("structure").is_some());
 }
 
 #[test]
 fn analyze_exit_code_flag() {
     // With exit-code flag, should still succeed on clean project.
-    let (code, _stdout, _stderr, elapsed) = run(&["analyze", fixture("minimal-ts-project").to_str().unwrap(), "--format", "json", "--exit-code"]);
+    let (code, _stdout, _stderr, elapsed) =
+        run(&["analyze", fixture("minimal-ts-project").to_str().unwrap(), "--format", "json", "--exit-code"]);
 
     assert!(elapsed.as_secs() < 30, "analyze --exit-code took {:?}", elapsed);
     // Exit code should be 0 or 1 (both are valid depending on whether issues found).
@@ -130,13 +131,13 @@ fn analyze_exit_code_flag() {
 
 #[test]
 fn analyze_quiet_mode() {
-    let (code, stdout, stderr, elapsed) = run(&["--quiet", "analyze", fixture("minimal-ts-project").to_str().unwrap(), "--format", "json"]);
+    let (code, stdout, stderr, elapsed) =
+        run(&["--quiet", "analyze", fixture("minimal-ts-project").to_str().unwrap(), "--format", "json"]);
 
     assert!(elapsed.as_secs() < 30, "analyze --quiet took {:?}", elapsed);
     assert_eq!(code, Some(0), "quiet analyze should exit 0, stderr: {}", stderr);
 
-    let json: serde_json::Value = serde_json::from_str(&stdout)
-        .expect("stdout should be valid JSON");
+    let json: serde_json::Value = serde_json::from_str(&stdout).expect("stdout should be valid JSON");
     assert!(json.get("structure").is_some());
 }
 
@@ -147,7 +148,8 @@ fn analyze_quiet_mode() {
 #[test]
 fn diff_completes_without_tty() {
     // First generate two analysis outputs.
-    let (code_a, stdout_a, _, _) = run(&["analyze", fixture("minimal-ts-project").to_str().unwrap(), "--format", "json"]);
+    let (code_a, stdout_a, _, _) =
+        run(&["analyze", fixture("minimal-ts-project").to_str().unwrap(), "--format", "json"]);
     assert_eq!(code_a, Some(0));
 
     let tmp = std::env::temp_dir().join("statico-ai-compat");
@@ -157,7 +159,8 @@ fn diff_completes_without_tty() {
     std::fs::write(&before, &stdout_a).unwrap();
     std::fs::write(&after, &stdout_a).unwrap();
 
-    let (code, stdout, _stderr, elapsed) = run(&["diff", before.to_str().unwrap(), after.to_str().unwrap(), "--format", "json"]);
+    let (code, stdout, _stderr, elapsed) =
+        run(&["diff", before.to_str().unwrap(), after.to_str().unwrap(), "--format", "json"]);
 
     assert!(elapsed.as_secs() < 10, "diff took {:?}", elapsed);
     assert_eq!(code, Some(0), "diff should exit 0");
@@ -225,7 +228,8 @@ fn plugin_docs_completes() {
 
 #[test]
 fn plugin_list_completes() {
-    let (code, _stdout, _stderr, elapsed) = run(&["plugin", "list", "--path", fixture("minimal-ts-project").to_str().unwrap()]);
+    let (code, _stdout, _stderr, elapsed) =
+        run(&["plugin", "list", "--path", fixture("minimal-ts-project").to_str().unwrap()]);
 
     assert!(elapsed.as_secs() < 5, "plugin list took {:?}", elapsed);
     // list exits 0 even when no plugins found.
@@ -252,7 +256,8 @@ fn update_check_completes_without_tty() {
 
 #[test]
 fn analyze_json_has_repetitive_patterns() {
-    let (code, stdout, stderr, _) = run(&["analyze", fixture("minimal-ts-project").to_str().unwrap(), "--format", "json"]);
+    let (code, stdout, stderr, _) =
+        run(&["analyze", fixture("minimal-ts-project").to_str().unwrap(), "--format", "json"]);
     assert_eq!(code, Some(0), "stderr: {}", stderr);
 
     let json: serde_json::Value = serde_json::from_str(&stdout).expect("valid JSON");
@@ -263,7 +268,8 @@ fn analyze_json_has_repetitive_patterns() {
 
 #[test]
 fn analyze_ai_format_completes() {
-    let (code, stdout, stderr, elapsed) = run(&["analyze", fixture("minimal-ts-project").to_str().unwrap(), "--format", "ai"]);
+    let (code, stdout, stderr, elapsed) =
+        run(&["analyze", fixture("minimal-ts-project").to_str().unwrap(), "--format", "ai"]);
 
     assert!(elapsed.as_secs() < 30, "analyze --format ai took {:?}", elapsed);
     assert_eq!(code, Some(0), "analyze ai format should exit 0, stderr: {}", stderr);
@@ -272,7 +278,8 @@ fn analyze_ai_format_completes() {
 
 #[test]
 fn analyze_context_format_completes() {
-    let (code, stdout, stderr, elapsed) = run(&["analyze", fixture("minimal-ts-project").to_str().unwrap(), "--format", "context"]);
+    let (code, stdout, stderr, elapsed) =
+        run(&["analyze", fixture("minimal-ts-project").to_str().unwrap(), "--format", "context"]);
 
     assert!(elapsed.as_secs() < 30, "analyze --format context took {:?}", elapsed);
     assert_eq!(code, Some(0), "analyze context format should exit 0, stderr: {}", stderr);
@@ -281,7 +288,8 @@ fn analyze_context_format_completes() {
 
 #[test]
 fn analyze_sarif_format_completes() {
-    let (code, stdout, stderr, elapsed) = run(&["analyze", fixture("minimal-ts-project").to_str().unwrap(), "--format", "sarif"]);
+    let (code, stdout, stderr, elapsed) =
+        run(&["analyze", fixture("minimal-ts-project").to_str().unwrap(), "--format", "sarif"]);
 
     assert!(elapsed.as_secs() < 30, "analyze --format sarif took {:?}", elapsed);
     assert_eq!(code, Some(0), "analyze sarif format should exit 0, stderr: {}", stderr);

@@ -74,10 +74,7 @@ fn main() {
     let results_dir = Path::new(&repo_root).join("benchmarks/results");
 
     if !results_dir.exists() {
-        eprintln!(
-            "No benchmark results found at {}.",
-            results_dir.display()
-        );
+        eprintln!("No benchmark results found at {}.", results_dir.display());
         eprintln!("Run ./scripts/bench_compare.sh first to generate results.");
         std::process::exit(1);
     }
@@ -104,9 +101,7 @@ fn main() {
     print!("{:<42}", "benchmark");
     for (filename, _) in &runs {
         // Trim to a readable date portion from filename like bench_20250430T120000Z.json
-        let label = filename
-            .trim_start_matches("bench_")
-            .trim_end_matches(".json");
+        let label = filename.trim_start_matches("bench_").trim_end_matches(".json");
         print!("  {:>18}", label);
     }
     println!();

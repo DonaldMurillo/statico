@@ -270,10 +270,16 @@ mod tests {
         let fmt = FixFormatter;
         let result = fmt.format(&output).unwrap();
         // A newline in the path should not inject a fake comment line
-        assert!(result.contains("src/good.ts evil-command "),
-            "newlines in path should be replaced with spaces, got:\n{}", result);
-        assert!(!result.contains("\nevil-command\n"),
-            "raw newlines should not appear in path output, got:\n{}", result);
+        assert!(
+            result.contains("src/good.ts evil-command "),
+            "newlines in path should be replaced with spaces, got:\n{}",
+            result
+        );
+        assert!(
+            !result.contains("\nevil-command\n"),
+            "raw newlines should not appear in path output, got:\n{}",
+            result
+        );
     }
 
     // ── V4-3: Newline injection via reason field ──
@@ -291,17 +297,26 @@ mod tests {
         let fmt = FixFormatter;
         let result = fmt.format(&output).unwrap();
         // The injected text should NOT appear as its own "# SAFE TO DELETE:" line
-        let safe_delete_lines: Vec<_> = result.lines()
-            .filter(|l| l.starts_with("# SAFE TO DELETE:"))
-            .collect();
-        assert_eq!(safe_delete_lines.len(), 1, "should only have one real SAFE TO DELETE line, got:\n{:?}\n{}",
-            safe_delete_lines, result);
-        assert!(safe_delete_lines[0].contains("src/dead.ts"),
-            "the real SAFE TO DELETE should reference the actual file, got:\n{}", result);
+        let safe_delete_lines: Vec<_> = result.lines().filter(|l| l.starts_with("# SAFE TO DELETE:")).collect();
+        assert_eq!(
+            safe_delete_lines.len(),
+            1,
+            "should only have one real SAFE TO DELETE line, got:\n{:?}\n{}",
+            safe_delete_lines,
+            result
+        );
+        assert!(
+            safe_delete_lines[0].contains("src/dead.ts"),
+            "the real SAFE TO DELETE should reference the actual file, got:\n{}",
+            result
+        );
         // Reason content should be on one line with newlines replaced
         let reason_line = result.lines().find(|l| l.starts_with("# Reason:")).unwrap();
-        assert!(reason_line.contains("not reachable # SAFE TO DELETE: /etc/passwd"),
-            "reason should have newlines replaced with spaces, got:\n{}", reason_line);
+        assert!(
+            reason_line.contains("not reachable # SAFE TO DELETE: /etc/passwd"),
+            "reason should have newlines replaced with spaces, got:\n{}",
+            reason_line
+        );
     }
 
     // ── V6-2: Newline injection via unused export path (group header) ──
@@ -309,22 +324,24 @@ mod tests {
     fn sec_fix_strips_newlines_in_export_path() {
         let output = make_output(
             vec![],
-            vec![
-                UnusedExportIssue { name: "foo".into(), path: "src/a.ts\n# FAKE DIRECTIVE\n".into() },
-            ],
+            vec![UnusedExportIssue { name: "foo".into(), path: "src/a.ts\n# FAKE DIRECTIVE\n".into() }],
         );
         let fmt = FixFormatter;
         let result = fmt.format(&output).unwrap();
         // Should NOT have a bare "# FAKE DIRECTIVE" line injected by the path
-        let fake_lines: Vec<_> = result.lines()
-            .filter(|l| l.trim() == "# FAKE DIRECTIVE")
-            .collect();
-        assert!(fake_lines.is_empty(),
+        let fake_lines: Vec<_> = result.lines().filter(|l| l.trim() == "# FAKE DIRECTIVE").collect();
+        assert!(
+            fake_lines.is_empty(),
             "newline in export path should not inject fake directives, got:\n{:?}\n{}",
-            fake_lines, result);
+            fake_lines,
+            result
+        );
         // Path should have newlines replaced with spaces
-        assert!(result.contains("src/a.ts # FAKE DIRECTIVE"),
-            "path should have newlines replaced with spaces, got:\n{}", result);
+        assert!(
+            result.contains("src/a.ts # FAKE DIRECTIVE"),
+            "path should have newlines replaced with spaces, got:\n{}",
+            result
+        );
     }
 
     // ── V6-3: Newline injection via unused export name ──
@@ -332,18 +349,17 @@ mod tests {
     fn sec_fix_strips_newlines_in_export_name() {
         let output = make_output(
             vec![],
-            vec![
-                UnusedExportIssue { name: "myExport\n# FAKE REMOVE".into(), path: "src/a.ts".into() },
-            ],
+            vec![UnusedExportIssue { name: "myExport\n# FAKE REMOVE".into(), path: "src/a.ts".into() }],
         );
         let fmt = FixFormatter;
         let result = fmt.format(&output).unwrap();
         // Should NOT have a bare "# FAKE REMOVE" line injected by the name
-        let fake_lines: Vec<_> = result.lines()
-            .filter(|l| l.trim() == "# FAKE REMOVE")
-            .collect();
-        assert!(fake_lines.is_empty(),
+        let fake_lines: Vec<_> = result.lines().filter(|l| l.trim() == "# FAKE REMOVE").collect();
+        assert!(
+            fake_lines.is_empty(),
             "newline in export name should not inject fake directives, got:\n{:?}\n{}",
-            fake_lines, result);
+            fake_lines,
+            result
+        );
     }
 }

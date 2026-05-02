@@ -164,18 +164,22 @@ pub fn detect_in_file(rel_path: &str, source: &str, issues: &mut Vec<GotchaIssue
         }
 
         // Console statements — JS/TS-only.
-        if lang.is_js_family() && !is_test && !is_comment_line(line) && !is_example_or_script(rel_path)
-            && (line.contains("console.log(") || line.contains("console.debug(")) {
-                issues.push(GotchaIssue {
-                    file: rel_path.to_string(),
-                    line: line_num,
-                    rule: "console-statement".into(),
-                    severity: "info".into(),
-                    message: "Console statement left in production code".into(),
-                    confidence: 0.4,
-                    snippet: truncate_line(line),
-                });
-            }
+        if lang.is_js_family()
+            && !is_test
+            && !is_comment_line(line)
+            && !is_example_or_script(rel_path)
+            && (line.contains("console.log(") || line.contains("console.debug("))
+        {
+            issues.push(GotchaIssue {
+                file: rel_path.to_string(),
+                line: line_num,
+                rule: "console-statement".into(),
+                severity: "info".into(),
+                message: "Console statement left in production code".into(),
+                confidence: 0.4,
+                snippet: truncate_line(line),
+            });
+        }
 
         // Unresolved TODO/FIXME/HACK/XXX comments — language-agnostic.
         if is_comment_line(line) {
@@ -198,21 +202,21 @@ pub fn detect_in_file(rel_path: &str, source: &str, issues: &mut Vec<GotchaIssue
         // process.env.VAR without fallback — JS/TS-only.
         if lang.is_js_family()
             && let Some(idx) = line.find("process.env.")
-                && !is_comment_line(line) {
-                    let after = &line[idx..];
-                    if !after.contains("||") && !after.contains("??") && !after.contains("?.") && !after.contains("? ") {
-                        issues.push(GotchaIssue {
-                            file: rel_path.to_string(),
-                            line: line_num,
-                            rule: "env-no-fallback".into(),
-                            severity: "info".into(),
-                            message: "`process.env.X` without fallback will be `undefined` if the env var is missing"
-                                .into(),
-                            confidence: 0.7,
-                            snippet: truncate_line(line),
-                        });
-                    }
-                }
+            && !is_comment_line(line)
+        {
+            let after = &line[idx..];
+            if !after.contains("||") && !after.contains("??") && !after.contains("?.") && !after.contains("? ") {
+                issues.push(GotchaIssue {
+                    file: rel_path.to_string(),
+                    line: line_num,
+                    rule: "env-no-fallback".into(),
+                    severity: "info".into(),
+                    message: "`process.env.X` without fallback will be `undefined` if the env var is missing".into(),
+                    confidence: 0.7,
+                    snippet: truncate_line(line),
+                });
+            }
+        }
 
         // ── Rust-specific rules ────────────────────────────────────────
         // Rust uses `//` comments too, so unresolved-comment detection works.
@@ -225,7 +229,8 @@ pub fn detect_in_file(rel_path: &str, source: &str, issues: &mut Vec<GotchaIssue
                 rule: "rust-unwrap".into(),
                 severity: "warning".into(),
                 message: "`.unwrap()` can panic at runtime; consider `.unwrap_or_default()`, \
-                          `.ok()`, or proper error handling".into(),
+                          `.ok()`, or proper error handling"
+                    .into(),
                 confidence: 0.5,
                 snippet: truncate_line(line),
             });
@@ -271,15 +276,20 @@ pub fn detect_in_file(rel_path: &str, source: &str, issues: &mut Vec<GotchaIssue
         }
 
         // `println!` in non-test, non-example code (should use logging).
-        if lang.is_rust() && !is_test && !is_example_or_script(rel_path) && !is_comment_line(line)
-            && line.contains("println!(") {
+        if lang.is_rust()
+            && !is_test
+            && !is_example_or_script(rel_path)
+            && !is_comment_line(line)
+            && line.contains("println!(")
+        {
             issues.push(GotchaIssue {
                 file: rel_path.to_string(),
                 line: line_num,
                 rule: "rust-println".into(),
                 severity: "info".into(),
                 message: "`println!()` in library/application code; consider using a logging framework \
-                          (tracing, log)".into(),
+                          (tracing, log)"
+                    .into(),
                 confidence: 0.3,
                 snippet: truncate_line(line),
             });
@@ -438,10 +448,7 @@ mod calls_rust_macro_tests {
             r####"assert!(!calls_rust_macro(r#"line.contains("todo!(")"#, "todo"));"####,
             "todo"
         ));
-        assert!(!calls_rust_macro(
-            r####"let s = r##"unimplemented!()"##;"####,
-            "unimplemented"
-        ));
+        assert!(!calls_rust_macro(r####"let s = r##"unimplemented!()"##;"####, "unimplemented"));
         // But a real call after a closing raw string still matches.
         assert!(calls_rust_macro(r#"let s = r"x"; todo!();"#, "todo"));
     }

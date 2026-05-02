@@ -82,7 +82,12 @@ impl OutputFormatter for MarkdownFormatter {
             md.push_str("## Unused Types (Top 20)\n\n");
             md.push_str("| Type | Kind | File |\n|---|---|---|\n");
             for ut in output.issues.unused_types.iter().take(20) {
-                md.push_str(&format!("| `{}` | {} | `{}` |\n", escape_md_cell(&ut.name), ut.kind, escape_md_cell(&ut.path)));
+                md.push_str(&format!(
+                    "| `{}` | {} | `{}` |\n",
+                    escape_md_cell(&ut.name),
+                    ut.kind,
+                    escape_md_cell(&ut.path)
+                ));
             }
             md.push('\n');
         }
@@ -101,8 +106,11 @@ impl OutputFormatter for MarkdownFormatter {
             let mut groups = output.duplication.clone_groups.clone();
             groups.sort_by(|a, b| b.line_count.cmp(&a.line_count));
             for (i, g) in groups.iter().take(10).enumerate() {
-                let files: Vec<String> =
-                    g.instances.iter().map(|inst| format!("{}:L{}", escape_md_cell(&inst.file), inst.start_line)).collect();
+                let files: Vec<String> = g
+                    .instances
+                    .iter()
+                    .map(|inst| format!("{}:L{}", escape_md_cell(&inst.file), inst.start_line))
+                    .collect();
                 md.push_str(&format!("| {} | {} | {} |\n", i + 1, files.join(", "), g.line_count));
             }
             md.push('\n');
@@ -110,7 +118,7 @@ impl OutputFormatter for MarkdownFormatter {
             if !output.duplication.clone_families.is_empty() {
                 md.push_str("### Clone Families\n\n");
                 for fam in &output.duplication.clone_families {
-                let escaped_fam_files: Vec<String> = fam.files.iter().map(|f| escape_md_cell(f)).collect();
+                    let escaped_fam_files: Vec<String> = fam.files.iter().map(|f| escape_md_cell(f)).collect();
                     md.push_str(&format!(
                         "- **{} groups, {} lines**: {}\n",
                         fam.group_count,
@@ -135,7 +143,10 @@ impl OutputFormatter for MarkdownFormatter {
         // Framework Info
         md.push_str("## Framework Info\n\n");
         md.push_str(&format!("- **Entry points:** {}\n", output.structure.entry_points.len()));
-        md.push_str(&format!("- **Config files:** {}\n", output.structure.config_files.iter().map(|f| escape_md_cell(f)).collect::<Vec<_>>().join(", ")));
+        md.push_str(&format!(
+            "- **Config files:** {}\n",
+            output.structure.config_files.iter().map(|f| escape_md_cell(f)).collect::<Vec<_>>().join(", ")
+        ));
 
         Ok(md)
     }
@@ -151,12 +162,12 @@ fn health_bar(score: f64) -> String {
 /// Prevents injection of links, table breaks, backtick breaks, and structural elements.
 fn escape_md_cell(s: &str) -> String {
     s.replace('|', "\\|")
-     .replace('[', "\\[")
-     .replace(']', "\\]")
-     .replace('`', "\\`")
-     .replace('<', "&lt;")
-     .replace('>', "&gt;")
-     .replace(['\n', '\r'], " ")
+        .replace('[', "\\[")
+        .replace(']', "\\]")
+        .replace('`', "\\`")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace(['\n', '\r'], " ")
 }
 
 #[cfg(test)]
@@ -225,8 +236,7 @@ mod tests {
         let formatter = MarkdownFormatter;
         let md = formatter.format(&output).unwrap();
         // Raw | in table cell values would break markdown table formatting
-        assert!(!md.contains("evil | [link]"),
-            "markdown should escape pipe chars in table cells: {}", md);
+        assert!(!md.contains("evil | [link]"), "markdown should escape pipe chars in table cells: {}", md);
     }
 
     #[test]
@@ -234,8 +244,7 @@ mod tests {
         let output = make_output_with_evil_path();
         let formatter = MarkdownFormatter;
         let md = formatter.format(&output).unwrap();
-        assert!(!md.contains("[link](https://evil.com)"),
-            "markdown should escape link injection in cells");
+        assert!(!md.contains("[link](https://evil.com)"), "markdown should escape link injection in cells");
     }
 
     #[test]
@@ -244,8 +253,7 @@ mod tests {
         let formatter = MarkdownFormatter;
         let md = formatter.format(&output).unwrap();
         // Newlines in table cells break the table structure
-        assert!(!md.contains("EvilExport\n\n# Headline"),
-            "markdown should escape newlines in table cells");
+        assert!(!md.contains("EvilExport\n\n# Headline"), "markdown should escape newlines in table cells");
     }
 
     // ── V4-5: Backtick injection breaks inline code spans ──
@@ -273,8 +281,7 @@ mod tests {
             files: vec!["src/[evil](https://evil.com).ts".to_string(), "src/b.ts".to_string()],
         }];
         let md = MarkdownFormatter.format(&output).unwrap();
-        assert!(!md.contains("[evil](https://evil.com)"),
-            "circular dep file names should be escaped, got:\n{}", md);
+        assert!(!md.contains("[evil](https://evil.com)"), "circular dep file names should be escaped, got:\n{}", md);
     }
 
     // ── V4-7: Duplication instance file names not escaped ──
@@ -285,15 +292,19 @@ mod tests {
         output.issues.unused_exports = vec![];
         output.duplication.clone_groups = vec![CloneGroup {
             instances: vec![
-                CloneInstance { file: "src/[evil](https://evil.com).ts".to_string(), start_line: 1, end_line: 10, snippet: "...".to_string() },
+                CloneInstance {
+                    file: "src/[evil](https://evil.com).ts".to_string(),
+                    start_line: 1,
+                    end_line: 10,
+                    snippet: "...".to_string(),
+                },
                 CloneInstance { file: "src/b.ts".to_string(), start_line: 1, end_line: 10, snippet: "...".to_string() },
             ],
             token_count: 60,
             line_count: 10,
         }];
         let md = MarkdownFormatter.format(&output).unwrap();
-        assert!(!md.contains("[evil](https://evil.com)"),
-            "duplication file names should be escaped, got:\n{}", md);
+        assert!(!md.contains("[evil](https://evil.com)"), "duplication file names should be escaped, got:\n{}", md);
     }
 
     // ── V4-10: HTML chars not escaped in markdown cells ──
@@ -307,10 +318,8 @@ mod tests {
             reason: "<b>bold</b>".to_string(),
         }];
         let md = MarkdownFormatter.format(&output).unwrap();
-        assert!(!md.contains("<script>"),
-            "HTML angle brackets should be escaped in markdown, got:\n{}", md);
-        assert!(md.contains("&lt;script&gt;"),
-            "should use HTML entities for angle brackets, got:\n{}", md);
+        assert!(!md.contains("<script>"), "HTML angle brackets should be escaped in markdown, got:\n{}", md);
+        assert!(md.contains("&lt;script&gt;"), "should use HTML entities for angle brackets, got:\n{}", md);
     }
 
     // ── V5-9: config_files are escaped in markdown output ──
@@ -331,24 +340,35 @@ mod tests {
             dependencies: Dependencies { imports: vec![], external: vec![] },
             quality: Quality { files: vec![] },
             issues: Issues {
-                dead_code: vec![], unused_exports: vec![], duplicate_exports: vec![],
-                duplicate_code: vec![], gotchas: vec![], unused_types: vec![],
-                circular_dependencies: vec![], unused_dependencies: vec![],
-                unresolved_imports: vec![], unlisted_dependencies: vec![], plugin_issues: vec![],
+                dead_code: vec![],
+                unused_exports: vec![],
+                duplicate_exports: vec![],
+                duplicate_code: vec![],
+                gotchas: vec![],
+                unused_types: vec![],
+                circular_dependencies: vec![],
+                unused_dependencies: vec![],
+                unresolved_imports: vec![],
+                unlisted_dependencies: vec![],
+                plugin_issues: vec![],
             },
             duplication: DuplicationSection {
                 stats: DuplicationStats {
-                    total_lines: 0, duplicated_lines: 0,
-                    duplication_percentage: 0.0, clone_groups: 0,
-                    clone_instances: 0, clone_families: 0,
+                    total_lines: 0,
+                    duplicated_lines: 0,
+                    duplication_percentage: 0.0,
+                    clone_groups: 0,
+                    clone_instances: 0,
+                    clone_families: 0,
                 },
-                clone_groups: vec![], clone_families: vec![], mirrored_directories: vec![],
+                clone_groups: vec![],
+                clone_families: vec![],
+                mirrored_directories: vec![],
                 repetitive_patterns: vec![],
             },
         };
         let formatter = MarkdownFormatter;
         let md = formatter.format(&output).unwrap();
-        assert!(!md.contains("[evil](link)"),
-            "config_files should be escaped, got:\n{}", md);
+        assert!(!md.contains("[evil](link)"), "config_files should be escaped, got:\n{}", md);
     }
 }

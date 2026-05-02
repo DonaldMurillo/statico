@@ -64,10 +64,12 @@ pub fn extract_exports(code: &str, tree: &Tree) -> Vec<RustExport> {
 fn collect_pub_items(node: Node, code: &str, item_kinds: &[(&str, &str)], exports: &mut Vec<RustExport>) {
     for child in node.children(&mut node.walk()) {
         for (tree_kind, export_kind) in item_kinds {
-            if child.kind() == *tree_kind && is_pub(&child)
-                && let Some(name) = get_item_name(&child, code) {
-                    exports.push(RustExport { name, kind: export_kind.to_string() });
-                }
+            if child.kind() == *tree_kind
+                && is_pub(&child)
+                && let Some(name) = get_item_name(&child, code)
+            {
+                exports.push(RustExport { name, kind: export_kind.to_string() });
+            }
         }
         // Recurse into impl blocks and mod blocks for inline items
         if child.kind() == "impl_item" || child.kind() == "declaration_list" {
@@ -115,9 +117,10 @@ pub fn extract_imports(code: &str, tree: &Tree) -> Vec<RustImport> {
 
     for node in root.children(&mut root.walk()) {
         if node.kind() == "use_declaration"
-            && let Some(imp) = parse_use_decl(node, code) {
-                imports.extend(imp);
-            }
+            && let Some(imp) = parse_use_decl(node, code)
+        {
+            imports.extend(imp);
+        }
     }
     imports
 }
@@ -332,38 +335,36 @@ fn scan_tokens_with_prefix(tokens: &[Node], code: &str, mods: &mut Vec<RustModDe
             }
         }
         // Look for `mod` keyword followed by identifier
-        if &code[tok.byte_range()] == "mod"
-            && i + 2 < tokens.len() {
-                let name_tok = &tokens[i + 1];
-                let sep_tok = &tokens[i + 2];
-                if name_tok.kind() == "identifier" {
-                    let name = code[name_tok.byte_range()].to_string();
-                    // Inline module if next is token_tree ({...}) or literal "{" followed by content
-                    let is_inline = sep_tok.kind() == "token_tree" || &code[sep_tok.byte_range()] == "{";
-                    if is_inline {
-                        // Inline module — recurse into its body with the name as prefix
-                        let mut child_stack = inline_mod_stack.clone();
-                        child_stack.push(name);
-                        if sep_tok.kind() == "token_tree" {
-                            let inner: Vec<Node> = sep_tok.children(&mut sep_tok.walk()).collect();
-                            scan_tokens_with_prefix(&inner, code, mods, &child_stack);
-                        }
-                        i += 3;
-                        continue;
-                    } else if &code[sep_tok.byte_range()] == ";" {
-                        // mod <name>; — file reference
-                        let full_prefix =
-                            if inline_mod_stack.is_empty() { None } else { Some(inline_mod_stack.join("/")) };
-                        let full_name = match full_prefix {
-                            Some(p) => format!("{}/{}", p, name),
-                            None => name,
-                        };
-                        mods.push(RustModDecl { name: full_name, is_inline: false, path_override: None });
-                        i += 3;
-                        continue;
+        if &code[tok.byte_range()] == "mod" && i + 2 < tokens.len() {
+            let name_tok = &tokens[i + 1];
+            let sep_tok = &tokens[i + 2];
+            if name_tok.kind() == "identifier" {
+                let name = code[name_tok.byte_range()].to_string();
+                // Inline module if next is token_tree ({...}) or literal "{" followed by content
+                let is_inline = sep_tok.kind() == "token_tree" || &code[sep_tok.byte_range()] == "{";
+                if is_inline {
+                    // Inline module — recurse into its body with the name as prefix
+                    let mut child_stack = inline_mod_stack.clone();
+                    child_stack.push(name);
+                    if sep_tok.kind() == "token_tree" {
+                        let inner: Vec<Node> = sep_tok.children(&mut sep_tok.walk()).collect();
+                        scan_tokens_with_prefix(&inner, code, mods, &child_stack);
                     }
+                    i += 3;
+                    continue;
+                } else if &code[sep_tok.byte_range()] == ";" {
+                    // mod <name>; — file reference
+                    let full_prefix = if inline_mod_stack.is_empty() { None } else { Some(inline_mod_stack.join("/")) };
+                    let full_name = match full_prefix {
+                        Some(p) => format!("{}/{}", p, name),
+                        None => name,
+                    };
+                    mods.push(RustModDecl { name: full_name, is_inline: false, path_override: None });
+                    i += 3;
+                    continue;
                 }
             }
+        }
         i += 1;
     }
 }

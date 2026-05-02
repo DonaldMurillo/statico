@@ -75,8 +75,8 @@ impl Baseline {
 
     /// Load a baseline from a JSON file.
     pub fn load(path: &Path) -> Result<Self, String> {
-        let content = std::fs::read_to_string(path)
-            .map_err(|e| format!("failed to read baseline {}: {}", path.display(), e))?;
+        let content =
+            std::fs::read_to_string(path).map_err(|e| format!("failed to read baseline {}: {}", path.display(), e))?;
         let file: BaselineFile = serde_json::from_str(&content)
             .map_err(|e| format!("failed to parse baseline {}: {}", path.display(), e))?;
         if file.version != BASELINE_VERSION {
@@ -85,9 +85,7 @@ impl Baseline {
                 file.version, BASELINE_VERSION
             ));
         }
-        Ok(Self {
-            fingerprints: file.fingerprints.into_iter().collect(),
-        })
+        Ok(Self { fingerprints: file.fingerprints.into_iter().collect() })
     }
 
     /// Write the baseline to a JSON file (atomically: write to .tmp, rename).
@@ -97,11 +95,9 @@ impl Baseline {
             generated_at: Some(today_string()),
             fingerprints: self.fingerprints.iter().cloned().collect(),
         };
-        let json = serde_json::to_string_pretty(&file)
-            .map_err(|e| format!("failed to serialize baseline: {}", e))?;
+        let json = serde_json::to_string_pretty(&file).map_err(|e| format!("failed to serialize baseline: {}", e))?;
         let tmp = path.with_extension("tmp");
-        std::fs::write(&tmp, json.as_bytes())
-            .map_err(|e| format!("failed to write {}: {}", tmp.display(), e))?;
+        std::fs::write(&tmp, json.as_bytes()).map_err(|e| format!("failed to write {}: {}", tmp.display(), e))?;
         std::fs::rename(&tmp, path).map_err(|e| {
             let _ = std::fs::remove_file(&tmp);
             format!("failed to install baseline at {}: {}", path.display(), e)
@@ -136,7 +132,9 @@ impl Baseline {
 
         retain_with_fp!(output.issues.dead_code, |i: &crate::types::DeadCodeIssue| fp_dead_code(i));
         retain_with_fp!(output.issues.unused_exports, |i: &crate::types::UnusedExportIssue| fp_unused_export(i));
-        retain_with_fp!(output.issues.duplicate_exports, |i: &crate::types::DuplicateExportIssue| fp_duplicate_export(i));
+        retain_with_fp!(output.issues.duplicate_exports, |i: &crate::types::DuplicateExportIssue| fp_duplicate_export(
+            i
+        ));
         retain_with_fp!(output.issues.unused_types, |i: &crate::types::UnusedTypeIssue| fp_unused_type(i));
         retain_with_fp!(output.issues.gotchas, |i: &crate::types::GotchaIssue| fp_gotcha(i));
         retain_with_fp!(output.issues.unused_dependencies, |i: &crate::types::UnusedDepIssue| fp_unused_dep(i));
@@ -204,11 +202,7 @@ fn fp_circular(i: &crate::types::CircularDepIssue) -> String {
     let mut chain = i.files.clone();
     // Rotate so the alphabetically smallest file is first — same cycle
     // started from any node fingerprints identically.
-    if let Some((min_idx, _)) = chain
-        .iter()
-        .enumerate()
-        .min_by_key(|(_, s)| s.as_str())
-    {
+    if let Some((min_idx, _)) = chain.iter().enumerate().min_by_key(|(_, s)| s.as_str()) {
         chain.rotate_left(min_idx);
     }
     format!("circular_dep::{}", chain.join("->"))
@@ -222,10 +216,7 @@ fn fp_unlisted(i: &crate::types::UnlistedDepIssue) -> String {
 
 fn today_string() -> String {
     use std::time::SystemTime;
-    let secs = SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
+    let secs = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
     let total_days = secs / 86400;
     let z = total_days as i64 + 719468;
     let era = (if z >= 0 { z } else { z - 146096 }) / 146097;
@@ -311,15 +302,9 @@ mod tests {
 
     #[test]
     fn fingerprint_circular_is_rotation_invariant() {
-        let a = CircularDepIssue {
-            files: vec!["b.rs".into(), "c.rs".into(), "a.rs".into()],
-        };
-        let b = CircularDepIssue {
-            files: vec!["a.rs".into(), "b.rs".into(), "c.rs".into()],
-        };
-        let c = CircularDepIssue {
-            files: vec!["c.rs".into(), "a.rs".into(), "b.rs".into()],
-        };
+        let a = CircularDepIssue { files: vec!["b.rs".into(), "c.rs".into(), "a.rs".into()] };
+        let b = CircularDepIssue { files: vec!["a.rs".into(), "b.rs".into(), "c.rs".into()] };
+        let c = CircularDepIssue { files: vec!["c.rs".into(), "a.rs".into(), "b.rs".into()] };
         assert_eq!(fp_circular(&a), fp_circular(&b));
         assert_eq!(fp_circular(&b), fp_circular(&c));
     }
@@ -339,9 +324,7 @@ mod tests {
             confidence: 0.9,
             reason: String::new(),
         });
-        let baseline = Baseline {
-            fingerprints: BTreeSet::from(["dead_code::src/known.rs".to_string()]),
-        };
+        let baseline = Baseline { fingerprints: BTreeSet::from(["dead_code::src/known.rs".to_string()]) };
         let suppressed = baseline.apply(&mut output);
         assert_eq!(suppressed, 1);
         assert_eq!(output.issues.dead_code.len(), 1);
@@ -354,10 +337,7 @@ mod tests {
         let path = dir.path().join("baseline.json");
 
         let mut output = empty_output();
-        output.issues.unused_exports.push(UnusedExportIssue {
-            name: "Helper".into(),
-            path: "src/lib.ts".into(),
-        });
+        output.issues.unused_exports.push(UnusedExportIssue { name: "Helper".into(), path: "src/lib.ts".into() });
         output.issues.dead_code.push(DeadCodeIssue {
             path: "src/dead.ts".into(),
             lines_of_code: 5,

@@ -133,12 +133,7 @@ fn build_workspace_aliases(root: &Path) -> Vec<(String, Vec<oxc_resolver::AliasV
 }
 
 /// Try oxc resolution using the nearest tsconfig scope.
-pub(super) fn resolve_oxc(
-    oxc_scopes: &OxcScopes,
-    root: &Path,
-    from_dir: &Path,
-    spec: &str,
-) -> Option<PathBuf> {
+pub(super) fn resolve_oxc(oxc_scopes: &OxcScopes, root: &Path, from_dir: &Path, spec: &str) -> Option<PathBuf> {
     let from_rel = path_relative_to(root, from_dir);
 
     // Find the nearest scope (longest matching prefix).
@@ -154,11 +149,7 @@ pub(super) fn resolve_oxc(
     match resolver.resolve(from_dir, spec) {
         Ok(resolution) => {
             let path = resolution.full_path();
-            if let Ok(rel) = path.strip_prefix(root) {
-                Some(root.join(rel))
-            } else {
-                Some(path.to_path_buf())
-            }
+            if let Ok(rel) = path.strip_prefix(root) { Some(root.join(rel)) } else { Some(path.to_path_buf()) }
         }
         Err(_) => None,
     }

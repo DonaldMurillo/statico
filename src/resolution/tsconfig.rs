@@ -5,7 +5,7 @@
 use std::path::{Path, PathBuf};
 
 use super::paths::try_extensions;
-use super::{path_relative_to, PathAlias};
+use super::{PathAlias, path_relative_to};
 
 /// Path aliases loaded from a single tsconfig.json.
 #[derive(Clone)]
@@ -71,11 +71,7 @@ pub(super) fn parse_tsconfig_paths(tsconfig_path: &Path) -> Option<Vec<PathAlias
     let mut aliases = Vec::new();
     for (pattern, targets) in paths {
         let is_wildcard = pattern.ends_with('*');
-        let prefix = if is_wildcard {
-            pattern.trim_end_matches('*').to_string()
-        } else {
-            pattern.clone()
-        };
+        let prefix = if is_wildcard { pattern.trim_end_matches('*').to_string() } else { pattern.clone() };
 
         let target_list: Vec<String> = targets
             .as_array()
@@ -108,11 +104,8 @@ pub(super) fn parse_tsconfig_paths_relative(
     let tsconfig_dir = tsconfig_path.parent()?;
     let tsconfig_dir_rel = path_relative_to(root, tsconfig_dir);
 
-    let base_url = tsconfig
-        .get("compilerOptions")
-        .and_then(|co| co.get("baseUrl"))
-        .and_then(|v| v.as_str())
-        .unwrap_or(".");
+    let base_url =
+        tsconfig.get("compilerOptions").and_then(|co| co.get("baseUrl")).and_then(|v| v.as_str()).unwrap_or(".");
 
     let convert_target = |t: &str, tsconfig_dir_rel: &str, base_url: &str| -> Option<String> {
         let bare = if t.ends_with('*') { t.trim_end_matches('*').to_string() } else { t.to_string() };
@@ -123,12 +116,7 @@ pub(super) fn parse_tsconfig_paths_relative(
         let resolved = if bare.starts_with('.') {
             format!("./{}/{}", tsconfig_dir_rel, bare.trim_start_matches("./"))
         } else {
-            format!(
-                "./{}/{}/{}",
-                tsconfig_dir_rel,
-                base_url.trim_start_matches("./"),
-                bare.trim_start_matches("./")
-            )
+            format!("./{}/{}/{}", tsconfig_dir_rel, base_url.trim_start_matches("./"), bare.trim_start_matches("./"))
         };
         Some(resolved.replace("././", "./").replace("//", "/"))
     };
@@ -164,19 +152,12 @@ pub(super) fn parse_tsconfig_paths_relative(
 }
 
 /// Try resolving using the nearest tsconfig scope's aliases.
-pub(super) fn resolve_scoped(
-    scopes: &[TsconfigScope],
-    root: &Path,
-    from_dir: &Path,
-    spec: &str,
-) -> Option<PathBuf> {
+pub(super) fn resolve_scoped(scopes: &[TsconfigScope], root: &Path, from_dir: &Path, spec: &str) -> Option<PathBuf> {
     let from_rel = path_relative_to(root, from_dir);
 
     // Find the nearest scope (longest matching prefix).
-    let best_scope = scopes
-        .iter()
-        .filter(|scope| from_rel.starts_with(&scope.dir_rel))
-        .max_by_key(|scope| scope.dir_rel.len());
+    let best_scope =
+        scopes.iter().filter(|scope| from_rel.starts_with(&scope.dir_rel)).max_by_key(|scope| scope.dir_rel.len());
 
     let scope = best_scope?;
 
@@ -197,7 +178,6 @@ pub(super) fn resolve_scoped(
 #[cfg(test)]
 mod tests {
     use super::*;
-    
 
     #[test]
     fn sec_jsonc_handles_unterminated_comment() {
@@ -228,14 +208,14 @@ mod tests {
                         "@evil/*": ["../../etc/*"]
                     }
                 }
-            }"#, 
-        ).unwrap();
+            }"#,
+        )
+        .unwrap();
         let result = parse_tsconfig_paths_relative(&tsconfig_dir.join("tsconfig.json"), tmp.path());
         if let Some((ref aliases, _)) = result {
             for alias in aliases {
                 for target in &alias.targets {
-                    assert!(!target.contains(".."),
-                        "target should not contain ..: {}", target);
+                    assert!(!target.contains(".."), "target should not contain ..: {}", target);
                 }
             }
         }
@@ -243,8 +223,7 @@ mod tests {
         if let Some((aliases, _)) = result {
             let evil_aliases: Vec<_> = aliases.iter().filter(|a| a.prefix == "@evil/").collect();
             for a in &evil_aliases {
-                assert!(a.targets.is_empty(),
-                    "@evil/ alias targets should be empty after filtering: {:?}", a.targets);
+                assert!(a.targets.is_empty(), "@evil/ alias targets should be empty after filtering: {:?}", a.targets);
             }
         }
     }
@@ -261,16 +240,15 @@ mod tests {
                         "@ok/*": ["src/*"]
                     }
                 }
-            }"#, 
-        ).unwrap();
+            }"#,
+        )
+        .unwrap();
         let result = parse_tsconfig_paths(&tmp.path().join("tsconfig.json"));
         if let Some(aliases) = result {
             for alias in &aliases {
                 for target in &alias.targets {
-                    assert!(!target.contains(".."),
-                        "target should not contain ..: {}", target);
-                    assert!(!target.starts_with('/'),
-                        "target should not be absolute: {}", target);
+                    assert!(!target.contains(".."), "target should not contain ..: {}", target);
+                    assert!(!target.starts_with('/'), "target should not be absolute: {}", target);
                 }
             }
         }

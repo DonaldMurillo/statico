@@ -149,12 +149,12 @@ pub fn format_diff_json(diff: &DiffResult) -> Result<String, String> {
 /// Escape special characters for safe embedding in Markdown table cells.
 fn escape_md_cell(s: &str) -> String {
     s.replace('|', "\\|")
-     .replace('[', "\\[")
-     .replace(']', "\\]")
-     .replace('`', "\\`")
-     .replace('<', "&lt;")
-     .replace('>', "&gt;")
-     .replace(['\n', '\r'], " ")
+        .replace('[', "\\[")
+        .replace(']', "\\]")
+        .replace('`', "\\`")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace(['\n', '\r'], " ")
 }
 
 /// Format diff result as Markdown.
@@ -289,13 +289,10 @@ mod tests {
         let diff = compute_diff(&old, &new);
         let md = format_diff_markdown(&diff).unwrap();
         // Raw pipe should be escaped
-        assert!(!md.contains("| src/a|ts"),
-            "pipe in detail should be escaped, got:\n{}", md);
-        assert!(md.contains("\\|") || md.contains("src/a"),
-            "escaped pipe should be present");
+        assert!(!md.contains("| src/a|ts"), "pipe in detail should be escaped, got:\n{}", md);
+        assert!(md.contains("\\|") || md.contains("src/a"), "escaped pipe should be present");
         // Raw markdown link should not appear
-        assert!(!md.contains("[link](https://evil)"),
-            "markdown link in detail should be escaped, got:\n{}", md);
+        assert!(!md.contains("[link](https://evil)"), "markdown link in detail should be escaped, got:\n{}", md);
     }
 
     #[test]
@@ -310,15 +307,17 @@ mod tests {
         let diff = compute_diff(&old, &new);
         let md = format_diff_markdown(&diff).unwrap();
         // Newlines in detail should be replaced with spaces
-        assert!(!md.contains("line1\nline2"),
-            "newlines in table cells should be escaped, got:\n{}", md);
+        assert!(!md.contains("line1\nline2"), "newlines in table cells should be escaped, got:\n{}", md);
     }
 
     // ── V5-7: escape_md_cell must escape backticks and angle brackets ──
     #[test]
     fn sec_diff_escapes_backticks_and_angle_brackets() {
         let cell = escape_md_cell("file`code`<evil>.ts");
-        assert_eq!(cell, "file\\`code\\`&lt;evil&gt;.ts",
-            "backticks and angle brackets must be escaped, got: {}", cell);
+        assert_eq!(
+            cell, "file\\`code\\`&lt;evil&gt;.ts",
+            "backticks and angle brackets must be escaped, got: {}",
+            cell
+        );
     }
 }

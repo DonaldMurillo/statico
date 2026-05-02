@@ -345,10 +345,7 @@ fn real_repo_metacollector_analyzes_cleanly() {
 
 #[test]
 fn cli_version_flag_works() {
-    let output = Command::new(statico_bin())
-        .arg("--version")
-        .output()
-        .expect("failed to execute statico --version");
+    let output = Command::new(statico_bin()).arg("--version").output().expect("failed to execute statico --version");
 
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
     assert!(output.status.success(), "--version should exit 0");
@@ -357,10 +354,7 @@ fn cli_version_flag_works() {
 
 #[test]
 fn cli_help_lists_new_commands() {
-    let output = Command::new(statico_bin())
-        .arg("--help")
-        .output()
-        .expect("failed to execute statico --help");
+    let output = Command::new(statico_bin()).arg("--help").output().expect("failed to execute statico --help");
 
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
     assert!(output.status.success());
@@ -388,14 +382,10 @@ fn cli_update_check_handles_missing_releases() {
 
 #[test]
 fn cli_doctor_runs_without_crash() {
-    let output = Command::new(statico_bin())
-        .arg("doctor")
-        .output()
-        .expect("failed to execute statico doctor");
+    let output = Command::new(statico_bin()).arg("doctor").output().expect("failed to execute statico doctor");
 
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-    assert!(output.status.success(), "doctor should exit 0, stderr: {}",
-        String::from_utf8_lossy(&output.stderr));
+    assert!(output.status.success(), "doctor should exit 0, stderr: {}", String::from_utf8_lossy(&output.stderr));
     assert!(stdout.contains("Binary:"), "doctor should report binary location");
     assert!(stdout.contains("Version:"), "doctor should report version");
     assert!(stdout.contains("PATH:"), "doctor should check PATH");
@@ -421,8 +411,7 @@ fn cli_init_writes_shell_rc_file() {
         .expect("failed to execute statico init");
 
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-    assert!(output.status.success(), "init should exit 0, stderr: {}",
-        String::from_utf8_lossy(&output.stderr));
+    assert!(output.status.success(), "init should exit 0, stderr: {}", String::from_utf8_lossy(&output.stderr));
     assert!(stdout.contains("Shell integration configured"), "expected success message, got: {stdout}");
 
     // Verify .zshrc was modified.
@@ -514,7 +503,10 @@ fn cli_update_downloads_and_extracts_from_mock_server() {
     } else {
         "linux-x86_64"
     };
-    let release_json = format!(r#"{{"tag_name":"v99.0.0","assets":[{{"name":"statico-{}.tar.gz","browser_download_url":"http://MOCK/releases/download/v99.0.0/statico-{}.tar.gz"}}]}}"#, platform, platform);
+    let release_json = format!(
+        r#"{{"tag_name":"v99.0.0","assets":[{{"name":"statico-{}.tar.gz","browser_download_url":"http://MOCK/releases/download/v99.0.0/statico-{}.tar.gz"}}]}}"#,
+        platform, platform
+    );
 
     // 3. Start a tiny HTTP server in a background thread.
     let server = tiny_http::ServerBuilder::new().with_random_port().build().expect("start mock server");
@@ -534,12 +526,14 @@ fn cli_update_downloads_and_extracts_from_mock_server() {
             if let Ok(req) = server.recv() {
                 let path = req.url();
                 if path.contains("/releases/latest") && !path.contains("download") {
-                    let resp = tiny_http::Response::from_string(&release_json_clone)
-                        .with_header(tiny_http::Header::from_bytes(&b"Content-Type"[..], &b"application/json"[..]).expect("header"));
+                    let resp = tiny_http::Response::from_string(&release_json_clone).with_header(
+                        tiny_http::Header::from_bytes(&b"Content-Type"[..], &b"application/json"[..]).expect("header"),
+                    );
                     req.respond(resp);
                 } else {
-                    let resp = tiny_http::Response::from_data(tarball_bytes_clone.clone())
-                        .with_header(tiny_http::Header::from_bytes(&b"Content-Type"[..], &b"application/gzip"[..]).expect("header"));
+                    let resp = tiny_http::Response::from_data(tarball_bytes_clone.clone()).with_header(
+                        tiny_http::Header::from_bytes(&b"Content-Type"[..], &b"application/gzip"[..]).expect("header"),
+                    );
                     req.respond(resp);
                 }
             }
@@ -562,8 +556,7 @@ fn cli_update_downloads_and_extracts_from_mock_server() {
     let output = std::process::Command::new(&fake_exe)
         .args(["--quiet", "update"])
         .env("STATICO_UPDATE_API_URL", &base_url)
-        .env("STATICO_UPDATE_DL_URL", &base_url
-        )
+        .env("STATICO_UPDATE_DL_URL", &base_url)
         .output()
         .expect("run fake binary");
 
@@ -582,15 +575,9 @@ fn cli_update_downloads_and_extracts_from_mock_server() {
     assert!(stdout.contains("99.0.0"), "expected new version in output, got: {stdout}");
 
     // 6. Verify the binary was replaced — it should now print our fake version.
-    let verify = std::process::Command::new(&fake_exe)
-        .arg("--version")
-        .output()
-        .expect("verify replaced binary");
+    let verify = std::process::Command::new(&fake_exe).arg("--version").output().expect("verify replaced binary");
     let verify_stdout = String::from_utf8_lossy(&verify.stdout).to_string();
-    assert!(
-        verify_stdout.contains("99.0.0"),
-        "binary should have been replaced with mock, got: {verify_stdout}"
-    );
+    assert!(verify_stdout.contains("99.0.0"), "binary should have been replaced with mock, got: {verify_stdout}");
 }
 
 // ---------------------------------------------------------------------------
@@ -603,11 +590,7 @@ fn cli_setup_generates_claude_files() {
     let tmp_path = tmp.path();
 
     // Init a git repo so .gitignore works.
-    std::process::Command::new("git")
-        .arg("init")
-        .current_dir(tmp_path)
-        .output()
-        .expect("git init");
+    std::process::Command::new("git").arg("init").current_dir(tmp_path).output().expect("git init");
     std::fs::write(tmp_path.join(".gitignore"), "node_modules/\n").expect("gitignore");
 
     let output = std::process::Command::new(statico_bin())
@@ -809,11 +792,8 @@ fn test_plugin_schema_json() {
 
 #[test]
 fn test_plugin_schema_text() {
-    let output = Command::new(statico_bin())
-        .arg("plugin")
-        .arg("schema")
-        .output()
-        .expect("failed to run statico plugin schema");
+    let output =
+        Command::new(statico_bin()).arg("plugin").arg("schema").output().expect("failed to run statico plugin schema");
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("HOOKS:"), "expected HOOKS section in: {stdout}");
     assert!(stdout.contains("analyze_file"), "expected analyze_file in: {stdout}");
@@ -821,11 +801,8 @@ fn test_plugin_schema_text() {
 
 #[test]
 fn test_plugin_docs_output() {
-    let output = Command::new(statico_bin())
-        .arg("plugin")
-        .arg("docs")
-        .output()
-        .expect("failed to run statico plugin docs");
+    let output =
+        Command::new(statico_bin()).arg("plugin").arg("docs").output().expect("failed to run statico plugin docs");
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("Plugin Development Guide"), "expected guide title in: {stdout}");
     assert!(stdout.contains("Quick Start"), "expected Quick Start in: {stdout}");
@@ -895,10 +872,7 @@ fn test_plugin_init_rejects_duplicate() {
 
 #[test]
 fn test_plugin_doctor() {
-    let output = Command::new(statico_bin())
-        .args(["plugin", "doctor"])
-        .output()
-        .expect("run plugin doctor");
+    let output = Command::new(statico_bin()).args(["plugin", "doctor"]).output().expect("run plugin doctor");
     assert!(output.status.success());
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("Plugin Doctor"), "expected Doctor header in: {stdout}");
@@ -920,8 +894,7 @@ fn test_plugin_build_empty() {
 
 #[test]
 fn test_plugin_run_discovers_console_log() {
-    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("fixtures/plugin-demo");
+    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/plugin-demo");
 
     // Check bun is available (skip test if not).
     let has_bun = std::process::Command::new("which")
@@ -937,13 +910,7 @@ fn test_plugin_run_discovers_console_log() {
     }
 
     let output = Command::new(statico_bin())
-        .args([
-            "plugin",
-            "run",
-            "no-console-log",
-            "--file",
-            "src/index.ts",
-        ])
+        .args(["plugin", "run", "no-console-log", "--file", "src/index.ts"])
         .arg("--path")
         .arg(&fixture)
         .output()
@@ -954,17 +921,12 @@ fn test_plugin_run_discovers_console_log() {
 
     assert!(output.status.success(), "stderr: {}", stderr);
     assert!(stdout.contains("Issues: 3"), "expected 3 issues in: {}", stdout);
-    assert!(
-        stdout.contains("console.log"),
-        "expected console.log message in: {}",
-        stdout
-    );
+    assert!(stdout.contains("console.log"), "expected console.log message in: {}", stdout);
 }
 
 #[test]
 fn test_plugin_run_clean_file_no_issues() {
-    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("fixtures/plugin-demo");
+    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/plugin-demo");
 
     let has_bun = std::process::Command::new("which")
         .arg("bun")
@@ -979,13 +941,7 @@ fn test_plugin_run_clean_file_no_issues() {
     }
 
     let output = Command::new(statico_bin())
-        .args([
-            "plugin",
-            "run",
-            "no-console-log",
-            "--file",
-            "src/utils.ts",
-        ])
+        .args(["plugin", "run", "no-console-log", "--file", "src/utils.ts"])
         .arg("--path")
         .arg(&fixture)
         .output()
@@ -1000,8 +956,7 @@ fn test_plugin_run_clean_file_no_issues() {
 
 #[test]
 fn test_python_plugin_detects_bare_excepts() {
-    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("fixtures/python-demo");
+    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/python-demo");
 
     let has_python = std::process::Command::new("which")
         .arg("python3")
@@ -1016,13 +971,7 @@ fn test_python_plugin_detects_bare_excepts() {
     }
 
     let output = Command::new(statico_bin())
-        .args([
-            "plugin",
-            "run",
-            "no-bare-except",
-            "--file",
-            "src/main.py",
-        ])
+        .args(["plugin", "run", "no-bare-except", "--file", "src/main.py"])
         .arg("--path")
         .arg(&fixture)
         .output()
@@ -1033,17 +982,12 @@ fn test_python_plugin_detects_bare_excepts() {
 
     assert!(output.status.success(), "stderr: {}", stderr);
     assert!(stdout.contains("Issues: 2"), "expected 2 issues in: {}", stdout);
-    assert!(
-        stdout.contains("bare except") || stdout.contains("Bare"),
-        "expected bare except message in: {}",
-        stdout
-    );
+    assert!(stdout.contains("bare except") || stdout.contains("Bare"), "expected bare except message in: {}", stdout);
 }
 
 #[test]
 fn test_python_plugin_clean_file_no_issues() {
-    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("fixtures/python-demo");
+    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/python-demo");
 
     let has_python = std::process::Command::new("which")
         .arg("python3")
@@ -1058,13 +1002,7 @@ fn test_python_plugin_clean_file_no_issues() {
     }
 
     let output = Command::new(statico_bin())
-        .args([
-            "plugin",
-            "run",
-            "no-bare-except",
-            "--file",
-            "src/utils.py",
-        ])
+        .args(["plugin", "run", "no-bare-except", "--file", "src/utils.py"])
         .arg("--path")
         .arg(&fixture)
         .output()
@@ -1089,8 +1027,10 @@ fn test_v9_plugin_list_rejects_nonexistent_path() {
         .expect("failed to run statico plugin list");
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(!output.status.success(), "should fail for non-existent path, stderr: {stderr}");
-    assert!(stderr.contains("cannot resolve") || stderr.contains("not found"),
-        "should mention path resolution error, stderr: {stderr}");
+    assert!(
+        stderr.contains("cannot resolve") || stderr.contains("not found"),
+        "should mention path resolution error, stderr: {stderr}"
+    );
 }
 
 #[test]
@@ -1101,8 +1041,10 @@ fn test_v9_plugin_doctor_rejects_nonexistent_path() {
         .expect("failed to run statico plugin doctor");
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(!output.status.success(), "should fail for non-existent path, stderr: {stderr}");
-    assert!(stderr.contains("cannot resolve") || stderr.contains("not found"),
-        "should mention path resolution error, stderr: {stderr}");
+    assert!(
+        stderr.contains("cannot resolve") || stderr.contains("not found"),
+        "should mention path resolution error, stderr: {stderr}"
+    );
 }
 
 #[test]
@@ -1113,8 +1055,8 @@ fn test_v9_tui_rejects_nonexistent_path() {
         .expect("failed to run statico tui");
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(!output.status.success(), "should fail for non-existent path, stderr: {stderr}");
-    assert!(stderr.contains("cannot resolve") || stderr.contains("not found"),
-        "should mention path resolution error, stderr: {stderr}");
+    assert!(
+        stderr.contains("cannot resolve") || stderr.contains("not found"),
+        "should mention path resolution error, stderr: {stderr}"
+    );
 }
-
-

@@ -34,9 +34,8 @@ const MAX_EXAMPLE_FILES: usize = 5;
 
 /// Tokens that carry almost no information (skip for 1-grams, allow in n-grams).
 const STOP_TOKENS: &[&str] = &[
-    "{", "}", "(", ")", "[", "]", ";", ",", ".", ":", "::", "=>", "->", "=", "==", "===",
-    "!=", "!==", "<", ">", "<=", ">=", "+", "-", "*", "/", "|", "||", "&&", "&", "#", "@",
-    "?", "??", "!", "...", "..",
+    "{", "}", "(", ")", "[", "]", ";", ",", ".", ":", "::", "=>", "->", "=", "==", "===", "!=", "!==", "<", ">", "<=",
+    ">=", "+", "-", "*", "/", "|", "||", "&&", "&", "#", "@", "?", "??", "!", "...", "..",
 ];
 
 // ---------------------------------------------------------------------------
@@ -53,10 +52,8 @@ pub fn detect_patterns(file_sources: &[(String, String)]) -> Vec<RepetitivePatte
     }
 
     // Tokenize all files.
-    let file_tokens: Vec<(&str, Vec<String>)> = file_sources
-        .iter()
-        .map(|(path, source)| (path.as_str(), tokenize(source)))
-        .collect();
+    let file_tokens: Vec<(&str, Vec<String>)> =
+        file_sources.iter().map(|(path, source)| (path.as_str(), tokenize(source))).collect();
 
     // Collect n-gram stats: (ngram_string) → (total_occurrences, set_of_files).
     let mut ngram_stats: HashMap<String, (usize, Vec<String>)> = HashMap::new();
@@ -188,21 +185,13 @@ fn tokenize(source: &str) -> Vec<String> {
         }
 
         // Multi-char operators.
-        let two_char: String = if i + 1 < chars.len() {
-            chars[i..i + 2].iter().collect()
-        } else {
-            String::new()
-        };
-        let three_char: String = if i + 2 < chars.len() {
-            chars[i..i + 3].iter().collect()
-        } else {
-            String::new()
-        };
+        let two_char: String = if i + 1 < chars.len() { chars[i..i + 2].iter().collect() } else { String::new() };
+        let three_char: String = if i + 2 < chars.len() { chars[i..i + 3].iter().collect() } else { String::new() };
 
         if ["===", "!==", "..."].contains(&three_char.as_str()) {
             tokens.push(three_char);
             i += 3;
-        } else if ["->", "=>", "::", "==", "!=", "&&", "||", "??", "<=" , ">=", ".."].contains(&two_char.as_str()) {
+        } else if ["->", "=>", "::", "==", "!=", "&&", "||", "??", "<=", ">=", ".."].contains(&two_char.as_str()) {
             tokens.push(two_char);
             i += 2;
         } else {
@@ -274,17 +263,16 @@ mod tests {
     #[test]
     fn tokenize_basic() {
         let tokens = tokenize("const [user, setUser] = useState<User>();");
-        assert_eq!(tokens, vec![
-            "const", "[", "user", ",", "setUser", "]", "=", "useState", "<", "User", ">", "(", ")", ";"
-        ]);
+        assert_eq!(
+            tokens,
+            vec!["const", "[", "user", ",", "setUser", "]", "=", "useState", "<", "User", ">", "(", ")", ";"]
+        );
     }
 
     #[test]
     fn tokenize_rust() {
         let tokens = tokenize("fn main() -> Result<(), String> {");
-        assert_eq!(tokens, vec![
-            "fn", "main", "(", ")", "->", "Result", "<", "(", ")", ",", "String", ">", "{"
-        ]);
+        assert_eq!(tokens, vec!["fn", "main", "(", ")", "->", "Result", "<", "(", ")", ",", "String", ">", "{"]);
     }
 
     #[test]
@@ -320,10 +308,8 @@ mod tests {
 
     #[test]
     fn too_few_files_returns_empty() {
-        let files = vec![
-            ("a.ts".to_string(), "const x = 1;".to_string()),
-            ("b.ts".to_string(), "const x = 1;".to_string()),
-        ];
+        let files =
+            vec![("a.ts".to_string(), "const x = 1;".to_string()), ("b.ts".to_string(), "const x = 1;".to_string())];
         let patterns = detect_patterns(&files);
         assert!(patterns.is_empty());
     }
@@ -353,8 +339,12 @@ mod tests {
         let rare = patterns.iter().find(|p| p.pattern.contains("rareThing"));
         let common = patterns.iter().find(|p| p.pattern.contains("const") && !p.pattern.contains("rareThing"));
         if let (Some(r), Some(c)) = (rare, common) {
-            assert!(r.info_score >= c.info_score,
-                "rare pattern should have >= info_score: {} vs {}", r.info_score, c.info_score);
+            assert!(
+                r.info_score >= c.info_score,
+                "rare pattern should have >= info_score: {} vs {}",
+                r.info_score,
+                c.info_score
+            );
         }
     }
 }

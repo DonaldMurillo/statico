@@ -13,12 +13,10 @@ const BUN_MIN_VERSION: &str = "1.0.0";
 
 /// Bun download URL template. Supports macOS (arm64, x64) and Linux (arm64, x64).
 #[cfg(target_os = "macos")]
-const BUN_URL_TEMPLATE: &str =
-    "https://github.com/oven-sh/bun/releases/latest/download/bun-{arch}.zip";
+const BUN_URL_TEMPLATE: &str = "https://github.com/oven-sh/bun/releases/latest/download/bun-{arch}.zip";
 
 #[cfg(target_os = "linux")]
-const BUN_URL_TEMPLATE: &str =
-    "https://github.com/oven-sh/bun/releases/latest/download/bun-linux-{arch}.zip";
+const BUN_URL_TEMPLATE: &str = "https://github.com/oven-sh/bun/releases/latest/download/bun-linux-{arch}.zip";
 
 /// Get the architecture suffix for download URLs.
 fn arch_suffix() -> &'static str {
@@ -99,8 +97,7 @@ fn download_bun() -> Result<PathBuf, String> {
     let target = bun_path();
     let target_dir = target.parent().unwrap();
 
-    std::fs::create_dir_all(target_dir)
-        .map_err(|e| format!("Failed to create runtime dir: {}", e))?;
+    std::fs::create_dir_all(target_dir).map_err(|e| format!("Failed to create runtime dir: {}", e))?;
 
     let arch = arch_suffix();
     let url = BUN_URL_TEMPLATE.replace("{arch}", arch);
@@ -119,12 +116,11 @@ fn download_bun() -> Result<PathBuf, String> {
         .map_err(|e| format!("Failed to download Bun: {}", e))?;
 
     {
-        let mut file = std::fs::File::create(&tmp_zip)
-            .map_err(|e| format!("Failed to create temp file: {}", e))?;
+        let mut file = std::fs::File::create(&tmp_zip).map_err(|e| format!("Failed to create temp file: {}", e))?;
         let mut reader = resp.into_parts().1.into_reader();
         let mut limited = std::io::Read::take(&mut reader, MAX_BUN_DOWNLOAD);
-        let bytes = std::io::copy(&mut limited, &mut file)
-            .map_err(|e| format!("Failed to write Bun download: {}", e))?;
+        let bytes =
+            std::io::copy(&mut limited, &mut file).map_err(|e| format!("Failed to write Bun download: {}", e))?;
         if bytes >= MAX_BUN_DOWNLOAD {
             let _ = std::fs::remove_file(&tmp_zip);
             return Err("Bun download exceeded maximum size (200 MB)".to_string());
@@ -159,10 +155,7 @@ fn download_bun() -> Result<PathBuf, String> {
 
     // Verify the binary landed at the expected path.
     if !target.exists() {
-        return Err(format!(
-            "Bun binary not found at expected path: {}",
-            target.display()
-        ));
+        return Err(format!("Bun binary not found at expected path: {}", target.display()));
     }
 
     // Make executable.
@@ -192,11 +185,9 @@ fn download_bun() -> Result<PathBuf, String> {
 /// Compute the SHA-256 of a file, returned as a lowercase hex string.
 fn sha256_file(path: &std::path::Path) -> Result<String, String> {
     use sha2::{Digest, Sha256};
-    let mut file = std::fs::File::open(path)
-        .map_err(|e| format!("Failed to open archive for hashing: {}", e))?;
+    let mut file = std::fs::File::open(path).map_err(|e| format!("Failed to open archive for hashing: {}", e))?;
     let mut hasher = Sha256::new();
-    std::io::copy(&mut file, &mut hasher)
-        .map_err(|e| format!("Failed to hash archive: {}", e))?;
+    std::io::copy(&mut file, &mut hasher).map_err(|e| format!("Failed to hash archive: {}", e))?;
     Ok(format!("{:x}", hasher.finalize()))
 }
 
@@ -207,15 +198,11 @@ fn sha256_file(path: &std::path::Path) -> Result<String, String> {
 fn extract_zip(archive: &std::path::Path, dest: &std::path::Path) -> Result<(), String> {
     use std::path::Component;
 
-    let file = std::fs::File::open(archive)
-        .map_err(|e| format!("Failed to open archive: {}", e))?;
-    let mut zip = zip::ZipArchive::new(file)
-        .map_err(|e| format!("Failed to read zip archive: {}", e))?;
+    let file = std::fs::File::open(archive).map_err(|e| format!("Failed to open archive: {}", e))?;
+    let mut zip = zip::ZipArchive::new(file).map_err(|e| format!("Failed to read zip archive: {}", e))?;
 
     for i in 0..zip.len() {
-        let mut entry = zip
-            .by_index(i)
-            .map_err(|e| format!("Failed to read zip entry {}: {}", i, e))?;
+        let mut entry = zip.by_index(i).map_err(|e| format!("Failed to read zip entry {}: {}", i, e))?;
 
         // The zip crate exposes the entry's enclosed name with traversal
         // components stripped, but we belt-and-suspender: reject any entry
@@ -225,10 +212,7 @@ fn extract_zip(archive: &std::path::Path, dest: &std::path::Path) -> Result<(), 
             None => return Err(format!("zip entry {} has unsafe path", i)),
         };
         if entry_path.components().any(|c| c == Component::ParentDir) {
-            return Err(format!(
-                "refusing to extract zip entry with path traversal: {}",
-                entry_path.display()
-            ));
+            return Err(format!("refusing to extract zip entry with path traversal: {}", entry_path.display()));
         }
 
         let outpath = dest.join(&entry_path);
@@ -241,10 +225,9 @@ fn extract_zip(archive: &std::path::Path, dest: &std::path::Path) -> Result<(), 
             std::fs::create_dir_all(parent)
                 .map_err(|e| format!("Failed to create parent {}: {}", parent.display(), e))?;
         }
-        let mut out = std::fs::File::create(&outpath)
-            .map_err(|e| format!("Failed to create {}: {}", outpath.display(), e))?;
-        std::io::copy(&mut entry, &mut out)
-            .map_err(|e| format!("Failed to extract {}: {}", outpath.display(), e))?;
+        let mut out =
+            std::fs::File::create(&outpath).map_err(|e| format!("Failed to create {}: {}", outpath.display(), e))?;
+        std::io::copy(&mut entry, &mut out).map_err(|e| format!("Failed to extract {}: {}", outpath.display(), e))?;
 
         #[cfg(unix)]
         {
@@ -273,19 +256,13 @@ pub fn check_bun_version(bun: &std::path::Path) -> Result<String, String> {
 
     // Simple version comparison — just check major version.
     if let Some(major_str) = version.split('.').next()
-        && let Ok(major) = major_str.parse::<u32>() {
-            let min_major: u32 = BUN_MIN_VERSION
-                .split('.')
-                .next()
-                .and_then(|s| s.parse().ok())
-                .unwrap_or(1);
-            if major < min_major {
-                return Err(format!(
-                    "Bun version {} is too old (minimum: {})",
-                    version, BUN_MIN_VERSION
-                ));
-            }
+        && let Ok(major) = major_str.parse::<u32>()
+    {
+        let min_major: u32 = BUN_MIN_VERSION.split('.').next().and_then(|s| s.parse().ok()).unwrap_or(1);
+        if major < min_major {
+            return Err(format!("Bun version {} is too old (minimum: {})", version, BUN_MIN_VERSION));
         }
+    }
 
     Ok(version)
 }
@@ -330,8 +307,8 @@ mod tests {
         use std::io::Write;
         let file = std::fs::File::create(path).unwrap();
         let mut zip = zip::ZipWriter::new(file);
-        let opts: zip::write::SimpleFileOptions = zip::write::SimpleFileOptions::default()
-            .compression_method(zip::CompressionMethod::Stored);
+        let opts: zip::write::SimpleFileOptions =
+            zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
         for (name, body) in entries {
             zip.start_file(*name, opts).unwrap();
             zip.write_all(body).unwrap();
@@ -370,8 +347,11 @@ mod tests {
         // rejects it. Both outcomes are acceptable; what matters is that no
         // file is written outside `dest`.
         let escape_target = tmp.path().join("escape.txt");
-        assert!(!escape_target.exists(),
-            "path-traversal entry must not be written outside dest (result was {:?})", result);
+        assert!(
+            !escape_target.exists(),
+            "path-traversal entry must not be written outside dest (result was {:?})",
+            result
+        );
     }
 
     #[test]

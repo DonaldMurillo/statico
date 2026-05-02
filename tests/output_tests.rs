@@ -59,7 +59,7 @@ pub fn minimal_output() -> AnalysisOutput {
             clone_groups: vec![],
             clone_families: vec![],
             mirrored_directories: vec![],
-                repetitive_patterns: vec![],
+            repetitive_patterns: vec![],
         },
     }
 }
@@ -73,18 +73,16 @@ pub fn output_with_issues() -> AnalysisOutput {
         confidence: 0.9,
         reason: "Not reachable from entry points".into(),
     });
-    output.issues.unused_exports.push(UnusedExportIssue {
-        name: "unusedFn".into(),
-        path: "src/utils.ts".into(),
-    });
+    output.issues.unused_exports.push(UnusedExportIssue { name: "unusedFn".into(), path: "src/utils.ts".into() });
     output.issues.unused_types.push(UnusedTypeIssue {
         name: "OldType".into(),
         path: "src/types.ts".into(),
         kind: "interface".into(),
     });
-    output.issues.circular_dependencies.push(CircularDepIssue {
-        files: vec!["src/a.ts".into(), "src/b.ts".into(), "src/a.ts".into()],
-    });
+    output
+        .issues
+        .circular_dependencies
+        .push(CircularDepIssue { files: vec!["src/a.ts".into(), "src/b.ts".into(), "src/a.ts".into()] });
     output.issues.gotchas.push(GotchaIssue {
         file: "src/app.ts".into(),
         line: 42,
@@ -94,22 +92,22 @@ pub fn output_with_issues() -> AnalysisOutput {
         confidence: 0.85,
         snippet: "const x = data as any;".into(),
     });
-    output.issues.duplicate_exports.push(DuplicateExportIssue {
-        name: "VERSION".into(),
-        locations: vec!["src/a.ts".into(), "src/b.ts".into()],
-    });
-    output.issues.unresolved_imports.push(UnresolvedImportIssue {
-        source_file: "src/app.ts".into(),
-        import_spec: "./missing".into(),
-    });
-    output.issues.unused_dependencies.push(UnusedDepIssue {
-        package_name: "lodash".into(),
-        location: "package.json".into(),
-    });
-    output.issues.unlisted_dependencies.push(UnlistedDepIssue {
-        package_name: "unknown-pkg".into(),
-        imported_by: "src/app.ts".into(),
-    });
+    output
+        .issues
+        .duplicate_exports
+        .push(DuplicateExportIssue { name: "VERSION".into(), locations: vec!["src/a.ts".into(), "src/b.ts".into()] });
+    output
+        .issues
+        .unresolved_imports
+        .push(UnresolvedImportIssue { source_file: "src/app.ts".into(), import_spec: "./missing".into() });
+    output
+        .issues
+        .unused_dependencies
+        .push(UnusedDepIssue { package_name: "lodash".into(), location: "package.json".into() });
+    output
+        .issues
+        .unlisted_dependencies
+        .push(UnlistedDepIssue { package_name: "unknown-pkg".into(), imported_by: "src/app.ts".into() });
     output
 }
 
@@ -209,7 +207,10 @@ fn test_sarif_formatter_empty() {
     let output = minimal_output();
     let result = statico::output::sarif::SarifFormatter.format(&output).unwrap();
     let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
-    assert_eq!(parsed["$schema"], "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/sarif-2.1/schema/sarif-schema-2.1.0.json");
+    assert_eq!(
+        parsed["$schema"],
+        "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/sarif-2.1/schema/sarif-schema-2.1.0.json"
+    );
     assert_eq!(parsed["version"], "2.1.0");
     let runs = parsed["runs"].as_array().unwrap();
     assert_eq!(runs.len(), 1);

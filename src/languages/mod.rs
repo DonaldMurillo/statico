@@ -206,10 +206,7 @@ pub trait LanguagePlugin: Send + Sync {
 /// 2. Implement `LanguagePlugin`
 /// 3. Add `Box::new(my_lang::MyLangPlugin {})` here
 pub fn all_plugins() -> Vec<Box<dyn LanguagePlugin>> {
-    vec![
-        Box::new(typescript::TypeScriptPlugin::new()),
-        Box::new(rust::RustPlugin {}),
-    ]
+    vec![Box::new(typescript::TypeScriptPlugin::new()), Box::new(rust::RustPlugin {})]
 }
 
 /// Find the plugin that handles a given file extension.

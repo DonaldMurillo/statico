@@ -268,12 +268,8 @@ mod tests {
 
     #[test]
     fn serialize_request() {
-        let req = Request {
-            jsonrpc: "2.0",
-            id: 1,
-            method: "init".to_string(),
-            params: serde_json::json!({"root": "/tmp"}),
-        };
+        let req =
+            Request { jsonrpc: "2.0", id: 1, method: "init".to_string(), params: serde_json::json!({"root": "/tmp"}) };
         let json = serde_json::to_string(&req).unwrap();
         assert!(json.contains("\"jsonrpc\":\"2.0\""));
         assert!(json.contains("\"method\":\"init\""));

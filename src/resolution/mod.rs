@@ -19,9 +19,7 @@ use paths::resolve_relative;
 /// Check that a resolved path is within the project root.
 /// Uses the same logic as `ensure_within_root` but returns bool.
 fn is_within_root(root: &Path, resolved: &Path) -> bool {
-    if let (Ok(canonical), Ok(canonical_root)) =
-        (std::fs::canonicalize(resolved), std::fs::canonicalize(root))
-    {
+    if let (Ok(canonical), Ok(canonical_root)) = (std::fs::canonicalize(resolved), std::fs::canonicalize(root)) {
         return canonical.starts_with(&canonical_root);
     }
     // Fallback: lexical check
@@ -32,9 +30,13 @@ fn is_within_root(root: &Path, resolved: &Path) -> bool {
                 match component {
                     std::path::Component::ParentDir => {
                         depth -= 1;
-                        if depth < 0 { return false; }
+                        if depth < 0 {
+                            return false;
+                        }
                     }
-                    std::path::Component::Normal(_) => { depth += 1; }
+                    std::path::Component::Normal(_) => {
+                        depth += 1;
+                    }
                     _ => {}
                 }
             }
@@ -43,7 +45,7 @@ fn is_within_root(root: &Path, resolved: &Path) -> bool {
         Err(_) => false,
     }
 }
-use tsconfig::{parse_tsconfig_paths, parse_tsconfig_paths_relative, resolve_scoped, TsconfigScope};
+use tsconfig::{TsconfigScope, parse_tsconfig_paths, parse_tsconfig_paths_relative, resolve_scoped};
 
 /// A tsconfig `paths` alias mapping.
 /// E.g. `@/*` → `["./src/*"]` becomes `PathAlias { prefix: "@/", targets: ["./src/"] }`.

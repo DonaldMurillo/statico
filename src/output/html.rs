@@ -9,13 +9,14 @@ pub struct HtmlFormatter;
 impl OutputFormatter for HtmlFormatter {
     fn format(&self, output: &AnalysisOutput) -> Result<String, String> {
         let summary = compute_summary(output);
-        let json_data = serde_json::to_string(output).map_err(|e| format!("failed to serialize: {}", e))?
-            .replace("</", "<\\/")  // Prevent </script> injection (S3-01)
+        let json_data = serde_json::to_string(output)
+            .map_err(|e| format!("failed to serialize: {}", e))?
+            .replace("</", "<\\/") // Prevent </script> injection (S3-01)
             .replace("<!--", "<\\x21--"); // Prevent HTML comment injection in script
-        let summary_json =
-            serde_json::to_string(&summary).map_err(|e| format!("failed to serialize summary: {}", e))?
-                .replace("</", "<\\/")
-                .replace("<!--", "<\\x21--");
+        let summary_json = serde_json::to_string(&summary)
+            .map_err(|e| format!("failed to serialize summary: {}", e))?
+            .replace("</", "<\\/")
+            .replace("<!--", "<\\x21--");
 
         Ok(format!(
             r##"<!DOCTYPE html>
@@ -214,11 +215,12 @@ mod tests {
         let formatter = HtmlFormatter;
         let html = formatter.format(&output).unwrap();
         // The raw </script> string should NOT appear in the output
-        assert!(!html.contains("</script><script>alert(1)"),
-            "HTML output should not contain raw </script> injection");
+        assert!(!html.contains("</script><script>alert(1)"), "HTML output should not contain raw </script> injection");
         // The escaped version <\/ should be used instead
-        assert!(html.contains("<\\/") || !html.contains("</script><script>"),
-            "JSON should have escaped forward slashes");
+        assert!(
+            html.contains("<\\/") || !html.contains("</script><script>"),
+            "JSON should have escaped forward slashes"
+        );
     }
 
     #[test]
@@ -231,8 +233,7 @@ mod tests {
         let script_end = html.find(";\nfunction toggleTheme").expect("should find end of DATA");
         let json_fragment = &html[script_start..script_end];
         // No raw </ sequence in the JSON data (should be <\/ instead)
-        assert!(!json_fragment.contains("</script"),
-            "JSON in HTML should not contain unescaped </script");
+        assert!(!json_fragment.contains("</script"), "JSON in HTML should not contain unescaped </script");
     }
 
     #[test]
@@ -241,7 +242,6 @@ mod tests {
         let output = make_output_with_path("test/<!--<script>alert(1)//");
         let formatter = HtmlFormatter;
         let html = formatter.format(&output).unwrap();
-        assert!(!html.contains("<!--<script>"),
-            "HTML comment should be escaped, not raw in output");
+        assert!(!html.contains("<!--<script>"), "HTML comment should be escaped, not raw in output");
     }
 }

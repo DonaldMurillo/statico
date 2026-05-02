@@ -62,22 +62,23 @@ fn collect_blocks_recursive(node: Node, source: &[u8], blocks: &mut Vec<CodeBloc
             let mut cursor = node.walk();
             for child in node.children(&mut cursor) {
                 if (child.kind() == "arrow_function" || child.kind() == "function_expression")
-                    && let Some(name_node) = node.child_by_field_name("name") {
-                        let name = name_node.utf8_text(source).unwrap_or("anonymous").to_string();
-                        let start = child.start_position().row + 1;
-                        let end = child.end_position().row + 1;
-                        let body_text = child.utf8_text(source).unwrap_or("").to_string();
-                        // Skip trivially short blocks.
-                        if body_text.lines().count() >= 3 {
-                            blocks.push(CodeBlock {
-                                name,
-                                source: body_text,
-                                start_line: start,
-                                end_line: end,
-                                kind: BlockKind::ArrowFunction,
-                            });
-                        }
+                    && let Some(name_node) = node.child_by_field_name("name")
+                {
+                    let name = name_node.utf8_text(source).unwrap_or("anonymous").to_string();
+                    let start = child.start_position().row + 1;
+                    let end = child.end_position().row + 1;
+                    let body_text = child.utf8_text(source).unwrap_or("").to_string();
+                    // Skip trivially short blocks.
+                    if body_text.lines().count() >= 3 {
+                        blocks.push(CodeBlock {
+                            name,
+                            source: body_text,
+                            start_line: start,
+                            end_line: end,
+                            kind: BlockKind::ArrowFunction,
+                        });
                     }
+                }
             }
         }
         _ => {}

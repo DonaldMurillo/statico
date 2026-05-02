@@ -1,7 +1,7 @@
 //! statico CLI — Static code analyzer for TypeScript and Rust projects.
 
 use clap::{CommandFactory, Parser};
-use clap_complete::{generate, Shell};
+use clap_complete::{Shell, generate};
 use std::process;
 
 mod commands;
@@ -10,11 +10,7 @@ static VERSION_FULL: &str = concat!(env!("CARGO_PKG_VERSION"));
 
 fn version_with_git() -> &'static str {
     let git = git_version::git_version!(fallback = "unknown");
-    if git == "unknown" {
-        VERSION_FULL
-    } else {
-        Box::leak(format!("{} ({})", VERSION_FULL, git).into_boxed_str())
-    }
+    if git == "unknown" { VERSION_FULL } else { Box::leak(format!("{} ({})", VERSION_FULL, git).into_boxed_str()) }
 }
 
 /// Static code analyzer for TypeScript and Rust projects.
@@ -344,16 +340,7 @@ fn main() {
     }
 
     match cli.command {
-        Commands::Analyze {
-            path,
-            format,
-            min_confidence,
-            exit_code,
-            no_cache,
-            baseline,
-            update_baseline,
-            watch,
-        } => {
+        Commands::Analyze { path, format, min_confidence, exit_code, no_cache, baseline, update_baseline, watch } => {
             commands::analyze::run_analyze(
                 &path,
                 format.as_deref(),
@@ -366,10 +353,7 @@ fn main() {
                 watch,
             );
         }
-        Commands::Tui {
-            path,
-            min_confidence,
-        } => {
+        Commands::Tui { path, min_confidence } => {
             let root = std::path::Path::new(&path);
             let root = match std::fs::canonicalize(root) {
                 Ok(c) => c,
@@ -383,11 +367,7 @@ fn main() {
                 process::exit(1);
             }
         }
-        Commands::Diff {
-            before,
-            after,
-            format,
-        } => {
+        Commands::Diff { before, after, format } => {
             commands::diff::run_diff(&before, &after, &format);
         }
         Commands::Completions { shell } => {
@@ -402,37 +382,24 @@ fn main() {
         Commands::Doctor => {
             commands::doctor::run_doctor();
         }
-        Commands::Fix {
-            path,
-            apply,
-            unused_exports,
-            no_unused_exports,
-            unused_deps,
-            no_unused_deps,
-        } => {
+        Commands::Fix { path, apply, unused_exports, no_unused_exports, unused_deps, no_unused_deps } => {
             let selection = commands::fix::FixSelection {
                 unused_exports: unused_exports && !no_unused_exports,
                 unused_deps: unused_deps && !no_unused_deps,
             };
             commands::fix::run_fix(&path, apply, selection);
         }
-        Commands::Setup {
-            target,
-            path,
-            force,
-        } => {
+        Commands::Setup { target, path, force } => {
             commands::init::run_setup(&target, &path, force);
         }
-        Commands::Plugin { action } => {
-            match action {
-                PluginAction::List { path } => commands::plugin::run_plugin_list(&path),
-                PluginAction::Schema { format } => commands::plugin::run_plugin_schema(&format),
-                PluginAction::Docs => commands::plugin::run_plugin_docs(),
-                PluginAction::Init { name, lang, path } => commands::plugin::run_plugin_init(&name, &lang, &path),
-                PluginAction::Build { name, path } => commands::plugin::run_plugin_build(name.as_deref(), &path),
-                PluginAction::Run { name, file, path } => commands::plugin::run_plugin_run(&name, &file, &path),
-                PluginAction::Doctor { path } => commands::plugin::run_plugin_doctor(&path),
-            }
-        }
+        Commands::Plugin { action } => match action {
+            PluginAction::List { path } => commands::plugin::run_plugin_list(&path),
+            PluginAction::Schema { format } => commands::plugin::run_plugin_schema(&format),
+            PluginAction::Docs => commands::plugin::run_plugin_docs(),
+            PluginAction::Init { name, lang, path } => commands::plugin::run_plugin_init(&name, &lang, &path),
+            PluginAction::Build { name, path } => commands::plugin::run_plugin_build(name.as_deref(), &path),
+            PluginAction::Run { name, file, path } => commands::plugin::run_plugin_run(&name, &file, &path),
+            PluginAction::Doctor { path } => commands::plugin::run_plugin_doctor(&path),
+        },
     }
 }

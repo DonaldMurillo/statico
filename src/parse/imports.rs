@@ -32,9 +32,10 @@ pub fn extract_imports(root: Node, source: &str) -> (Vec<String>, Vec<String>) {
     for call in collect_nodes(root, &["call_expression"]) {
         if let Some(func) = call.child(0)
             && func.kind() == "import"
-            && let Some(spec) = extract_dynamic_import_specifier(call, source) {
-                classify_import(&spec, &mut internal, &mut external);
-            }
+            && let Some(spec) = extract_dynamic_import_specifier(call, source)
+        {
+            classify_import(&spec, &mut internal, &mut external);
+        }
     }
 
     // require() calls.
@@ -53,9 +54,10 @@ pub fn extract_imports(root: Node, source: &str) -> (Vec<String>, Vec<String>) {
         let ctor_id = node.children(&mut node.walk()).find(|c| c.kind() == "identifier");
         if let Some(ctor) = ctor_id
             && ctor.utf8_text(source.as_bytes()).unwrap_or("") == "Worker"
-                && let Some(url_spec) = extract_worker_url_arg(node, source) {
-                    classify_import(&url_spec, &mut internal, &mut external);
-                }
+            && let Some(url_spec) = extract_worker_url_arg(node, source)
+        {
+            classify_import(&url_spec, &mut internal, &mut external);
+        }
     }
 
     internal.sort();
@@ -81,11 +83,10 @@ pub fn extract_named_imports(root: Node, source: &str) -> BTreeMap<String, Vec<S
     // Export-from: export { a, b } from 'module'
     for node in collect_nodes(root, &["export_statement"]) {
         let has_from = node.children(&mut node.walk()).any(|c| c.kind() == "from");
-        if has_from
-            && let Some(spec) = extract_module_specifier(node, source) {
-                let names = collect_export_specifier_names(node, source);
-                map.entry(spec).or_default().extend(names);
-            }
+        if has_from && let Some(spec) = extract_module_specifier(node, source) {
+            let names = collect_export_specifier_names(node, source);
+            map.entry(spec).or_default().extend(names);
+        }
     }
 
     map
@@ -120,9 +121,10 @@ fn extract_names_from_import_clause(clause: Node, source: &str) -> Vec<String> {
                     if spec.kind() == "import_specifier" {
                         // The imported name is the first identifier.
                         if let Some(name) = spec.child(0)
-                            && name.kind() == "identifier" {
-                                names.push(name.utf8_text(source.as_bytes()).unwrap_or("").to_string());
-                            }
+                            && name.kind() == "identifier"
+                        {
+                            names.push(name.utf8_text(source.as_bytes()).unwrap_or("").to_string());
+                        }
                     }
                 }
             }
@@ -156,9 +158,10 @@ fn collect_export_specifier_names(node: Node, source: &str) -> Vec<String> {
                 if spec.kind() == "export_specifier" {
                     // The first identifier is the original name being re-exported.
                     if let Some(name) = spec.child(0)
-                        && name.kind() == "identifier" {
-                            names.push(name.utf8_text(source.as_bytes()).unwrap_or("").to_string());
-                        }
+                        && name.kind() == "identifier"
+                    {
+                        names.push(name.utf8_text(source.as_bytes()).unwrap_or("").to_string());
+                    }
                 }
             }
         }
@@ -359,16 +362,13 @@ import { qux } from 'lodash';
     fn sec_imports_bare_at_returns_empty() {
         // A bare "@" is not a valid package specifier.
         // extract_package_name should return empty string, not "@".
-        assert_eq!(extract_package_name("@"), "",
-            "bare '@' should return empty, not a fake package");
+        assert_eq!(extract_package_name("@"), "", "bare '@' should return empty, not a fake package");
         // Also verify that classify_import treats bare @ as neither internal nor external
         let mut internal = vec![];
         let mut external = vec![];
         classify_import("@", &mut internal, &mut external);
-        assert!(!internal.contains(&"@".to_string()),
-            "bare '@' should not be classified as internal");
-        assert!(!external.contains(&"@".to_string()),
-            "bare '@' should not be classified as external package");
+        assert!(!internal.contains(&"@".to_string()), "bare '@' should not be classified as internal");
+        assert!(!external.contains(&"@".to_string()), "bare '@' should not be classified as external package");
     }
 
     // ── V7-8: classify_import must not push empty string to external ──
@@ -378,12 +378,18 @@ import { qux } from 'lodash';
         let mut external = vec![];
         // "@@" → extract_package_name returns empty → should be skipped
         classify_import("@@", &mut internal, &mut external);
-        assert!(external.iter().all(|e| !e.is_empty()),
-            "external packages should not contain empty strings, got: {:?}", external);
+        assert!(
+            external.iter().all(|e| !e.is_empty()),
+            "external packages should not contain empty strings, got: {:?}",
+            external
+        );
         // Also test bare "@" doesn't produce empty external
         external.clear();
         classify_import("@", &mut internal, &mut external);
-        assert!(external.iter().all(|e| !e.is_empty()),
-            "bare '@' should not produce empty external, got: {:?}", external);
+        assert!(
+            external.iter().all(|e| !e.is_empty()),
+            "bare '@' should not produce empty external, got: {:?}",
+            external
+        );
     }
 }

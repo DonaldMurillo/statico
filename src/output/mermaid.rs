@@ -318,17 +318,30 @@ mod tests {
             dependencies: Dependencies { imports: vec![], external: vec![] },
             quality: Quality { files: vec![] },
             issues: Issues {
-                dead_code: vec![], unused_exports: vec![], duplicate_exports: vec![],
-                duplicate_code: vec![], gotchas: vec![], unused_types: vec![],
-                circular_dependencies: vec![], unused_dependencies: vec![],
-                unresolved_imports: vec![], unlisted_dependencies: vec![], plugin_issues: vec![],
+                dead_code: vec![],
+                unused_exports: vec![],
+                duplicate_exports: vec![],
+                duplicate_code: vec![],
+                gotchas: vec![],
+                unused_types: vec![],
+                circular_dependencies: vec![],
+                unused_dependencies: vec![],
+                unresolved_imports: vec![],
+                unlisted_dependencies: vec![],
+                plugin_issues: vec![],
             },
             duplication: DuplicationSection {
                 stats: DuplicationStats {
-                    total_lines: 0, duplicated_lines: 0, duplication_percentage: 0.0,
-                    clone_groups: 0, clone_instances: 0, clone_families: 0,
+                    total_lines: 0,
+                    duplicated_lines: 0,
+                    duplication_percentage: 0.0,
+                    clone_groups: 0,
+                    clone_instances: 0,
+                    clone_families: 0,
                 },
-                clone_groups: vec![], clone_families: vec![], mirrored_directories: vec![],
+                clone_groups: vec![],
+                clone_families: vec![],
+                mirrored_directories: vec![],
                 repetitive_patterns: vec![],
             },
         }
@@ -364,10 +377,7 @@ mod tests {
                 config_files: vec![],
             },
             dependencies: Dependencies {
-                imports: vec![FileImports {
-                    source: evil_path.to_string(),
-                    targets: vec!["src/other.ts".to_string()],
-                }],
+                imports: vec![FileImports { source: evil_path.to_string(), targets: vec!["src/other.ts".to_string()] }],
                 external: vec![],
             },
             quality: Quality { files: vec![] },
@@ -386,11 +396,15 @@ mod tests {
             },
             duplication: DuplicationSection {
                 stats: DuplicationStats {
-                    total_lines: 0, duplicated_lines: 0,
-                    duplication_percentage: 0.0, clone_groups: 0,
-                    clone_instances: 0, clone_families: 0,
+                    total_lines: 0,
+                    duplicated_lines: 0,
+                    duplication_percentage: 0.0,
+                    clone_groups: 0,
+                    clone_instances: 0,
+                    clone_families: 0,
                 },
-                clone_groups: vec![], clone_families: vec![],
+                clone_groups: vec![],
+                clone_families: vec![],
                 mirrored_directories: vec![],
                 repetitive_patterns: vec![],
             },
@@ -398,8 +412,11 @@ mod tests {
         let formatter = MermaidFormatter;
         let result = formatter.format(&output).unwrap();
         // Raw "] should not appear to close a node label prematurely
-        assert!(!result.contains("evil\"] --> evilNode"),
-            "mermaid should escape quotes/brackets in node labels, got:\n{}", result);
+        assert!(
+            !result.contains("evil\"] --> evilNode"),
+            "mermaid should escape quotes/brackets in node labels, got:\n{}",
+            result
+        );
     }
 
     // ── V4-4: Subgraph label injection via directory names with quotes ──
@@ -408,15 +425,11 @@ mod tests {
         // Directory name containing quotes/brackets should not break Mermaid syntax
         let evil_dir = "src/evil\"dir";
         let mut output = make_minimal_output();
-        output.dependencies.imports = vec![FileImports {
-            source: format!("{}/a.ts", evil_dir),
-            targets: vec![format!("{}/b.ts", evil_dir)],
-        }];
+        output.dependencies.imports =
+            vec![FileImports { source: format!("{}/a.ts", evil_dir), targets: vec![format!("{}/b.ts", evil_dir)] }];
         let formatter = MermaidFormatter;
         let result = formatter.format(&output).unwrap();
         // Raw unescaped quote in subgraph label would break mermaid parsing
-        assert!(!result.contains("subgraph src/evil\"dir"),
-            "subgraph label should escape quotes, got:\n{}", result);
+        assert!(!result.contains("subgraph src/evil\"dir"), "subgraph label should escape quotes, got:\n{}", result);
     }
-
 }

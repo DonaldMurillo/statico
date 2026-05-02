@@ -12,12 +12,12 @@ pub struct PrCommentFormatter;
 /// Escape special characters for safe embedding in Markdown table cells.
 fn escape_md_cell(s: &str) -> String {
     s.replace('|', "\\|")
-     .replace('[', "\\[")
-     .replace(']', "\\]")
-     .replace('`', "\\`")
-     .replace('<', "&lt;")
-     .replace('>', "&gt;")
-     .replace(['\n', '\r'], " ")
+        .replace('[', "\\[")
+        .replace(']', "\\]")
+        .replace('`', "\\`")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace(['\n', '\r'], " ")
 }
 
 impl OutputFormatter for PrCommentFormatter {
@@ -258,11 +258,15 @@ mod tests {
             },
             duplication: DuplicationSection {
                 stats: DuplicationStats {
-                    total_lines: 0, duplicated_lines: 0,
-                    duplication_percentage: 0.0, clone_groups: 0,
-                    clone_instances: 0, clone_families: 0,
+                    total_lines: 0,
+                    duplicated_lines: 0,
+                    duplication_percentage: 0.0,
+                    clone_groups: 0,
+                    clone_instances: 0,
+                    clone_families: 0,
                 },
-                clone_groups: vec![], clone_families: vec![],
+                clone_groups: vec![],
+                clone_families: vec![],
                 mirrored_directories: vec![],
                 repetitive_patterns: vec![],
             },
@@ -274,8 +278,7 @@ mod tests {
         let output = make_evil_output();
         let formatter = PrCommentFormatter;
         let md = formatter.format(&output).unwrap();
-        assert!(!md.contains("evil | [click](https://evil.com)"),
-            "PR comment should escape pipe chars: {}", md);
+        assert!(!md.contains("evil | [click](https://evil.com)"), "PR comment should escape pipe chars: {}", md);
     }
 
     #[test]
@@ -283,8 +286,7 @@ mod tests {
         let output = make_evil_output();
         let formatter = PrCommentFormatter;
         let md = formatter.format(&output).unwrap();
-        assert!(!md.contains("[inject](https://evil.com)"),
-            "PR comment should escape link injection");
+        assert!(!md.contains("[inject](https://evil.com)"), "PR comment should escape link injection");
     }
 
     #[test]
@@ -292,8 +294,7 @@ mod tests {
         let output = make_evil_output();
         let formatter = PrCommentFormatter;
         let md = formatter.format(&output).unwrap();
-        assert!(!md.contains("\n\n# Headline"),
-            "PR comment should escape newlines in table cells");
+        assert!(!md.contains("\n\n# Headline"), "PR comment should escape newlines in table cells");
     }
 
     #[test]
@@ -301,15 +302,13 @@ mod tests {
         let output = make_evil_output();
         let formatter = PrCommentFormatter;
         let md = formatter.format(&output).unwrap();
-        assert!(!md.contains("[evil](https://x)"),
-            "PR comment should escape file names in circular deps");
+        assert!(!md.contains("[evil](https://x)"), "PR comment should escape file names in circular deps");
     }
 
     // ── V5-4: escape_md_cell must escape backticks and angle brackets ──
     #[test]
     fn sec_pr_comment_escapes_backticks_and_angle_brackets() {
         let cell = escape_md_cell("file`name<evil>.ts");
-        assert_eq!(cell, "file\\`name&lt;evil&gt;.ts",
-            "backticks and angle brackets must be escaped, got: {}", cell);
+        assert_eq!(cell, "file\\`name&lt;evil&gt;.ts", "backticks and angle brackets must be escaped, got: {}", cell);
     }
 }

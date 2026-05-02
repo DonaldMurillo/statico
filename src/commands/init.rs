@@ -3,13 +3,11 @@
 use std::io::Write;
 use std::process;
 
-use clap_complete::{generate, Shell};
+use clap_complete::{Shell, generate};
 
 pub fn run_init(shell: Option<&str>, cli_command: &mut clap::Command) {
-    let shell = shell
-        .map(|s| s.to_string())
-        .or_else(|| std::env::var("SHELL").ok())
-        .unwrap_or_else(|| "bash".to_string());
+    let shell =
+        shell.map(|s| s.to_string()).or_else(|| std::env::var("SHELL").ok()).unwrap_or_else(|| "bash".to_string());
 
     let is_zsh = shell.contains("zsh");
     let _is_bash = shell.contains("bash");
@@ -34,11 +32,8 @@ pub fn run_init(shell: Option<&str>, cli_command: &mut clap::Command) {
     std::fs::create_dir_all(&completions_dir).ok();
 
     // Generate completion file.
-    let completion_file = if is_fish {
-        completions_dir.join("statico.fish")
-    } else {
-        completions_dir.join("statico.bash")
-    };
+    let completion_file =
+        if is_fish { completions_dir.join("statico.fish") } else { completions_dir.join("statico.bash") };
 
     let shell_type = if is_fish {
         Shell::Fish
@@ -49,8 +44,7 @@ pub fn run_init(shell: Option<&str>, cli_command: &mut clap::Command) {
     };
 
     {
-        let mut file = std::fs::File::create(&completion_file)
-            .expect("failed to create completion file");
+        let mut file = std::fs::File::create(&completion_file).expect("failed to create completion file");
         generate(shell_type, cli_command, "statico", &mut file);
     }
 
@@ -66,9 +60,7 @@ pub fn run_init(shell: Option<&str>, cli_command: &mut clap::Command) {
         // survive intact (audit S4.4).
         let bin_dir_fish = fish_single_quote(&bin_dir.display().to_string());
         let completion_fish = fish_single_quote(&completion_file.display().to_string());
-        format!(
-            "\n# statico\nset -gx PATH {bin_dir_fish} $PATH\nalias st statico\nsource {completion_fish}\n"
-        )
+        format!("\n# statico\nset -gx PATH {bin_dir_fish} $PATH\nalias st statico\nsource {completion_fish}\n")
     } else {
         format!(
             "\n# statico\nexport PATH=\"{bin_dir_escaped}:$PATH\"\nalias st='statico'\nsource \"{completion_escaped}\"\n"
@@ -85,14 +77,20 @@ pub fn run_init(shell: Option<&str>, cli_command: &mut clap::Command) {
     }
 
     // Append to rc file.
-    let mut file = std::fs::OpenOptions::new()
-        .append(true)
-        .open(&rc_file)
-        .expect("failed to open rc file");
+    let mut file = std::fs::OpenOptions::new().append(true).open(&rc_file).expect("failed to open rc file");
     file.write_all(snippet.as_bytes()).expect("failed to write rc file");
 
     println!("\x1b[32m✓ Shell integration configured!\x1b[0m");
-    println!("  Shell:    {}", if is_zsh { "zsh" } else if is_fish { "fish" } else { "bash" });
+    println!(
+        "  Shell:    {}",
+        if is_zsh {
+            "zsh"
+        } else if is_fish {
+            "fish"
+        } else {
+            "bash"
+        }
+    );
     println!("  Config:   {}", rc_file.display());
     println!("  Alias:    st → statico");
     println!("  Complete: {}", completion_file.display());
@@ -163,17 +161,21 @@ pub fn run_setup(target: &str, path: &str, force: bool) {
             files_written += 1;
         }
 
-        files_written += write_skill(&claude_dir.join("skills").join("statico-analyze"), "statico-analyze", SKILL_ANALYZE, force);
+        files_written +=
+            write_skill(&claude_dir.join("skills").join("statico-analyze"), "statico-analyze", SKILL_ANALYZE, force);
         files_written += write_skill(&claude_dir.join("skills").join("statico-fix"), "statico-fix", SKILL_FIX, force);
-        files_written += write_skill(&claude_dir.join("skills").join("statico-plugin"), "statico-plugin", SKILL_PLUGIN, force);
+        files_written +=
+            write_skill(&claude_dir.join("skills").join("statico-plugin"), "statico-plugin", SKILL_PLUGIN, force);
     }
 
     // --- Pi setup ---
     if generate_pi {
         let pi_dir = root.join(".pi");
-        files_written += write_skill(&pi_dir.join("skills").join("statico-analyze"), "statico-analyze", SKILL_ANALYZE, force);
+        files_written +=
+            write_skill(&pi_dir.join("skills").join("statico-analyze"), "statico-analyze", SKILL_ANALYZE, force);
         files_written += write_skill(&pi_dir.join("skills").join("statico-fix"), "statico-fix", SKILL_FIX, force);
-        files_written += write_skill(&pi_dir.join("skills").join("statico-plugin"), "statico-plugin", SKILL_PLUGIN, force);
+        files_written +=
+            write_skill(&pi_dir.join("skills").join("statico-plugin"), "statico-plugin", SKILL_PLUGIN, force);
     }
 
     // --- Cursor setup ---
@@ -218,7 +220,6 @@ const SKILL_FIX: &str = include_str!("../../templates/skills/statico-fix/SKILL.m
 const SKILL_PLUGIN: &str = include_str!("../../templates/skills/statico-plugin/SKILL.md");
 const CURSOR_RULES: &str = include_str!("../../templates/cursor/statico.mdc");
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -230,10 +231,7 @@ mod tests {
 
     #[test]
     fn sec_fish_single_quote_handles_path_with_space() {
-        assert_eq!(
-            fish_single_quote("/Users/Alice Smith/.statico/bin"),
-            "'/Users/Alice Smith/.statico/bin'"
-        );
+        assert_eq!(fish_single_quote("/Users/Alice Smith/.statico/bin"), "'/Users/Alice Smith/.statico/bin'");
     }
 
     #[test]

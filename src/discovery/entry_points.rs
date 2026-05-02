@@ -204,31 +204,32 @@ fn add_workspace_entries(
         // Try package.json main/module/exports fields.
         let pkg_json_path = root.join(pkg_dir).join("package.json");
         if let Ok(content) = std::fs::read_to_string(&pkg_json_path)
-            && let Ok(pkg) = serde_json::from_str::<serde_json::Value>(&content) {
-                // main/module → both entry_point and public_api
-                for field in &["main", "module"] {
-                    if let Some(val) = pkg.get(field).and_then(|v| v.as_str()) {
-                        let rel = format!("{}/{}", pkg_dir, val.trim_start_matches("./"));
-                        let resolved = resolve_to_source(&rel, source_set);
-                        if let Some(r) = resolved {
-                            entry_points.insert(r.clone());
-                            public_api.insert(r);
-                        }
-                    }
-                }
-                // exports field → public_api (these define the package's external interface)
-                if let Some(exports) = pkg.get("exports") {
-                    let mut export_paths = BTreeSet::new();
-                    extract_exports_paths(exports, &mut export_paths);
-                    for ep in &export_paths {
-                        let rel = format!("{}/{}", pkg_dir, ep.trim_start_matches("./"));
-                        let resolved = resolve_to_source(&rel, source_set);
-                        if let Some(r) = resolved {
-                            public_api.insert(r);
-                        }
+            && let Ok(pkg) = serde_json::from_str::<serde_json::Value>(&content)
+        {
+            // main/module → both entry_point and public_api
+            for field in &["main", "module"] {
+                if let Some(val) = pkg.get(field).and_then(|v| v.as_str()) {
+                    let rel = format!("{}/{}", pkg_dir, val.trim_start_matches("./"));
+                    let resolved = resolve_to_source(&rel, source_set);
+                    if let Some(r) = resolved {
+                        entry_points.insert(r.clone());
+                        public_api.insert(r);
                     }
                 }
             }
+            // exports field → public_api (these define the package's external interface)
+            if let Some(exports) = pkg.get("exports") {
+                let mut export_paths = BTreeSet::new();
+                extract_exports_paths(exports, &mut export_paths);
+                for ep in &export_paths {
+                    let rel = format!("{}/{}", pkg_dir, ep.trim_start_matches("./"));
+                    let resolved = resolve_to_source(&rel, source_set);
+                    if let Some(r) = resolved {
+                        public_api.insert(r);
+                    }
+                }
+            }
+        }
 
         // Try default entry points within the package dir.
         for def in &defaults {

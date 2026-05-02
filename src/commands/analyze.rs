@@ -29,29 +29,11 @@ pub fn run_analyze(
     }
 
     if watch {
-        run_watch_loop(
-            &root,
-            path,
-            format,
-            min_confidence,
-            exit_code,
-            quiet,
-            no_cache,
-            baseline,
-        );
+        run_watch_loop(&root, path, format, min_confidence, exit_code, quiet, no_cache, baseline);
         return;
     }
 
-    run_analyze_inner(
-        &root,
-        format,
-        min_confidence,
-        exit_code,
-        quiet,
-        no_cache,
-        baseline,
-        update_baseline,
-    );
+    run_analyze_inner(&root, format, min_confidence, exit_code, quiet, no_cache, baseline, update_baseline);
 }
 
 /// Watch loop: re-run `run_analyze_once` whenever a source file under `root`
@@ -75,9 +57,7 @@ fn run_watch_loop(
     eprintln!("statico: watching {} (Ctrl-C to exit)", root.display());
 
     // Run once up front so users see the initial state.
-    run_analyze_inner(
-        root, format, min_confidence, exit_code, quiet, no_cache, baseline, None,
-    );
+    run_analyze_inner(root, format, min_confidence, exit_code, quiet, no_cache, baseline, None);
 
     let (tx, rx) = mpsc::channel();
     let mut watcher: RecommendedWatcher = match notify::recommended_watcher(move |res| {
@@ -122,9 +102,7 @@ fn run_watch_loop(
         }
 
         eprintln!("\nstatico: change detected in {} — re-analyzing…", raw_path);
-        run_analyze_inner(
-            root, format, min_confidence, exit_code, quiet, no_cache, baseline, None,
-        );
+        run_analyze_inner(root, format, min_confidence, exit_code, quiet, no_cache, baseline, None);
     }
 }
 
@@ -171,8 +149,7 @@ fn run_analyze_inner(
     update_baseline: Option<&str>,
 ) {
     // Load config from project root and merge with CLI args.
-    let mut config =
-        statico::config::StaticoConfig::load(root).merge_cli(format, min_confidence, exit_code, quiet);
+    let mut config = statico::config::StaticoConfig::load(root).merge_cli(format, min_confidence, exit_code, quiet);
 
     if format.is_none() && config.format == "json" && std::io::IsTerminal::is_terminal(&std::io::stdout()) {
         config.format = "markdown".to_string();
@@ -221,10 +198,7 @@ fn run_analyze_inner(
                     for issue in &mut result.issues {
                         issue.file = issue.file.chars().filter(|c| !c.is_control()).collect::<String>();
                         if issue.file.starts_with('/') || issue.file.starts_with("..") {
-                            issue.file = issue.file
-                                .trim_start_matches('/')
-                                .trim_start_matches("../")
-                                .to_string();
+                            issue.file = issue.file.trim_start_matches('/').trim_start_matches("../").to_string();
                         }
                     }
                     output.issues.plugin_issues.extend(result.issues);
@@ -314,8 +288,7 @@ fn run_analyze_inner(
 }
 
 pub fn load_analysis(path: &str) -> Result<statico::types::AnalysisOutput, String> {
-    let content =
-        std::fs::read_to_string(path).map_err(|e| format!("failed to read {}: {}", path, e))?;
+    let content = std::fs::read_to_string(path).map_err(|e| format!("failed to read {}: {}", path, e))?;
     serde_json::from_str(&content).map_err(|e| format!("failed to parse {}: {}", path, e))
 }
 

@@ -19,11 +19,7 @@ fn main() {
         let abs = root.join(file);
         let file_dir = abs.parent().unwrap();
         let result = resolver.resolve(file_dir, spec);
-        println!(
-            "  {} from {}",
-            spec,
-            result.map(|p| p.to_string_lossy().to_string()).unwrap_or("NONE".into())
-        );
+        println!("  {} from {}", spec, result.map(|p| p.to_string_lossy().to_string()).unwrap_or("NONE".into()));
     }
 
     // Also test with oxc (requires deep-resolution feature)
@@ -52,14 +48,9 @@ fn main() {
                 continue;
             }
             let pkg_dir = path.parent().unwrap();
-            workspace_aliases.push((
-                format!("{}$", name),
-                vec![AliasValue::Path(pkg_dir.to_string_lossy().to_string())],
-            ));
-            workspace_aliases.push((
-                name.to_string(),
-                vec![AliasValue::Path(pkg_dir.to_string_lossy().to_string())],
-            ));
+            workspace_aliases
+                .push((format!("{}$", name), vec![AliasValue::Path(pkg_dir.to_string_lossy().to_string())]));
+            workspace_aliases.push((name.to_string(), vec![AliasValue::Path(pkg_dir.to_string_lossy().to_string())]));
         }
         println!("  ({} workspace aliases)", workspace_aliases.len());
         let options2 = ResolveOptions {
@@ -95,9 +86,7 @@ fn main() {
             println!(
                 "  {} from {}",
                 spec,
-                result
-                    .map(|r| r.full_path().to_string_lossy().to_string())
-                    .unwrap_or_else(|e| format!("ERR: {}", e))
+                result.map(|r| r.full_path().to_string_lossy().to_string()).unwrap_or_else(|e| format!("ERR: {}", e))
             );
         }
     }

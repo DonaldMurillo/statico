@@ -25,11 +25,11 @@ pub fn run_doctor() {
     }
 
     // 4. Shell alias.
-    let alias_check = std::process::Command::new("alias")
-        .arg("st")
-        .output();
+    let alias_check = std::process::Command::new("alias").arg("st").output();
     let alias_ok = alias_check
-        .map(|o| String::from_utf8_lossy(&o.stdout).contains("statico") || String::from_utf8_lossy(&o.stdout).contains("st"))
+        .map(|o| {
+            String::from_utf8_lossy(&o.stdout).contains("statico") || String::from_utf8_lossy(&o.stdout).contains("st")
+        })
         .unwrap_or(false);
     if alias_ok {
         println!("  Alias:    st='statico' \x1b[32m✓\x1b[0m");

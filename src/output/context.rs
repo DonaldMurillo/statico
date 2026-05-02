@@ -86,10 +86,7 @@ mod tests {
             dependencies: Dependencies { imports: vec![], external: vec![] },
             quality: Quality { files: vec![] },
             issues: Issues {
-                unused_exports: vec![UnusedExportIssue {
-                    name: "foo".to_string(),
-                    path: path.to_string(),
-                }],
+                unused_exports: vec![UnusedExportIssue { name: "foo".to_string(), path: path.to_string() }],
                 dead_code: vec![],
                 duplicate_exports: vec![],
                 duplicate_code: vec![],
@@ -103,11 +100,15 @@ mod tests {
             },
             duplication: DuplicationSection {
                 stats: DuplicationStats {
-                    total_lines: 0, duplicated_lines: 0,
-                    duplication_percentage: 0.0, clone_groups: 0,
-                    clone_instances: 0, clone_families: 0,
+                    total_lines: 0,
+                    duplicated_lines: 0,
+                    duplication_percentage: 0.0,
+                    clone_groups: 0,
+                    clone_instances: 0,
+                    clone_families: 0,
                 },
-                clone_groups: vec![], clone_families: vec![],
+                clone_groups: vec![],
+                clone_families: vec![],
                 mirrored_directories: vec![],
                 repetitive_patterns: vec![],
             },
@@ -122,9 +123,11 @@ mod tests {
         let result = formatter.format(&output).unwrap();
         // The raw newline should be replaced with a space so "Top risk" stays on one line
         let top_risk_line = result.lines().find(|l| l.starts_with("Top risk:")).unwrap();
-        assert!(!top_risk_line.contains('\n'),
-            "Top risk line should not contain newline, got: {}", top_risk_line);
-        assert!(top_risk_line.contains("evil INJECTED.ts"),
-            "newline should be replaced with space, got: {}", top_risk_line);
+        assert!(!top_risk_line.contains('\n'), "Top risk line should not contain newline, got: {}", top_risk_line);
+        assert!(
+            top_risk_line.contains("evil INJECTED.ts"),
+            "newline should be replaced with space, got: {}",
+            top_risk_line
+        );
     }
 }

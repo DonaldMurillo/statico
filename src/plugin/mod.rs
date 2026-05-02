@@ -8,4 +8,4 @@ pub mod runtime;
 pub use discovery::{DiscoveredPlugin, PluginKind};
 pub use manager::ActivePlugin;
 pub use pipeline::PluginPipeline;
-pub use protocol::{HookName, HookMode};
+pub use protocol::{HookMode, HookName};

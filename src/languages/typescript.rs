@@ -170,12 +170,7 @@ fn build_resolver(root: &Path) -> Resolver {
 }
 
 /// Resolve import specifiers to relative file paths.
-fn resolve_specs(
-    root: &Path,
-    file_dir: &Path,
-    specs: &[String],
-    resolver: &Resolver,
-) -> Vec<String> {
+fn resolve_specs(root: &Path, file_dir: &Path, specs: &[String], resolver: &Resolver) -> Vec<String> {
     let mut resolved: Vec<String> = Vec::new();
     for spec in specs {
         if let Some(path) = resolver.resolve(file_dir, spec) {

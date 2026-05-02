@@ -6,7 +6,7 @@
 //! - `post_analysis`: whole-result enrichment
 //! - `format_output`: output formatting override
 
-use crate::plugin::discovery::{discover_plugins, DiscoveredPlugin};
+use crate::plugin::discovery::{DiscoveredPlugin, discover_plugins};
 use crate::plugin::manager::ActivePlugin;
 use crate::plugin::protocol::{AnalyzeFileParams, AnalyzeFileResult, PostAnalysisParams};
 use crate::types::AnalysisOutput;
@@ -34,10 +34,7 @@ impl PluginPipeline {
             match ActivePlugin::spawn(&plugin, root) {
                 Ok(ap) => active.push((plugin, ap)),
                 Err(e) => {
-                    eprintln!(
-                        "warning: plugin '{}' failed to start: {}",
-                        plugin.name, e
-                    );
+                    eprintln!("warning: plugin '{}' failed to start: {}", plugin.name, e);
                 }
             }
         }
@@ -58,12 +55,7 @@ impl PluginPipeline {
     /// Call `analyze_file` on all plugins that subscribe to it.
     ///
     /// Returns additional issues, exports, and dependencies collected from plugins.
-    pub fn analyze_file(
-        &mut self,
-        path: &str,
-        source: &str,
-        language: &str,
-    ) -> Vec<AnalyzeFileResult> {
+    pub fn analyze_file(&mut self, path: &str, source: &str, language: &str) -> Vec<AnalyzeFileResult> {
         let mut results = Vec::new();
 
         for (_disc, plugin) in &mut self.plugins {
@@ -77,10 +69,7 @@ impl PluginPipeline {
             match plugin.send_request("analyze_file", &params) {
                 Ok(result) => results.push(result),
                 Err(e) => {
-                    eprintln!(
-                        "warning: plugin error in analyze_file for '{}': {}",
-                        path, e
-                    );
+                    eprintln!("warning: plugin error in analyze_file for '{}': {}", path, e);
                 }
             }
         }
@@ -93,31 +82,20 @@ impl PluginPipeline {
     /// Allows plugins to add cross-cutting issues and suggestions after
     /// the full analysis is complete.
     pub fn post_analysis(&mut self, output: &AnalysisOutput) -> Vec<serde_json::Value> {
-        let health_score = output
-            .summary
-            .as_ref()
-            .map(|s| s.health_score)
-            .unwrap_or(0.0);
+        let health_score = output.summary.as_ref().map(|s| s.health_score).unwrap_or(0.0);
 
-        let total_files = output
-            .summary
-            .as_ref()
-            .map(|s| s.total_files)
-            .unwrap_or(0);
+        let total_files = output.summary.as_ref().map(|s| s.total_files).unwrap_or(0);
 
         let output_json = serde_json::to_value(output).unwrap_or(serde_json::Value::Null);
 
         let mut results = Vec::new();
 
         for (_disc, plugin) in &mut self.plugins {
-            let params = PostAnalysisParams {
-                results: output_json.clone(),
-                health_score,
-                total_files,
-                language: String::new(),
-            };
+            let params =
+                PostAnalysisParams { results: output_json.clone(), health_score, total_files, language: String::new() };
 
-            let result: Result<crate::plugin::protocol::PostAnalysisResult, String> = plugin.send_request("post_analysis", &params);
+            let result: Result<crate::plugin::protocol::PostAnalysisResult, String> =
+                plugin.send_request("post_analysis", &params);
             match result {
                 Ok(result) => results.push(serde_json::to_value(result).unwrap_or(serde_json::Value::Null)),
                 Err(e) => {
@@ -137,16 +115,8 @@ impl PluginPipeline {
     /// If any plugin provides `format_output` with mode `override`,
     /// only its output is used. Otherwise, all results are concatenated.
     /// Returns `None` if no plugin handled it (use built-in formatter).
-    pub fn format_output(
-        &mut self,
-        output: &AnalysisOutput,
-        format: &str,
-    ) -> Option<String> {
-        let health_score = output
-            .summary
-            .as_ref()
-            .map(|s| s.health_score)
-            .unwrap_or(0.0);
+    pub fn format_output(&mut self, output: &AnalysisOutput, format: &str) -> Option<String> {
+        let health_score = output.summary.as_ref().map(|s| s.health_score).unwrap_or(0.0);
 
         let output_json = serde_json::to_value(output).unwrap_or(serde_json::Value::Null);
 
@@ -160,7 +130,8 @@ impl PluginPipeline {
                 health_score,
             };
 
-            let result: Result<crate::plugin::protocol::FormatOutputResult, String> = plugin.send_request("format_output", &params);
+            let result: Result<crate::plugin::protocol::FormatOutputResult, String> =
+                plugin.send_request("format_output", &params);
             match result {
                 Ok(result) => {
                     any_handled = true;
@@ -176,11 +147,7 @@ impl PluginPipeline {
             }
         }
 
-        if any_handled {
-            Some(combined.trim_end().to_string())
-        } else {
-            None
-        }
+        if any_handled { Some(combined.trim_end().to_string()) } else { None }
     }
 
     /// Shut down all plugins gracefully.

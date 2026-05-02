@@ -49,8 +49,7 @@ pub fn download_base_url() -> String {
     // V-10: Only allow env var override in debug builds
     #[cfg(debug_assertions)]
     {
-        std::env::var("STATICO_UPDATE_DL_URL")
-            .unwrap_or_else(|_| format!("https://github.com/{}", GITHUB_REPO))
+        std::env::var("STATICO_UPDATE_DL_URL").unwrap_or_else(|_| format!("https://github.com/{}", GITHUB_REPO))
     }
     #[cfg(not(debug_assertions))]
     {
@@ -82,15 +81,9 @@ pub fn is_newer(current: &str, latest: &str) -> bool {
     let parse = |v: &str| -> (Vec<u32>, Option<String>) {
         let v = v.trim();
         // Split off any pre-release suffix (first '-' after digits)
-        let (num_part, pre) = if let Some(idx) = v.find('-') {
-            (&v[..idx], Some(v[idx + 1..].to_string()))
-        } else {
-            (v, None)
-        };
-        let nums: Vec<u32> = num_part
-            .split('.')
-            .filter_map(|p| p.parse().ok())
-            .collect();
+        let (num_part, pre) =
+            if let Some(idx) = v.find('-') { (&v[..idx], Some(v[idx + 1..].to_string())) } else { (v, None) };
+        let nums: Vec<u32> = num_part.split('.').filter_map(|p| p.parse().ok()).collect();
         (nums, pre)
     };
     let (cur_nums, cur_pre) = parse(current);
@@ -108,10 +101,10 @@ pub fn is_newer(current: &str, latest: &str) -> bool {
     // Numeric parts are equal — pre-release versions are older than release.
     // "0.1.0-beta" < "0.1.0" because "0.1.0" has no pre-release tag.
     match (cur_pre, lat_pre) {
-        (Some(_), None) => true,  // current has pre-release, latest doesn't → newer exists
-        (None, Some(_)) => false, // current is release, latest is pre-release → not newer
+        (Some(_), None) => true,     // current has pre-release, latest doesn't → newer exists
+        (None, Some(_)) => false,    // current is release, latest is pre-release → not newer
         (Some(a), Some(b)) => a < b, // both pre-release, compare lexicographically
-        (None, None) => false,      // both are equal release versions
+        (None, None) => false,       // both are equal release versions
     }
 }
 
@@ -154,10 +147,7 @@ pub fn run_update(dry_run: bool) -> Result<String, String> {
 
     let platform = platform_triple()?;
     let archive_name = format!("statico-{}.tar.gz", platform);
-    let url = format!(
-        "{}/releases/download/v{}/{}",
-        download_base_url(), latest, archive_name
-    );
+    let url = format!("{}/releases/download/v{}/{}", download_base_url(), latest, archive_name);
 
     eprintln!("Downloading statico v{} for {}...", latest, platform);
 
@@ -178,8 +168,7 @@ pub fn run_update(dry_run: bool) -> Result<String, String> {
         let mut reader = resp.into_parts().1.into_reader();
         // V-11: Limit download size to prevent disk-fill DoS
         let mut limited = io::Read::take(&mut reader, MAX_DOWNLOAD_SIZE);
-        let bytes = io::copy(&mut limited, &mut file)
-            .map_err(|e| format!("download write failed: {}", e))?;
+        let bytes = io::copy(&mut limited, &mut file).map_err(|e| format!("download write failed: {}", e))?;
         if bytes >= MAX_DOWNLOAD_SIZE {
             return Err("download exceeded maximum size limit (100 MB)".into());
         }
@@ -221,26 +210,14 @@ fn extract_tar_gz(archive: &Path, dest: &Path) -> Result<(), String> {
 
     for entry in archive.entries().map_err(|e| format!("failed to read archive entries: {}", e))? {
         let mut entry = entry.map_err(|e| format!("failed to read archive entry: {}", e))?;
-        let path = entry
-            .path()
-            .map_err(|e| format!("failed to read entry path: {}", e))?
-            .into_owned();
+        let path = entry.path().map_err(|e| format!("failed to read entry path: {}", e))?.into_owned();
 
         // Reject any entry whose path contains a parent directory component.
         if path.components().any(|c| c == Component::ParentDir) {
-            return Err(format!(
-                "refusing to extract archive entry with path traversal: {}",
-                path.display()
-            ));
+            return Err(format!("refusing to extract archive entry with path traversal: {}", path.display()));
         }
 
-        entry.unpack_in(dest).map_err(|e| {
-            format!(
-                "failed to extract archive entry '{}': {}",
-                path.display(),
-                e
-            )
-        })?;
+        entry.unpack_in(dest).map_err(|e| format!("failed to extract archive entry '{}': {}", path.display(), e))?;
     }
 
     Ok(())
@@ -310,9 +287,7 @@ fn today_string() -> String {
     // Simple approach: use SystemTime and format as date.
     // We only need the date portion for rate-limiting.
     use std::time::SystemTime;
-    let duration = SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .unwrap_or_default();
+    let duration = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap_or_default();
     let total_days = duration.as_secs() / 86400;
     // Compute year/month/day from unix epoch days.
     // Algorithm from http://howardhinnant.github.io/date_algorithms.html
@@ -457,8 +432,7 @@ mod tests {
         }
 
         // This should succeed (safe path)
-        assert!(extract_tar_gz(&archive_path, &dest).is_ok(),
-            "safe path should extract successfully");
+        assert!(extract_tar_gz(&archive_path, &dest).is_ok(), "safe path should extract successfully");
 
         // The real protection is in the extract loop checking for ParentDir components.
         // We verify ensure_within_root separately (in lib.rs tests).
@@ -500,20 +474,14 @@ mod tests {
     #[test]
     fn sec_update_is_newer_distinguishes_prerelease() {
         // Pre-release versions should be considered older than the release
-        assert!(is_newer("0.1.0-beta", "0.1.0"),
-            "0.1.0-beta should be older than 0.1.0");
-        assert!(is_newer("0.1.0-alpha", "0.1.0"),
-            "0.1.0-alpha should be older than 0.1.0");
-        assert!(is_newer("1.0.0-rc.1", "1.0.0"),
-            "1.0.0-rc.1 should be older than 1.0.0");
+        assert!(is_newer("0.1.0-beta", "0.1.0"), "0.1.0-beta should be older than 0.1.0");
+        assert!(is_newer("0.1.0-alpha", "0.1.0"), "0.1.0-alpha should be older than 0.1.0");
+        assert!(is_newer("1.0.0-rc.1", "1.0.0"), "1.0.0-rc.1 should be older than 1.0.0");
         // Release is NOT older than pre-release
-        assert!(!is_newer("0.1.0", "0.1.0-beta"),
-            "0.1.0 should NOT be older than 0.1.0-beta");
+        assert!(!is_newer("0.1.0", "0.1.0-beta"), "0.1.0 should NOT be older than 0.1.0-beta");
         // Both pre-release: lexicographic comparison
-        assert!(is_newer("0.1.0-alpha", "0.1.0-beta"),
-            "0.1.0-alpha should be older than 0.1.0-beta");
+        assert!(is_newer("0.1.0-alpha", "0.1.0-beta"), "0.1.0-alpha should be older than 0.1.0-beta");
         // Same pre-release: not newer
-        assert!(!is_newer("0.1.0-beta", "0.1.0-beta"),
-            "same pre-release should not be newer");
+        assert!(!is_newer("0.1.0-beta", "0.1.0-beta"), "same pre-release should not be newer");
     }
 }

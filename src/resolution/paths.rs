@@ -85,8 +85,11 @@ mod tests {
         if let Some(resolved) = result {
             // If it resolved (file exists on system), it must NOT be inside /project
             let project_root = PathBuf::from("/project");
-            assert!(!resolved.starts_with(&project_root),
-                "../../etc/passwd should not resolve inside /project, got: {:?}", resolved);
+            assert!(
+                !resolved.starts_with(&project_root),
+                "../../etc/passwd should not resolve inside /project, got: {:?}",
+                resolved
+            );
         }
         // Root-boundary enforcement is done by is_within_root() in Resolver::resolve
     }
@@ -95,7 +98,10 @@ mod tests {
     fn sec_paths_rejects_absolute_spec() {
         let dir = PathBuf::from("/project/src");
         let result = resolve_relative(&dir, "/etc/passwd");
-        assert!(result.is_none(),
-            "resolve_relative should not resolve absolute paths outside project, got: {:?}", result);
+        assert!(
+            result.is_none(),
+            "resolve_relative should not resolve absolute paths outside project, got: {:?}",
+            result
+        );
     }
 }

@@ -97,26 +97,28 @@ pub fn discover_workspace_roots(root: &Path, packages: &[String]) -> Vec<PathBuf
             // Directory prefix like "packages/" — enumerate subdirs with package.json.
             let dir = root.join(pkg_pattern.trim_end_matches('/'));
             if dir.is_dir()
-                && let Ok(entries) = std::fs::read_dir(&dir) {
-                    for entry in entries.flatten() {
-                        if entry.path().is_dir() && entry.path().join("package.json").exists() {
-                            roots.push(entry.path());
-                        }
+                && let Ok(entries) = std::fs::read_dir(&dir)
+            {
+                for entry in entries.flatten() {
+                    if entry.path().is_dir() && entry.path().join("package.json").exists() {
+                        roots.push(entry.path());
                     }
                 }
+            }
         } else if pkg_pattern.contains('*') {
             // Handle glob patterns like "packages/*".
             if let Some(parent) = pkg_pattern.trim_end_matches("/*").strip_suffix('*') {
                 let parent = parent.trim_end_matches('/');
                 let parent_dir = root.join(parent);
                 if parent_dir.is_dir()
-                    && let Ok(entries) = std::fs::read_dir(&parent_dir) {
-                        for entry in entries.flatten() {
-                            if entry.path().is_dir() && entry.path().join("package.json").exists() {
-                                roots.push(entry.path());
-                            }
+                    && let Ok(entries) = std::fs::read_dir(&parent_dir)
+                {
+                    for entry in entries.flatten() {
+                        if entry.path().is_dir() && entry.path().join("package.json").exists() {
+                            roots.push(entry.path());
                         }
                     }
+                }
             }
         } else {
             let pkg_dir = root.join(pkg_pattern);
@@ -232,9 +234,10 @@ fn has_nx_in_package_json(root: &Path) -> bool {
     // Check devDependencies or dependencies for nx.
     for field in &["devDependencies", "dependencies"] {
         if let Some(deps) = pkg.get(field).and_then(|v| v.as_object())
-            && (deps.contains_key("nx") || deps.contains_key("@nrwl/workspace")) {
-                return true;
-            }
+            && (deps.contains_key("nx") || deps.contains_key("@nrwl/workspace"))
+        {
+            return true;
+        }
     }
     false
 }
@@ -316,8 +319,12 @@ packages:
             "apps/**/".to_string(),
             "tools/admin".to_string(),
         ]);
-        assert_eq!(result, vec!["packages/", "libs/", "apps/", "tools/admin"],
-            "double-star patterns should normalize to directory prefixes, got: {:?}", result);
+        assert_eq!(
+            result,
+            vec!["packages/", "libs/", "apps/", "tools/admin"],
+            "double-star patterns should normalize to directory prefixes, got: {:?}",
+            result
+        );
     }
 
     #[test]
@@ -418,8 +425,7 @@ packages:
         let _ = std::fs::remove_dir_all(&tmp);
         std::fs::create_dir_all(&tmp).unwrap();
         let roots = discover_workspace_roots(&tmp, &["../../etc".to_string()]);
-        assert!(roots.is_empty(),
-            "traversal pattern should produce no roots: {:?}", roots);
+        assert!(roots.is_empty(), "traversal pattern should produce no roots: {:?}", roots);
         let _ = std::fs::remove_dir_all(&tmp);
     }
 
@@ -429,8 +435,7 @@ packages:
         let _ = std::fs::remove_dir_all(&tmp);
         std::fs::create_dir_all(&tmp).unwrap();
         let roots = discover_workspace_roots(&tmp, &["/etc".to_string()]);
-        assert!(roots.is_empty(),
-            "absolute pattern should produce no roots: {:?}", roots);
+        assert!(roots.is_empty(), "absolute pattern should produce no roots: {:?}", roots);
         let _ = std::fs::remove_dir_all(&tmp);
     }
 }

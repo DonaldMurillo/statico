@@ -76,10 +76,9 @@ fn bfs_reachable<'a>(starts: &'a [String], dep_graph: &'a BTreeMap<String, Vec<S
     let mut stack: Vec<&str> = Vec::new();
 
     for ep in starts {
-        if dep_graph.contains_key(ep)
-            && reachable.insert(ep) {
-                stack.push(ep);
-            }
+        if dep_graph.contains_key(ep) && reachable.insert(ep) {
+            stack.push(ep);
+        }
     }
 
     while let Some(current) = stack.pop() {

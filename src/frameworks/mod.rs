@@ -183,59 +183,62 @@ pub fn detect_profiles(root: &Path) -> Vec<&'static FrameworkProfile> {
                         continue;
                     }
                     if profile.markers.iter().any(|m| ws_root.join(m).exists())
-                        && !matched.iter().any(|p| p.name == profile.name) {
-                            matched.push(profile);
-                        }
+                        && !matched.iter().any(|p| p.name == profile.name)
+                    {
+                        matched.push(profile);
+                    }
                     // Also check deps in workspace package.json.
                     if !profile.dep_markers.is_empty()
                         && ws_deps.as_ref().is_some_and(|deps| profile.dep_markers.iter().any(|dm| deps.contains(*dm)))
-                        && !matched.iter().any(|p| p.name == profile.name) {
-                            matched.push(profile);
-                        }
+                        && !matched.iter().any(|p| p.name == profile.name)
+                    {
+                        matched.push(profile);
+                    }
                 }
             }
         }
 
         // 2b. Also try a shallow scan: walk first-level subdirectories.
         if matched.len() <= 1
-            && let Ok(entries) = std::fs::read_dir(root) {
-                for entry in entries.flatten() {
-                    if !entry.file_type().is_ok_and(|t| t.is_dir()) {
+            && let Ok(entries) = std::fs::read_dir(root)
+        {
+            for entry in entries.flatten() {
+                if !entry.file_type().is_ok_and(|t| t.is_dir()) {
+                    continue;
+                }
+                let name = entry.file_name();
+                let name_str = name.to_string_lossy();
+                if name_str.starts_with('.')
+                    || name_str == "node_modules"
+                    || name_str == "dist"
+                    || name_str == "build"
+                    || name_str == "target"
+                    || name_str == "benchmarks"
+                    || name_str == "fixtures"
+                    || name_str == "tools"
+                {
+                    continue;
+                }
+                let sub = entry.path();
+                let sub_deps = load_package_deps(&sub);
+                for profile in all {
+                    if profile.name == "generic" {
                         continue;
                     }
-                    let name = entry.file_name();
-                    let name_str = name.to_string_lossy();
-                    if name_str.starts_with('.')
-                        || name_str == "node_modules"
-                        || name_str == "dist"
-                        || name_str == "build"
-                        || name_str == "target"
-                        || name_str == "benchmarks"
-                        || name_str == "fixtures"
-                        || name_str == "tools"
+                    if profile.markers.iter().any(|m| sub.join(m).exists())
+                        && !matched.iter().any(|p| p.name == profile.name)
                     {
-                        continue;
+                        matched.push(profile);
                     }
-                    let sub = entry.path();
-                    let sub_deps = load_package_deps(&sub);
-                    for profile in all {
-                        if profile.name == "generic" {
-                            continue;
-                        }
-                        if profile.markers.iter().any(|m| sub.join(m).exists())
-                            && !matched.iter().any(|p| p.name == profile.name) {
-                                matched.push(profile);
-                            }
-                        if !profile.dep_markers.is_empty()
-                            && sub_deps
-                                .as_ref()
-                                .is_some_and(|deps| profile.dep_markers.iter().any(|dm| deps.contains(*dm)))
-                            && !matched.iter().any(|p| p.name == profile.name) {
-                                matched.push(profile);
-                            }
+                    if !profile.dep_markers.is_empty()
+                        && sub_deps.as_ref().is_some_and(|deps| profile.dep_markers.iter().any(|dm| deps.contains(*dm)))
+                        && !matched.iter().any(|p| p.name == profile.name)
+                    {
+                        matched.push(profile);
                     }
                 }
             }
+        }
     }
 
     // Always include generic fallback.

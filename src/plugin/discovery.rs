@@ -56,27 +56,28 @@ pub fn discover_plugins(root: &Path) -> Vec<DiscoveredPlugin> {
 
     // Auto-discover from directory.
     if plugins_dir.is_dir()
-        && let Ok(entries) = std::fs::read_dir(&plugins_dir) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if let Some(name) = path.file_name().map(|n| n.to_string_lossy().to_string()) {
-                    if name.starts_with('.') || name.starts_with('_') {
-                        continue; // skip hidden/temp files
-                    }
-                    let kind = detect_plugin_kind(&path);
-                    plugins.push(DiscoveredPlugin {
-                        name,
-                        path,
-                        kind,
-                        enabled: true,
-                        override_all: false,
-                        hook_overrides: HashMap::new(),
-                        settings: toml::Value::Table(toml::map::Map::new()),
-                        languages: Vec::new(),
-                    });
+        && let Ok(entries) = std::fs::read_dir(&plugins_dir)
+    {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if let Some(name) = path.file_name().map(|n| n.to_string_lossy().to_string()) {
+                if name.starts_with('.') || name.starts_with('_') {
+                    continue; // skip hidden/temp files
                 }
+                let kind = detect_plugin_kind(&path);
+                plugins.push(DiscoveredPlugin {
+                    name,
+                    path,
+                    kind,
+                    enabled: true,
+                    override_all: false,
+                    hook_overrides: HashMap::new(),
+                    settings: toml::Value::Table(toml::map::Map::new()),
+                    languages: Vec::new(),
+                });
             }
         }
+    }
 
     // Merge config from .statico.toml.
     merge_config(root, &mut plugins);
@@ -94,18 +95,15 @@ fn detect_plugin_kind(path: &Path) -> PluginKind {
         if pkg_path.exists() {
             if let Ok(contents) = std::fs::read_to_string(&pkg_path)
                 && let Ok(pkg) = serde_json::from_str::<serde_json::Value>(&contents)
-                    && let Some(runtime) = pkg
-                        .get("statico")
-                        .and_then(|s| s.get("runtime"))
-                        .and_then(|r| r.as_str())
-                    {
-                        return match runtime {
-                            "python3" | "python" => PluginKind::Python,
-                            "bun" | "typescript" => PluginKind::TypeScript,
-                            "rust" | "cargo" => PluginKind::Rust,
-                            _ => PluginKind::Executable,
-                        };
-                    }
+                && let Some(runtime) = pkg.get("statico").and_then(|s| s.get("runtime")).and_then(|r| r.as_str())
+            {
+                return match runtime {
+                    "python3" | "python" => PluginKind::Python,
+                    "bun" | "typescript" => PluginKind::TypeScript,
+                    "rust" | "cargo" => PluginKind::Rust,
+                    _ => PluginKind::Executable,
+                };
+            }
             // Default: package.json without statico.runtime = TypeScript
             PluginKind::TypeScript
         } else if path.join("Cargo.toml").exists() {
@@ -174,8 +172,7 @@ fn merge_config(root: &Path, plugins: &mut Vec<DiscoveredPlugin>) {
                 existing.kind = detect_plugin_kind(&existing.path);
             }
             if let Some(langs) = pc.get("languages").and_then(|v| v.as_array()) {
-                existing.languages =
-                    langs.iter().filter_map(|v| v.as_str().map(String::from)).collect();
+                existing.languages = langs.iter().filter_map(|v| v.as_str().map(String::from)).collect();
             }
             if let Some(settings) = pc.get("settings") {
                 existing.settings = settings.clone();
@@ -199,10 +196,7 @@ fn merge_config(root: &Path, plugins: &mut Vec<DiscoveredPlugin>) {
                 enabled: pc.get("enabled").and_then(|v| v.as_bool()).unwrap_or(true),
                 override_all: pc.get("override").and_then(|v| v.as_bool()).unwrap_or(false),
                 hook_overrides: HashMap::new(),
-                settings: pc
-                    .get("settings")
-                    .cloned()
-                    .unwrap_or(toml::Value::Table(toml::map::Map::new())),
+                settings: pc.get("settings").cloned().unwrap_or(toml::Value::Table(toml::map::Map::new())),
                 languages: pc
                     .get("languages")
                     .and_then(|v| v.as_array())
@@ -216,9 +210,7 @@ fn merge_config(root: &Path, plugins: &mut Vec<DiscoveredPlugin>) {
 /// Check for override conflicts among initialized plugins.
 ///
 /// Returns `Err` with a description if two plugins override the same hook.
-pub fn validate_overrides(
-    initialized: &[(String, crate::plugin::protocol::PluginCapabilities)],
-) -> Result<(), String> {
+pub fn validate_overrides(initialized: &[(String, crate::plugin::protocol::PluginCapabilities)]) -> Result<(), String> {
     let mut override_map: HashMap<HookName, String> = HashMap::new();
     for (name, caps) in initialized {
         for (hook, mode) in &caps.hooks {
@@ -228,10 +220,7 @@ pub fn validate_overrides(
                         "Plugin conflict: '{}' and '{}' both override hook '{}'",
                         other,
                         name,
-                        serde_json::to_value(hook)
-                            .ok()
-                            .and_then(|v| v.as_str().map(String::from))
-                            .unwrap_or_default()
+                        serde_json::to_value(hook).ok().and_then(|v| v.as_str().map(String::from)).unwrap_or_default()
                     ));
                 }
                 override_map.insert(hook.clone(), name.clone());
@@ -428,13 +417,15 @@ path = "../../usr/bin/malicious"
         // Plugin should be present but path should be within project
         if let Some(p) = plugins.first() {
             let path_str = p.path.to_string_lossy();
-            assert!(!path_str.contains("../../"),
-                "plugin path should not contain traversal: {}", path_str);
+            assert!(!path_str.contains("../../"), "plugin path should not contain traversal: {}", path_str);
             // Path must be within the project
             let canonical_root = std::fs::canonicalize(&tmp).unwrap_or_else(|_| tmp.clone());
             if let Ok(canonical_path) = std::fs::canonicalize(&p.path) {
-                assert!(canonical_path.starts_with(&canonical_root),
-                    "plugin path escapes project root: {:?}", canonical_path);
+                assert!(
+                    canonical_path.starts_with(&canonical_root),
+                    "plugin path escapes project root: {:?}",
+                    canonical_path
+                );
             }
         }
         let _ = std::fs::remove_dir_all(&tmp);
@@ -450,8 +441,11 @@ path = "../../usr/bin/malicious"
         make_executable(&plugins_dir.join("valid-plugin"));
         let plugins = discover_plugins(&tmp);
         let names: Vec<&str> = plugins.iter().map(|p| p.name.as_str()).collect();
-        assert!(!names.iter().any(|n| n.starts_with('.') || n.starts_with('_')),
-            "hidden/temp plugins should be skipped: {:?}", names);
+        assert!(
+            !names.iter().any(|n| n.starts_with('.') || n.starts_with('_')),
+            "hidden/temp plugins should be skipped: {:?}",
+            names
+        );
         assert!(names.contains(&"valid-plugin"));
         let _ = std::fs::remove_dir_all(&tmp);
     }

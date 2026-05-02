@@ -145,11 +145,10 @@ fn fix_unused_exports(root: &Path, output: &AnalysisOutput, apply: bool, report:
             continue;
         }
 
-        if apply
-            && let Err(e) = atomic_write(&abs, &new_source) {
-                report.write_errors += 1;
-                eprintln!("error: failed to write {}: {}", abs.display(), e);
-            }
+        if apply && let Err(e) = atomic_write(&abs, &new_source) {
+            report.write_errors += 1;
+            eprintln!("error: failed to write {}: {}", abs.display(), e);
+        }
     }
 }
 
@@ -214,10 +213,7 @@ fn fix_unused_deps(root: &Path, output: &AnalysisOutput, apply: bool, report: &m
         Ok(v) => v,
         Err(e) => {
             for issue in &output.issues.unused_dependencies {
-                report.deps_skipped.push(format!(
-                    "{} — could not parse package.json ({})",
-                    issue.package_name, e
-                ));
+                report.deps_skipped.push(format!("{} — could not parse package.json ({})", issue.package_name, e));
             }
             return;
         }
@@ -228,13 +224,7 @@ fn fix_unused_deps(root: &Path, output: &AnalysisOutput, apply: bool, report: &m
         // Try the section the analyzer told us about first; fall back to
         // the standard set in case the analyzer reports a non-canonical name.
         let primary = issue.location.as_str();
-        let candidates = [
-            primary,
-            "dependencies",
-            "devDependencies",
-            "peerDependencies",
-            "optionalDependencies",
-        ];
+        let candidates = [primary, "dependencies", "devDependencies", "peerDependencies", "optionalDependencies"];
         let removed = candidates.iter().any(|section| {
             json.get_mut(section)
                 .and_then(|v| v.as_object_mut())
@@ -245,9 +235,7 @@ fn fix_unused_deps(root: &Path, output: &AnalysisOutput, apply: bool, report: &m
             applied_here += 1;
             report.deps_applied += 1;
         } else {
-            report
-                .deps_skipped
-                .push(format!("{} — not found in any dependencies section", issue.package_name));
+            report.deps_skipped.push(format!("{} — not found in any dependencies section", issue.package_name));
         }
     }
 
@@ -280,17 +268,11 @@ fn atomic_write(path: &Path, contents: &str) -> std::io::Result<()> {
 fn print_report(report: &FixReport, apply: bool) {
     let verb = if apply { "removed" } else { "would remove" };
     println!("statico fix:");
-    println!(
-        "  unused exports: {} {}, {} skipped",
-        report.exports_applied, verb, report.exports_skipped.len()
-    );
+    println!("  unused exports: {} {}, {} skipped", report.exports_applied, verb, report.exports_skipped.len());
     for s in &report.exports_skipped {
         println!("    skipped {}::{} — {}", s.path, s.name, s.reason);
     }
-    println!(
-        "  unused deps:    {} {}, {} skipped",
-        report.deps_applied, verb, report.deps_skipped.len()
-    );
+    println!("  unused deps:    {} {}, {} skipped", report.deps_applied, verb, report.deps_skipped.len());
     for s in &report.deps_skipped {
         println!("    skipped {}", s);
     }
@@ -384,9 +366,6 @@ mod tests {
     fn strip_export_preserves_other_lines() {
         let source = "import { foo } from './x';\nexport const Bar = 1;\nexport const Other = 2;\n";
         let after = try_strip_export(source, "Bar").unwrap();
-        assert_eq!(
-            after,
-            "import { foo } from './x';\nconst Bar = 1;\nexport const Other = 2;\n"
-        );
+        assert_eq!(after, "import { foo } from './x';\nconst Bar = 1;\nexport const Other = 2;\n");
     }
 }

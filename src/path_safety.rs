@@ -3,9 +3,7 @@
 pub fn ensure_within_root(path: &std::path::Path, root: &std::path::Path) -> Result<(), String> {
     // Try canonicalize first (works for existing paths, resolves symlinks).
     // Fall back to lexical normalization for non-existent paths.
-    if let (Ok(canonical), Ok(canonical_root)) =
-        (std::fs::canonicalize(path), std::fs::canonicalize(root))
-    {
+    if let (Ok(canonical), Ok(canonical_root)) = (std::fs::canonicalize(path), std::fs::canonicalize(root)) {
         if !canonical.starts_with(&canonical_root) {
             return Err(format!("path '{}' escapes project root", path.display()));
         }
@@ -22,20 +20,14 @@ pub fn ensure_within_root(path: &std::path::Path, root: &std::path::Path) -> Res
             std::path::Component::ParentDir => {
                 depth -= 1;
                 if depth < 0 {
-                    return Err(format!(
-                        "path '{}' escapes project root",
-                        path.display()
-                    ));
+                    return Err(format!("path '{}' escapes project root", path.display()));
                 }
             }
             std::path::Component::Normal(_) => depth += 1,
             std::path::Component::RootDir => {
                 // Absolute path that isn't under root — only ok if path == root.
                 if path != root {
-                    return Err(format!(
-                        "path '{}' is absolute outside project root",
-                        path.display()
-                    ));
+                    return Err(format!("path '{}' is absolute outside project root", path.display()));
                 }
             }
             std::path::Component::CurDir => {

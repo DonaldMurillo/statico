@@ -16,10 +16,11 @@ fn main() {
     for entry in walkdir::WalkDir::new("src").into_iter().filter_map(|e| e.ok()) {
         let path = entry.path();
         if path.extension().and_then(|e| e.to_str()) == Some("rs")
-            && let Ok(content) = std::fs::read_to_string(path) {
-                let rel = path.to_string_lossy().to_string();
-                file_sources.push((rel, content));
-            }
+            && let Ok(content) = std::fs::read_to_string(path)
+        {
+            let rel = path.to_string_lossy().to_string();
+            file_sources.push((rel, content));
+        }
     }
     println!("Loaded {} source files", file_sources.len());
 

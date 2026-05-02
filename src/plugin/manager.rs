@@ -74,14 +74,7 @@ impl ActivePlugin {
 
         let caps: PluginCapabilities = active.send_request("init", &init_params)?;
         let caps = if plugin.override_all {
-            PluginCapabilities {
-                hooks: caps
-                    .hooks
-                    .into_keys()
-                    .map(|k| (k, HookMode::Override))
-                    .collect(),
-                ..caps
-            }
+            PluginCapabilities { hooks: caps.hooks.into_keys().map(|k| (k, HookMode::Override)).collect(), ..caps }
         } else {
             caps
         };
@@ -111,16 +104,11 @@ impl ActivePlugin {
             params: serde_json::to_value(params).unwrap_or(serde_json::Value::Null),
         };
 
-        let mut line =
-            serde_json::to_string(&request).map_err(|e| format!("Serialize error: {}", e))?;
+        let mut line = serde_json::to_string(&request).map_err(|e| format!("Serialize error: {}", e))?;
         line.push('\n');
 
-        self.stdin
-            .write_all(line.as_bytes())
-            .map_err(|e| format!("Write error to plugin '{}': {}", self.name, e))?;
-        self.stdin
-            .flush()
-            .map_err(|e| format!("Flush error to plugin '{}': {}", self.name, e))?;
+        self.stdin.write_all(line.as_bytes()).map_err(|e| format!("Write error to plugin '{}': {}", self.name, e))?;
+        self.stdin.flush().map_err(|e| format!("Flush error to plugin '{}': {}", self.name, e))?;
 
         // Take stdout and move to a read thread for bounded + timed read.
         let mut stdout = self.stdout.take().expect("stdout already taken (concurrent send_request?)");
@@ -138,8 +126,7 @@ impl ActivePlugin {
                 // Recover stdout from thread
                 self.stdout = Some(read_thread.join().expect("plugin read thread panicked"));
 
-                let bytes_read = read_result
-                    .map_err(|e| format!("Read error from plugin '{}': {}", name, e))?;
+                let bytes_read = read_result.map_err(|e| format!("Read error from plugin '{}': {}", name, e))?;
                 if bytes_read == 0 && response_line.is_empty() {
                     return Err(format!("Plugin '{}' returned empty response (EOF)", name));
                 }
@@ -151,15 +138,9 @@ impl ActivePlugin {
             }
             Err(mpsc::RecvTimeoutError::Timeout) => {
                 let _ = self.process.kill();
-                Err(format!(
-                    "Plugin '{}' timed out waiting for response (>{}s)",
-                    name,
-                    RESPONSE_TIMEOUT.as_secs()
-                ))
+                Err(format!("Plugin '{}' timed out waiting for response (>{}s)", name, RESPONSE_TIMEOUT.as_secs()))
             }
-            Err(mpsc::RecvTimeoutError::Disconnected) => {
-                Err(format!("Plugin '{}' reader thread panicked", name))
-            }
+            Err(mpsc::RecvTimeoutError::Disconnected) => Err(format!("Plugin '{}' reader thread panicked", name)),
         }
     }
 
@@ -167,12 +148,7 @@ impl ActivePlugin {
     pub fn shutdown(&mut self) -> Result<(), String> {
         let id = self.next_id;
         self.next_id += 1;
-        let request = Request {
-            jsonrpc: "2.0",
-            id,
-            method: "shutdown".to_string(),
-            params: serde_json::Value::Null,
-        };
+        let request = Request { jsonrpc: "2.0", id, method: "shutdown".to_string(), params: serde_json::Value::Null };
         if let Ok(mut line) = serde_json::to_string(&request) {
             line.push('\n');
             let _ = self.stdin.write_all(line.as_bytes());
@@ -195,11 +171,7 @@ impl ActivePlugin {
 }
 
 /// Parse a JSON-RPC response, truncating raw output in error messages (F-05).
-fn parse_response<R: serde::de::DeserializeOwned>(
-    name: &str,
-    expected_id: u64,
-    raw: &str,
-) -> Result<R, String> {
+fn parse_response<R: serde::de::DeserializeOwned>(name: &str, expected_id: u64, raw: &str) -> Result<R, String> {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
         return Err(format!("Plugin '{}' returned empty response", name));
@@ -209,27 +181,14 @@ fn parse_response<R: serde::de::DeserializeOwned>(
 
     if let Ok(resp) = serde_json::from_str::<GenericResponse>(trimmed) {
         if resp.id != expected_id {
-            return Err(format!(
-                "Plugin '{}' response id mismatch: expected {}, got {}",
-                name, expected_id, resp.id
-            ));
+            return Err(format!("Plugin '{}' response id mismatch: expected {}, got {}", name, expected_id, resp.id));
         }
-        serde_json::from_value(resp.result).map_err(|e| {
-            format!(
-                "Plugin '{}' response deserialization error: {} — raw: {}…",
-                name, e, truncated
-            )
-        })
+        serde_json::from_value(resp.result)
+            .map_err(|e| format!("Plugin '{}' response deserialization error: {} — raw: {}…", name, e, truncated))
     } else if let Ok(err_resp) = serde_json::from_str::<ErrorResponse>(trimmed) {
-        Err(format!(
-            "Plugin '{}' error: [{}] {}",
-            name, err_resp.error.code, err_resp.error.message
-        ))
+        Err(format!("Plugin '{}' error: [{}] {}", name, err_resp.error.code, err_resp.error.message))
     } else {
-        Err(format!(
-            "Plugin '{}' sent invalid JSON-RPC: {}…",
-            name, truncated
-        ))
+        Err(format!("Plugin '{}' sent invalid JSON-RPC: {}…", name, truncated))
     }
 }
 
@@ -258,25 +217,18 @@ fn build_command(plugin: &DiscoveredPlugin) -> Result<(String, Vec<String>), Str
     match plugin.kind {
         PluginKind::Executable => {
             if !plugin.path.exists() {
-                return Err(format!(
-                    "Plugin executable not found: {}",
-                    plugin.path.display()
-                ));
+                return Err(format!("Plugin executable not found: {}", plugin.path.display()));
             }
             Ok((plugin.path.to_string_lossy().to_string(), vec![]))
         }
         PluginKind::TypeScript => {
             let entry = find_ts_entry(&plugin.path)?;
-            let bun = crate::plugin::runtime::ensure_bun()
-                .map_err(|e| format!("Bun runtime unavailable: {}", e))?;
+            let bun = crate::plugin::runtime::ensure_bun().map_err(|e| format!("Bun runtime unavailable: {}", e))?;
             Ok((bun.to_string_lossy().to_string(), vec![entry]))
         }
         PluginKind::Rust => {
-            let name = plugin
-                .path
-                .file_name()
-                .ok_or_else(|| "Plugin path has no file name".to_string())?
-                .to_string_lossy();
+            let name =
+                plugin.path.file_name().ok_or_else(|| "Plugin path has no file name".to_string())?.to_string_lossy();
             let binary = plugin.path.join("target/release").join(name.as_ref());
             if binary.exists() {
                 Ok((binary.to_string_lossy().to_string(), vec![]))
@@ -302,10 +254,7 @@ fn find_ts_entry(dir: &Path) -> Result<String, String> {
             return Ok(candidate.to_string_lossy().to_string());
         }
     }
-    Err(format!(
-        "No TypeScript entry point found in {}",
-        dir.display()
-    ))
+    Err(format!("No TypeScript entry point found in {}", dir.display()))
 }
 
 /// Find the Python entry point in a plugin directory.
@@ -313,59 +262,51 @@ fn find_python_entry(dir: &Path) -> Result<String, String> {
     let pkg_path = dir.join("package.json");
     if pkg_path.exists()
         && let Ok(contents) = std::fs::read_to_string(&pkg_path)
-            && let Ok(pkg) = serde_json::from_str::<serde_json::Value>(&contents)
-                && let Some(entry) = pkg
-                    .get("statico")
-                    .and_then(|s| s.get("entry"))
-                    .and_then(|e| e.as_str())
-                {
-                    // Reject absolute paths and traversal sequences.
-                    if entry.starts_with('/') || entry.contains("..") {
-                        return Err(format!("entry path '{}' contains unsafe components", entry));
-                    }
-                    let candidate = dir.join(entry);
-                    // Verify entry path stays within plugin directory (F-04).
-                    // Use canonicalize for existing paths, lexical check otherwise.
-                    if let (Ok(canonical), Ok(canonical_dir)) =
-                        (std::fs::canonicalize(&candidate), std::fs::canonicalize(dir))
-                    {
-                        if !canonical.starts_with(&canonical_dir) {
+        && let Ok(pkg) = serde_json::from_str::<serde_json::Value>(&contents)
+        && let Some(entry) = pkg.get("statico").and_then(|s| s.get("entry")).and_then(|e| e.as_str())
+    {
+        // Reject absolute paths and traversal sequences.
+        if entry.starts_with('/') || entry.contains("..") {
+            return Err(format!("entry path '{}' contains unsafe components", entry));
+        }
+        let candidate = dir.join(entry);
+        // Verify entry path stays within plugin directory (F-04).
+        // Use canonicalize for existing paths, lexical check otherwise.
+        if let (Ok(canonical), Ok(canonical_dir)) = (std::fs::canonicalize(&candidate), std::fs::canonicalize(dir)) {
+            if !canonical.starts_with(&canonical_dir) {
+                return Err(format!("entry path '{}' escapes plugin directory", entry));
+            }
+        } else {
+            // Lexical fallback: normalize and check.
+            let normalized = candidate.clone();
+            let mut depth = 0i32;
+            for comp in normalized.components() {
+                match comp {
+                    std::path::Component::ParentDir => {
+                        depth -= 1;
+                        if depth < 0 {
                             return Err(format!("entry path '{}' escapes plugin directory", entry));
                         }
-                    } else {
-                        // Lexical fallback: normalize and check.
-                        let normalized = candidate.clone();
-                        let mut depth = 0i32;
-                        for comp in normalized.components() {
-                            match comp {
-                                std::path::Component::ParentDir => {
-                                    depth -= 1;
-                                    if depth < 0 {
-                                        return Err(format!("entry path '{}' escapes plugin directory", entry));
-                                    }
-                                }
-                                std::path::Component::Normal(_) => depth += 1,
-                                std::path::Component::RootDir => {
-                                    return Err(format!("entry path '{}' is absolute", entry));
-                                }
-                                std::path::Component::CurDir | std::path::Component::Prefix(_) => {}
-                            }
-                        }
                     }
-                    if candidate.exists() {
-                        return Ok(candidate.to_string_lossy().to_string());
+                    std::path::Component::Normal(_) => depth += 1,
+                    std::path::Component::RootDir => {
+                        return Err(format!("entry path '{}' is absolute", entry));
                     }
+                    std::path::Component::CurDir | std::path::Component::Prefix(_) => {}
                 }
+            }
+        }
+        if candidate.exists() {
+            return Ok(candidate.to_string_lossy().to_string());
+        }
+    }
     for name in &["plugin.py", "main.py", "index.py", "src/main.py"] {
         let candidate = dir.join(name);
         if candidate.exists() {
             return Ok(candidate.to_string_lossy().to_string());
         }
     }
-    Err(format!(
-        "No Python entry point found in {}",
-        dir.display()
-    ))
+    Err(format!("No Python entry point found in {}", dir.display()))
 }
 
 /// Maximum size of plugin settings JSON (64 KB) — prevents OOM from malicious config.
@@ -390,18 +331,16 @@ fn toml_to_json_value_depth(val: &toml::Value, depth: usize) -> Result<serde_jso
             serde_json::Value::String(s.clone())
         }
         toml::Value::Integer(i) => serde_json::Value::Number((*i).into()),
-        toml::Value::Float(f) => serde_json::Number::from_f64(*f)
-            .map(serde_json::Value::Number)
-            .unwrap_or(serde_json::Value::Null),
+        toml::Value::Float(f) => {
+            serde_json::Number::from_f64(*f).map(serde_json::Value::Number).unwrap_or(serde_json::Value::Null)
+        }
         toml::Value::Boolean(b) => serde_json::Value::Bool(*b),
         toml::Value::Array(arr) => {
             if arr.len() > 1000 {
                 return Err("plugin settings array too large (max 1000 elements)".into());
             }
             serde_json::Value::Array(
-                arr.iter()
-                    .map(|v| toml_to_json_value_depth(v, depth + 1))
-                    .collect::<Result<_, _>>()?
+                arr.iter().map(|v| toml_to_json_value_depth(v, depth + 1)).collect::<Result<_, _>>()?,
             )
         }
         toml::Value::Table(tbl) => {
@@ -411,7 +350,7 @@ fn toml_to_json_value_depth(val: &toml::Value, depth: usize) -> Result<serde_jso
             serde_json::Value::Object(
                 tbl.iter()
                     .map(|(k, v)| Ok((k.clone(), toml_to_json_value_depth(v, depth + 1)?)))
-                    .collect::<Result<_, String>>()?
+                    .collect::<Result<_, String>>()?,
             )
         }
         toml::Value::Datetime(dt) => serde_json::Value::String(dt.to_string()),
@@ -483,10 +422,7 @@ done
             languages: Vec::new(),
         };
         let mut plugin = ActivePlugin::spawn(&discovered, tmp.path()).unwrap();
-        assert_eq!(
-            plugin.hook_mode(&HookName::AnalyzeFile),
-            Some(&HookMode::Override)
-        );
+        assert_eq!(plugin.hook_mode(&HookName::AnalyzeFile), Some(&HookMode::Override));
         plugin.shutdown().ok();
     }
 
@@ -524,15 +460,15 @@ done
         let dir = tmp.path().join("evil-plugin");
         std::fs::create_dir_all(&dir).unwrap();
         // Create package.json with entry pointing outside
-        std::fs::write(
-            dir.join("package.json"),
-            r#"{"statico":{"entry":"../../etc/passwd"}}"#, 
-        ).unwrap();
+        std::fs::write(dir.join("package.json"), r#"{"statico":{"entry":"../../etc/passwd"}}"#).unwrap();
         let result = find_python_entry(&dir);
         assert!(result.is_err(), "should reject .. in entry path, got: {:?}", result);
         let err = result.unwrap_err();
-        assert!(err.contains("unsafe") || err.contains("traversal") || err.contains("escapes"),
-            "error should mention unsafe/traversal/escape: {}", err);
+        assert!(
+            err.contains("unsafe") || err.contains("traversal") || err.contains("escapes"),
+            "error should mention unsafe/traversal/escape: {}",
+            err
+        );
     }
 
     #[test]
@@ -540,10 +476,7 @@ done
         let tmp = tempfile::tempdir().unwrap();
         let dir = tmp.path().join("abs-plugin");
         std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(
-            dir.join("package.json"),
-            r#"{"statico":{"entry":"/etc/passwd"}}"#, 
-        ).unwrap();
+        std::fs::write(dir.join("package.json"), r#"{"statico":{"entry":"/etc/passwd"}}"#).unwrap();
         let result = find_python_entry(&dir);
         assert!(result.is_err(), "should reject absolute entry path, got: {:?}", result);
     }

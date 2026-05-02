@@ -9,19 +9,14 @@ use serde_json::{Value, json};
 /// Sanitize a file path for use as a SARIF artifactLocation URI.
 /// Removes control characters and normalizes backslashes to forward slashes.
 fn sanitize_uri(path: &str) -> String {
-    path.chars()
-        .filter(|c| !c.is_control())
-        .collect::<String>()
-        .replace('\\', "/")
+    path.chars().filter(|c| !c.is_control()).collect::<String>().replace('\\', "/")
 }
 
 /// Sanitize a message string for SARIF message.text fields.
 /// Strips control characters (except common whitespace) to prevent
 /// injection of misleading content via file paths and names.
 fn sanitize_message(s: &str) -> String {
-    s.chars()
-        .map(|c| if c.is_control() { ' ' } else { c })
-        .collect()
+    s.chars().map(|c| if c.is_control() { ' ' } else { c }).collect()
 }
 
 /// SARIF 2.1.0 formatter.
@@ -283,11 +278,15 @@ mod tests {
             },
             duplication: DuplicationSection {
                 stats: DuplicationStats {
-                    total_lines: 0, duplicated_lines: 0,
-                    duplication_percentage: 0.0, clone_groups: 0,
-                    clone_instances: 0, clone_families: 0,
+                    total_lines: 0,
+                    duplicated_lines: 0,
+                    duplication_percentage: 0.0,
+                    clone_groups: 0,
+                    clone_instances: 0,
+                    clone_families: 0,
                 },
-                clone_groups: vec![], clone_families: vec![],
+                clone_groups: vec![],
+                clone_families: vec![],
                 mirrored_directories: vec![],
                 repetitive_patterns: vec![],
             },
@@ -301,8 +300,7 @@ mod tests {
         let json = formatter.format(&output).unwrap();
         let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
         let results = parsed["runs"][0]["results"].as_array().unwrap();
-        let uri = results[0]["locations"][0]["physicalLocation"]["artifactLocation"]["uri"]
-            .as_str().unwrap();
+        let uri = results[0]["locations"][0]["physicalLocation"]["artifactLocation"]["uri"].as_str().unwrap();
         assert!(!uri.contains('\r'), "SARIF URI should not contain CR: {}", uri);
         assert!(!uri.contains('\n'), "SARIF URI should not contain LF: {}", uri);
     }
@@ -322,9 +320,10 @@ mod tests {
             snippet: "".into(),
         });
         // Inject control chars into circular dep
-        output.issues.circular_dependencies.push(crate::types::CircularDepIssue {
-            files: vec!["src/a\nts".into(), "src/b.ts".into()],
-        });
+        output
+            .issues
+            .circular_dependencies
+            .push(crate::types::CircularDepIssue { files: vec!["src/a\nts".into(), "src/b.ts".into()] });
         let formatter = SarifFormatter;
         let json = formatter.format(&output).unwrap();
         let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
@@ -338,6 +337,10 @@ mod tests {
         // Find the circular dep result
         let circ = results.iter().find(|r| r["ruleId"] == "circular_dependency").unwrap();
         let circ_msg = circ["message"]["text"].as_str().unwrap();
-        assert!(!circ_msg.contains('\n'), "LF should be replaced with space in circular dep message, got: {:?}", circ_msg);
+        assert!(
+            !circ_msg.contains('\n'),
+            "LF should be replaced with space in circular dep message, got: {:?}",
+            circ_msg
+        );
     }
 }

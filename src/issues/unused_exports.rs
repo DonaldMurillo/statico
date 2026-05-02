@@ -233,8 +233,9 @@ fn detect_barrel_files(file_sources: &[(String, String)]) -> HashSet<String> {
         //   - It's 100% re-exports with at least 1 re-export (catches icon wrappers), OR
         //   - It's an index file with >60% re-exports, OR
         //   - It's a non-index file with >30% re-exports AND ≥3 re-export stmts
-        let is_barrel =
-            (ratio >= 1.0 && reexport_stmts >= 1) || (is_index && ratio > 0.6) || (!is_index && ratio > 0.3 && reexport_stmts >= 3);
+        let is_barrel = (ratio >= 1.0 && reexport_stmts >= 1)
+            || (is_index && ratio > 0.6)
+            || (!is_index && ratio > 0.3 && reexport_stmts >= 3);
         if is_barrel {
             barrels.insert(path.clone());
         }

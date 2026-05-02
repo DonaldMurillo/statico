@@ -185,7 +185,7 @@ impl Drop for IncrementalCache {
 
 /// Compute a fast hash of file contents (SHA-256 for collision resistance).
 pub fn content_hash(content: &str) -> String {
-    use sha2::{Sha256, Digest};
+    use sha2::{Digest, Sha256};
     let mut hasher = Sha256::new();
     hasher.update(content.as_bytes());
     let result = hasher.finalize();
@@ -219,9 +219,7 @@ pub fn ensure_gitignore(project_root: &Path) {
                 return false;
             }
             // Match with or without leading slash and trailing slash variants.
-            let strip_slashes = |p: &str| -> String {
-                p.trim_start_matches('/').trim_end_matches('/').to_string()
-            };
+            let strip_slashes = |p: &str| -> String { p.trim_start_matches('/').trim_end_matches('/').to_string() };
             strip_slashes(trimmed) == strip_slashes(needle)
         })
     };
@@ -336,11 +334,9 @@ mod tests {
         let index_path = cache_dir.join("index.json");
         assert!(index_path.exists(), "index.json should exist after save at {:?}", index_path);
         let content = fs::read_to_string(&index_path).unwrap();
-        assert!(serde_json::from_str::<serde_json::Value>(&content).is_ok(),
-            "index.json should be valid JSON");
+        assert!(serde_json::from_str::<serde_json::Value>(&content).is_ok(), "index.json should be valid JSON");
         // No temp file should be left
-        assert!(!cache_dir.join("index.json.tmp").exists(),
-            "index.json.tmp should not exist after atomic save");
+        assert!(!cache_dir.join("index.json.tmp").exists(), "index.json.tmp should not exist after atomic save");
         let _ = fs::remove_dir_all(&dir);
     }
 
@@ -360,8 +356,11 @@ mod tests {
         // ensure_gitignore should NOT modify a symlinked .gitignore
         ensure_gitignore(&dir);
         let contents = fs::read_to_string(&target).unwrap();
-        assert!(!contents.contains(".statico"),
-            "ensure_gitignore should not modify a symlinked .gitignore; contents: {}", contents);
+        assert!(
+            !contents.contains(".statico"),
+            "ensure_gitignore should not modify a symlinked .gitignore; contents: {}",
+            contents
+        );
         let _ = fs::remove_dir_all(&dir);
     }
 
@@ -376,8 +375,7 @@ mod tests {
             ("test file 1", "test file 2"),
         ];
         for (a, b) in inputs {
-            assert_ne!(content_hash(a), content_hash(b),
-                "SHA-256 should not collide on '{}' vs '{}'", a, b);
+            assert_ne!(content_hash(a), content_hash(b), "SHA-256 should not collide on '{}' vs '{}'", a, b);
         }
     }
 
@@ -399,8 +397,7 @@ mod tests {
                 use std::os::unix::fs::PermissionsExt;
                 let mode = fs::metadata(&cache_file).unwrap().permissions().mode();
                 let others_perm = mode & 0o007;
-                assert_eq!(others_perm, 0,
-                    "Cache file should not be world-readable: mode={:o}", mode);
+                assert_eq!(others_perm, 0, "Cache file should not be world-readable: mode={:o}", mode);
             }
         }
         let _ = fs::remove_dir_all(&dir);
@@ -417,13 +414,21 @@ mod tests {
         fs::write(dir.join(".gitignore"), "# statico is a great tool\nnode_modules/\n").unwrap();
         ensure_gitignore(&dir);
         let contents = fs::read_to_string(dir.join(".gitignore")).unwrap();
-        assert!(contents.contains(".statico/cache/"),
-            "ensure_gitignore should add .statico/cache/ when comment mentions statico, got:\n{}", contents);
-        assert!(contents.contains(".statico/runtimes/"),
-            "ensure_gitignore should add .statico/runtimes/ when comment mentions statico, got:\n{}", contents);
+        assert!(
+            contents.contains(".statico/cache/"),
+            "ensure_gitignore should add .statico/cache/ when comment mentions statico, got:\n{}",
+            contents
+        );
+        assert!(
+            contents.contains(".statico/runtimes/"),
+            "ensure_gitignore should add .statico/runtimes/ when comment mentions statico, got:\n{}",
+            contents
+        );
         // Must NOT add a blanket `.statico/` — that would ignore plugins too.
-        assert!(!contents.lines().any(|l| l.trim() == ".statico/"),
-            "ensure_gitignore must not add blanket .statico/ — plugins must stay trackable");
+        assert!(
+            !contents.lines().any(|l| l.trim() == ".statico/"),
+            "ensure_gitignore must not add blanket .statico/ — plugins must stay trackable"
+        );
         let _ = fs::remove_dir_all(&dir);
     }
 
@@ -432,11 +437,7 @@ mod tests {
         let dir = std::env::temp_dir().join("statico_sec_gitignore_granular_exists");
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
-        fs::write(
-            dir.join(".gitignore"),
-            ".statico/cache/\n.statico/runtimes/\nnode_modules/\n",
-        )
-        .unwrap();
+        fs::write(dir.join(".gitignore"), ".statico/cache/\n.statico/runtimes/\nnode_modules/\n").unwrap();
         ensure_gitignore(&dir);
         let contents = fs::read_to_string(dir.join(".gitignore")).unwrap();
         // Each pattern should appear exactly once.
@@ -470,9 +471,13 @@ mod tests {
         ensure_gitignore(&dir);
         let contents = fs::read_to_string(dir.join(".gitignore")).unwrap_or_default();
         // No standalone `.statico/` pattern that would shadow plugins.
-        assert!(!contents.lines().any(|l| {
-            let t = l.trim();
-            t == ".statico/" || t == ".statico"
-        }), "blanket .statico ignore would hide plugins, got:\n{}", contents);
+        assert!(
+            !contents.lines().any(|l| {
+                let t = l.trim();
+                t == ".statico/" || t == ".statico"
+            }),
+            "blanket .statico ignore would hide plugins, got:\n{}",
+            contents
+        );
     }
 }

@@ -176,10 +176,7 @@ pub fn run_plugin_init(name: &str, lang: &str, path: &str) {
     // Validate plugin name: only alphanumeric, hyphens, underscores.
     let valid = name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
     if !valid || name.is_empty() {
-        eprintln!(
-            "Error: invalid plugin name '{}'. Must match ^[a-zA-Z0-9_-]+$",
-            name
-        );
+        eprintln!("Error: invalid plugin name '{}'. Must match ^[a-zA-Z0-9_-]+$", name);
         process::exit(1);
     }
 
@@ -224,7 +221,8 @@ fn scaffold_typescript_plugin(name: &str, dir: &std::path::Path) {
             }
         }))
         .unwrap(),
-    ).unwrap();
+    )
+    .unwrap();
 
     std::fs::write(
         dir.join("tsconfig.json"),
@@ -237,7 +235,8 @@ fn scaffold_typescript_plugin(name: &str, dir: &std::path::Path) {
   },
   "include": ["index.ts"]
 }"#,
-    ).unwrap();
+    )
+    .unwrap();
 
     std::fs::write(
         dir.join("index.ts"),
@@ -272,12 +271,14 @@ plugin.onAnalyzeFile((params) => {{
 plugin.start();
 "#
         ),
-    ).unwrap();
+    )
+    .unwrap();
 
     std::fs::write(
         dir.join("fixtures").join("sample.ts"),
         "// Test fixture for plugin development\nexport function hello() {\n  console.log('hello');\n}\n",
-    ).unwrap();
+    )
+    .unwrap();
 
     std::fs::write(
         dir.join("README.md"),
@@ -327,12 +328,14 @@ fn main() {{
 }}
 "#
         ),
-    ).unwrap();
+    )
+    .unwrap();
 
     std::fs::write(
         dir.join("fixtures").join("sample.rs"),
         "// Test fixture for plugin development\nfn main() {\n    println!(\"hello\");\n}\n",
-    ).unwrap();
+    )
+    .unwrap();
 
     std::fs::write(
         dir.join("README.md"),
@@ -363,7 +366,8 @@ fn scaffold_python_plugin(name: &str, dir: &std::path::Path) {
             }
         }))
         .unwrap(),
-    ).unwrap();
+    )
+    .unwrap();
 
     std::fs::write(
         dir.join("plugin.py"),
@@ -435,12 +439,14 @@ if __name__ == "__main__":
     main()
 "#
         ),
-    ).unwrap();
+    )
+    .unwrap();
 
     std::fs::write(
         dir.join("fixtures").join("sample.py"),
         "# Test fixture for plugin development\ndef hello():\n    pass\n",
-    ).unwrap();
+    )
+    .unwrap();
 
     std::fs::write(
         dir.join("README.md"),
@@ -500,11 +506,17 @@ pub fn run_plugin_build(name: Option<&str>, path: &str) {
                 }
             }
             statico::plugin::discovery::PluginKind::TypeScript => {
-                print!("TypeScript plugin '{}' (no build needed with Bun)... ", statico::strip_ansi::strip_ansi(&plugin.name));
+                print!(
+                    "TypeScript plugin '{}' (no build needed with Bun)... ",
+                    statico::strip_ansi::strip_ansi(&plugin.name)
+                );
                 println!("ok");
             }
             statico::plugin::discovery::PluginKind::Executable => {
-                println!("Skipping executable plugin '{}' (no build step)", statico::strip_ansi::strip_ansi(&plugin.name));
+                println!(
+                    "Skipping executable plugin '{}' (no build step)",
+                    statico::strip_ansi::strip_ansi(&plugin.name)
+                );
             }
             statico::plugin::discovery::PluginKind::Python => {
                 print!("Python plugin '{}' (no build needed)... ", statico::strip_ansi::strip_ansi(&plugin.name));
@@ -562,11 +574,7 @@ pub fn run_plugin_run(name: &str, file: &str, path: &str) {
         }
     };
 
-    let lang = std::path::Path::new(file)
-        .extension()
-        .and_then(|e| e.to_str())
-        .unwrap_or("unknown")
-        .to_string();
+    let lang = std::path::Path::new(file).extension().and_then(|e| e.to_str()).unwrap_or("unknown").to_string();
 
     let params = statico::plugin::protocol::AnalyzeFileParams {
         path: file.to_string(),
@@ -575,20 +583,25 @@ pub fn run_plugin_run(name: &str, file: &str, path: &str) {
         existing_issues: vec![],
     };
 
-    let result: statico::plugin::protocol::AnalyzeFileResult =
-        match active.send_request("analyze_file", &params) {
-            Ok(r) => r,
-            Err(e) => {
-                eprintln!("Error calling analyze_file: {}", e);
-                active.shutdown().ok();
-                process::exit(1);
-            }
-        };
+    let result: statico::plugin::protocol::AnalyzeFileResult = match active.send_request("analyze_file", &params) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("Error calling analyze_file: {}", e);
+            active.shutdown().ok();
+            process::exit(1);
+        }
+    };
 
     println!("\nResults:");
     println!("  Issues: {}", result.issues.len());
     for issue in &result.issues {
-        println!("    [{}] {} ({}:{})", issue.severity.as_ref(), statico::strip_ansi::strip_ansi(&issue.message), statico::strip_ansi::strip_ansi(&issue.file), issue.line);
+        println!(
+            "    [{}] {} ({}:{})",
+            issue.severity.as_ref(),
+            statico::strip_ansi::strip_ansi(&issue.message),
+            statico::strip_ansi::strip_ansi(&issue.file),
+            issue.line
+        );
     }
     println!("  Exports: {}", result.exports.len());
     for exp in &result.exports {
@@ -633,9 +646,10 @@ pub fn run_plugin_doctor(path: &str) {
     super::doctor::print_status(bun_label, bun_ok);
     if bun_ok
         && let Some(bun_path) = statico::plugin::runtime::find_bun()
-            && let Ok(ver) = statico::plugin::runtime::check_bun_version(&bun_path) {
-                println!("    version: {}", ver);
-            }
+        && let Ok(ver) = statico::plugin::runtime::check_bun_version(&bun_path)
+    {
+        println!("    version: {}", ver);
+    }
 
     let cargo_ok = super::doctor::which_exists("cargo");
     super::doctor::print_status("cargo (Rust plugins)", cargo_ok);
@@ -648,9 +662,7 @@ pub fn run_plugin_doctor(path: &str) {
     }
 
     // Check managed runtime dir.
-    let runtime_dir = dirs::home_dir()
-        .unwrap_or_default()
-        .join(".statico/runtimes");
+    let runtime_dir = dirs::home_dir().unwrap_or_default().join(".statico/runtimes");
     println!("\nRuntime directory: {}", runtime_dir.display());
     if runtime_dir.exists() {
         for e in std::fs::read_dir(&runtime_dir).unwrap_or_else(|_| panic!("read_dir")).flatten() {

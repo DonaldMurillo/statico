@@ -6,8 +6,8 @@ use crate::parse::AstParser;
 use crate::parse::blocks::CodeBlock;
 use crate::types::GotchaIssue;
 
-use super::{is_comment_line, is_test_file, truncate_line};
 use super::patterns::FileLanguage;
+use super::{is_comment_line, is_test_file, truncate_line};
 
 /// Run all AST-based gotcha checks on a single file.
 /// Only runs for JS/TS files — Rust files use a different parser.
