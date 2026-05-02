@@ -192,12 +192,17 @@ pub fn content_hash(content: &str) -> String {
     format!("{:x}", result)
 }
 
-/// Ensure `.statico/` is in the project's .gitignore.
-/// V-8: Refuses to modify .gitignore if it is a symlink (prevents corruption
-/// of linked files).
-/// V7-4: Checks for `.statico/` as a standalone gitignore pattern on its
-/// own line (not just a substring match), preventing false positives from
-/// comments like `# statico is great` or negation `!.statico`.
+/// Ensure the transient `.statico/` subdirs are in the project's .gitignore.
+///
+/// We deliberately ignore only `.statico/cache/` and `.statico/runtimes/`
+/// — *not* `.statico/` as a whole. `.statico/plugins/` is project content
+/// (user-authored plugins) and must stay trackable.
+///
+/// V-8: Refuses to modify .gitignore if it is a symlink (prevents
+/// corruption of linked files).
+/// V7-4: Checks for the patterns as standalone gitignore entries on
+/// their own line (not just substring matches), so comments like
+/// `# statico is great` don't suppress the real ignore entry.
 pub fn ensure_gitignore(project_root: &Path) {
     let gitignore_path = project_root.join(".gitignore");
     // V-8: Don't follow symlinks — could point to important system files
@@ -205,22 +210,46 @@ pub fn ensure_gitignore(project_root: &Path) {
         return;
     }
     let existing = fs::read_to_string(&gitignore_path).unwrap_or_default();
-    // V7-4: Check for `.statico` as a gitignore pattern (on its own line),
-    // not just as a substring. A comment like `# statico` or a negation like
-    // `!.statico` should not prevent us from adding the real ignore entry.
-    let has_statico_pattern = existing.lines().any(|line| {
-        let trimmed = line.trim();
-        // Skip comments and empty lines
-        if trimmed.is_empty() || trimmed.starts_with('#') {
-            return false;
+
+    // Helper: is this exact pattern present as a standalone, non-comment line?
+    let has_pattern = |needle: &str| -> bool {
+        existing.lines().any(|line| {
+            let trimmed = line.trim();
+            if trimmed.is_empty() || trimmed.starts_with('#') {
+                return false;
+            }
+            // Match with or without leading slash and trailing slash variants.
+            let strip_slashes = |p: &str| -> String {
+                p.trim_start_matches('/').trim_end_matches('/').to_string()
+            };
+            strip_slashes(trimmed) == strip_slashes(needle)
+        })
+    };
+
+    // If a too-broad legacy `.statico/` entry is already present we leave it
+    // alone — that's user-curated config and may be intentional. The
+    // `is_blanket_ignore` check below also short-circuits adding the
+    // granular entries in that case.
+    let is_blanket_ignore = has_pattern(".statico") || has_pattern(".statico/");
+    if is_blanket_ignore {
+        return;
+    }
+
+    let want_cache = !has_pattern(".statico/cache");
+    let want_runtimes = !has_pattern(".statico/runtimes");
+    if !want_cache && !want_runtimes {
+        return;
+    }
+
+    if let Ok(mut f) = fs::OpenOptions::new().create(true).append(true).open(&gitignore_path) {
+        let _ = writeln!(f, "\n# statico — cache + downloaded runtimes (regenerated on demand)");
+        if want_cache {
+            let _ = writeln!(f, ".statico/cache/");
         }
-        // Check if the pattern matches .statico (with or without trailing /)
-        trimmed == ".statico" || trimmed == ".statico/" || trimmed == "/.statico" || trimmed == "/.statico/"
-    });
-    if !has_statico_pattern
-        && let Ok(mut f) = fs::OpenOptions::new().create(true).append(true).open(&gitignore_path) {
-            let _ = writeln!(f, "\n# statico cache\n.statico/");
+        if want_runtimes {
+            let _ = writeln!(f, ".statico/runtimes/");
         }
+    }
 }
 
 #[cfg(test)]
@@ -379,32 +408,71 @@ mod tests {
 
     // ── V7-4: ensure_gitignore must detect real patterns, not substrings ──
     #[test]
-    fn sec_gitignore_adds_when_only_comment() {
+    fn sec_gitignore_adds_granular_when_only_comment() {
         let dir = std::env::temp_dir().join("statico_sec_gitignore_comment");
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         // A .gitignore with a comment mentioning statico should NOT prevent
-        // the real `.statico/` pattern from being added.
+        // the real granular patterns from being added.
         fs::write(dir.join(".gitignore"), "# statico is a great tool\nnode_modules/\n").unwrap();
         ensure_gitignore(&dir);
         let contents = fs::read_to_string(dir.join(".gitignore")).unwrap();
-        assert!(contents.contains(".statico/"),
-            "ensure_gitignore should add .statico/ even when comment mentions it, got:\n{}", contents);
+        assert!(contents.contains(".statico/cache/"),
+            "ensure_gitignore should add .statico/cache/ when comment mentions statico, got:\n{}", contents);
+        assert!(contents.contains(".statico/runtimes/"),
+            "ensure_gitignore should add .statico/runtimes/ when comment mentions statico, got:\n{}", contents);
+        // Must NOT add a blanket `.statico/` — that would ignore plugins too.
+        assert!(!contents.lines().any(|l| l.trim() == ".statico/"),
+            "ensure_gitignore must not add blanket .statico/ — plugins must stay trackable");
         let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
-    fn sec_gitignore_skips_when_pattern_present() {
-        let dir = std::env::temp_dir().join("statico_sec_gitignore_exists");
+    fn sec_gitignore_skips_when_granular_present() {
+        let dir = std::env::temp_dir().join("statico_sec_gitignore_granular_exists");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(
+            dir.join(".gitignore"),
+            ".statico/cache/\n.statico/runtimes/\nnode_modules/\n",
+        )
+        .unwrap();
+        ensure_gitignore(&dir);
+        let contents = fs::read_to_string(dir.join(".gitignore")).unwrap();
+        // Each pattern should appear exactly once.
+        assert_eq!(contents.matches(".statico/cache").count(), 1);
+        assert_eq!(contents.matches(".statico/runtimes").count(), 1);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn sec_gitignore_respects_legacy_blanket_pattern() {
+        // If a user already has the broad `.statico/` rule we don't fight
+        // them by adding redundant narrower ones.
+        let dir = std::env::temp_dir().join("statico_sec_gitignore_blanket");
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         fs::write(dir.join(".gitignore"), ".statico/\nnode_modules/\n").unwrap();
         ensure_gitignore(&dir);
         let contents = fs::read_to_string(dir.join(".gitignore")).unwrap();
-        // Should NOT add a duplicate entry
-        let count = contents.matches(".statico").count();
-        assert_eq!(count, 1,
-            "should not add duplicate .statico entry, found {} occurrences:\n{}", count, contents);
+        // Still only the original blanket entry.
+        assert_eq!(contents.matches(".statico").count(), 1, "got:\n{}", contents);
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn sec_gitignore_plugins_are_not_ignored() {
+        // The whole point of the granular split: a fresh project can keep
+        // `.statico/plugins/` under version control.
+        let dir = std::env::temp_dir().join("statico_sec_gitignore_plugins_tracked");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        ensure_gitignore(&dir);
+        let contents = fs::read_to_string(dir.join(".gitignore")).unwrap_or_default();
+        // No standalone `.statico/` pattern that would shadow plugins.
+        assert!(!contents.lines().any(|l| {
+            let t = l.trim();
+            t == ".statico/" || t == ".statico"
+        }), "blanket .statico ignore would hide plugins, got:\n{}", contents);
     }
 }
