@@ -25,9 +25,9 @@
   "files": [
     "bin/statico.js",
     "scripts/install.js",
-    "scripts/sha256.js",
     "README.md",
-    "LICENSE"
+    "LICENSE-MIT",
+    "LICENSE-APACHE"
   ],
   "scripts": {
     "postinstall": "node scripts/install.js"

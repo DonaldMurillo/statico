@@ -25,8 +25,15 @@ exclude = [
     "/.statico",
     "/__pycache__",
     "/target",
-    "*.md",
-    "!README.md",
+    "/install",
+    "/npm",
+    "/scripts",
+    "/sdks",
+    # CLAUDE.md and CONTRIBUTING.md are dev-process docs, not part of the
+    # crate API. The README, LICENSEs, CHANGELOG, SECURITY policy, and the
+    # `templates/` markdown (compiled in via include_str!) all stay.
+    "/CLAUDE.md",
+    "/CONTRIBUTING.md",
 ]
 
 [features]
