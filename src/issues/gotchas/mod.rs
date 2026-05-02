@@ -195,12 +195,20 @@ pub(super) fn is_comment_line(line: &str) -> bool {
 
 pub(super) fn is_test_file(path: &str) -> bool {
     let lower = path.to_lowercase();
-    lower.contains("/tests/")
+    // Match a `tests/`, `test/`, `__tests__/`, `fixtures/` segment whether
+    // it appears at the start of the path (`tests/integration.rs`) or
+    // nested under another directory (`crates/foo/tests/x.rs`). Filename
+    // suffixes `.test.` / `.spec.` work the same in both cases.
+    lower.starts_with("tests/")
+        || lower.starts_with("test/")
+        || lower.starts_with("__tests__/")
+        || lower.starts_with("fixtures/")
+        || lower.contains("/tests/")
         || lower.contains("/test/")
         || lower.contains("/__tests__/")
+        || lower.contains("/fixtures/")
         || lower.contains(".test.")
         || lower.contains(".spec.")
-        || lower.contains("/fixtures/")
 }
 
 pub(super) fn is_example_or_script(path: &str) -> bool {

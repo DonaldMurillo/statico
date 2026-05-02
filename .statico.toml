@@ -1,1 +1,24 @@
-exclude = ["benchmarks/**", "examples/**", "fixtures/**", "target/**"]
+# statico's own configuration when analyzing itself.
+#
+# We only point statico at the Rust binary that lives under src/. The
+# polyglot subprojects (npm wrapper, plugin SDKs, the Angular website,
+# install scripts, the homebrew tap) each have their own entry-point
+# conventions that statico's framework profiles don't model — leaving
+# them in scope produces false-positive "dead code" reports for files
+# that are obviously alive in those contexts (npm bin entries, Angular
+# SSR server, SDK index re-exports, etc.).
+exclude = [
+    "benchmarks/**",
+    "examples/**",
+    "fixtures/**",
+    "target/**",
+    # Polyglot sub-projects — analyze them on their own if needed.
+    "sdks/**",
+    "npm/**",
+    "website/**",
+    "install/**",
+    # Internal-only working directory (gitignored).
+    "docs/internal/**",
+    # Templates are markdown-only, not code.
+    "templates/**",
+]

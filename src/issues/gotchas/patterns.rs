@@ -232,7 +232,7 @@ pub fn detect_in_file(rel_path: &str, source: &str, issues: &mut Vec<GotchaIssue
         }
 
         // `panic!()` in non-test code.
-        if lang.is_rust() && !is_test && !is_comment_line(line) && line.contains("panic!(") {
+        if lang.is_rust() && !is_test && !is_comment_line(line) && calls_rust_macro(line, "panic") {
             issues.push(GotchaIssue {
                 file: rel_path.to_string(),
                 line: line_num,
@@ -245,7 +245,7 @@ pub fn detect_in_file(rel_path: &str, source: &str, issues: &mut Vec<GotchaIssue
         }
 
         // `todo!()` macro — unimplemented code.
-        if lang.is_rust() && !is_comment_line(line) && line.contains("todo!(") {
+        if lang.is_rust() && !is_comment_line(line) && calls_rust_macro(line, "todo") {
             issues.push(GotchaIssue {
                 file: rel_path.to_string(),
                 line: line_num,
@@ -258,7 +258,7 @@ pub fn detect_in_file(rel_path: &str, source: &str, issues: &mut Vec<GotchaIssue
         }
 
         // `unimplemented!()` macro.
-        if lang.is_rust() && !is_comment_line(line) && line.contains("unimplemented!(") {
+        if lang.is_rust() && !is_comment_line(line) && calls_rust_macro(line, "unimplemented") {
             issues.push(GotchaIssue {
                 file: rel_path.to_string(),
                 line: line_num,
@@ -286,7 +286,7 @@ pub fn detect_in_file(rel_path: &str, source: &str, issues: &mut Vec<GotchaIssue
         }
 
         // `dbg!` in non-test code.
-        if lang.is_rust() && !is_test && !is_comment_line(line) && line.contains("dbg!(") {
+        if lang.is_rust() && !is_test && !is_comment_line(line) && calls_rust_macro(line, "dbg") {
             issues.push(GotchaIssue {
                 file: rel_path.to_string(),
                 line: line_num,
@@ -297,5 +297,152 @@ pub fn detect_in_file(rel_path: &str, source: &str, issues: &mut Vec<GotchaIssue
                 snippet: truncate_line(line),
             });
         }
+    }
+}
+
+/// Returns true if `line` looks like an actual call to the Rust macro
+/// `name` (e.g. `todo`, `panic`, `unimplemented`) — i.e. `name!(`
+/// appearing **outside** any string literal and **at a word boundary** so
+/// `mytodo!(` doesn't match `todo`.
+///
+/// Skips occurrences inside both regular (`"…"`) and raw (`r"…"`,
+/// `r#"…"#`, `r##"…"##`, …) string literals. This matters because the
+/// gotcha rule definitions and unit tests in *this* file embed strings
+/// like `"todo!("` — a naive `line.contains("todo!(")` would happily flag
+/// the rule definition itself.
+pub(super) fn calls_rust_macro(line: &str, name: &str) -> bool {
+    let needle = format!("{}!(", name);
+    let needle_bytes = needle.as_bytes();
+    let bytes = line.as_bytes();
+    if bytes.len() < needle_bytes.len() {
+        return false;
+    }
+
+    let mut i = 0usize;
+
+    while i + needle_bytes.len() <= bytes.len() {
+        let c = bytes[i];
+
+        // Raw string: `r#…#"…"#…#`. Count the `#`s after the leading `r`
+        // and skip past the matching `"<#×n>` terminator.
+        if c == b'r' && i + 1 < bytes.len() {
+            let mut j = i + 1;
+            while j < bytes.len() && bytes[j] == b'#' {
+                j += 1;
+            }
+            let hashes = j - (i + 1);
+            if j < bytes.len() && bytes[j] == b'"' {
+                // Find the closing `"<#×hashes>`.
+                let mut k = j + 1;
+                while k < bytes.len() {
+                    if bytes[k] == b'"'
+                        && bytes.len() >= k + 1 + hashes
+                        && bytes[k + 1..k + 1 + hashes].iter().all(|&h| h == b'#')
+                    {
+                        i = k + 1 + hashes;
+                        break;
+                    }
+                    k += 1;
+                }
+                if k >= bytes.len() {
+                    // Unterminated raw string — bail out conservatively.
+                    return false;
+                }
+                continue;
+            }
+        }
+
+        // Regular `"…"` string with backslash escapes.
+        if c == b'"' {
+            let mut j = i + 1;
+            while j < bytes.len() {
+                let ch = bytes[j];
+                if ch == b'\\' && j + 1 < bytes.len() {
+                    j += 2;
+                    continue;
+                }
+                if ch == b'"' {
+                    break;
+                }
+                j += 1;
+            }
+            if j >= bytes.len() {
+                return false; // unterminated literal
+            }
+            i = j + 1;
+            continue;
+        }
+
+        // Try the macro match here. Word-boundary on the left.
+        if &bytes[i..i + needle_bytes.len()] == needle_bytes {
+            let boundary_ok = i == 0 || {
+                let prev = bytes[i - 1];
+                !(prev.is_ascii_alphanumeric() || prev == b'_')
+            };
+            if boundary_ok {
+                return true;
+            }
+        }
+        i += 1;
+    }
+    false
+}
+
+#[cfg(test)]
+mod calls_rust_macro_tests {
+    use super::calls_rust_macro;
+
+    #[test]
+    fn matches_simple_call() {
+        assert!(calls_rust_macro("    todo!(\"unfinished\");", "todo"));
+        assert!(calls_rust_macro("panic!(\"boom\")", "panic"));
+        assert!(calls_rust_macro("unimplemented!()", "unimplemented"));
+    }
+
+    #[test]
+    fn ignores_match_inside_double_quoted_string() {
+        // The exact false positive we're fixing: a rule definition that
+        // mentions `todo!(` as a string literal must not flag itself.
+        assert!(!calls_rust_macro(r#"line.contains("todo!(")"#, "todo"));
+        assert!(!calls_rust_macro(r#"if line.contains("panic!(")"#, "panic"));
+        assert!(!calls_rust_macro(r#"line.contains("unimplemented!(")"#, "unimplemented"));
+    }
+
+    #[test]
+    fn requires_word_boundary() {
+        // Word-boundary check: avoid matching `mytodo!(` when looking for `todo`.
+        assert!(!calls_rust_macro("    mytodo!(x);", "todo"));
+        assert!(!calls_rust_macro("    sub_todo!(x);", "todo"));
+        // But a normal call after a non-word char does match.
+        assert!(calls_rust_macro("foo();todo!();", "todo"));
+        assert!(calls_rust_macro("(todo!())", "todo"));
+    }
+
+    #[test]
+    fn no_match_when_absent() {
+        assert!(!calls_rust_macro("let x = 1;", "todo"));
+        assert!(!calls_rust_macro("// nothing here", "panic"));
+    }
+
+    #[test]
+    fn handles_escaped_quote_inside_string() {
+        // `\"` keeps us inside the string; the closing `"` after `todo!(`
+        // is the real terminator.
+        assert!(!calls_rust_macro(r#"println!("\"todo!(\" is a macro");"#, "todo"));
+    }
+
+    #[test]
+    fn ignores_match_inside_raw_string() {
+        // Raw strings — the actual case that bit us in this file's own tests.
+        assert!(!calls_rust_macro(
+            r####"assert!(!calls_rust_macro(r#"line.contains("todo!(")"#, "todo"));"####,
+            "todo"
+        ));
+        assert!(!calls_rust_macro(
+            r####"let s = r##"unimplemented!()"##;"####,
+            "unimplemented"
+        ));
+        // But a real call after a closing raw string still matches.
+        assert!(calls_rust_macro(r#"let s = r"x"; todo!();"#, "todo"));
     }
 }
