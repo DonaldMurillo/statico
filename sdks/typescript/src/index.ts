@@ -128,6 +128,20 @@ export interface ResolveImportResult {
   external: boolean;
 }
 
+/** init params (forwarded to onInit handlers, if any). */
+export interface InitParams {
+  /** Absolute path of the project root being analyzed. */
+  root: string;
+  /** The host's full statico config (rarely needed; usually empty). */
+  config: Record<string, unknown>;
+  /**
+   * Free-form settings from the plugin's `[plugin.settings]` block in
+   * `.statico.toml`. Plugin authors define the shape; the SDK passes it
+   * through unchanged. Capped at 64 KB / 32 nesting levels by the host.
+   */
+  pluginSettings: Record<string, unknown>;
+}
+
 /** post_analysis params. */
 export interface PostAnalysisParams {
   results: Record<string, unknown>;
@@ -209,6 +223,21 @@ export class Plugin {
     return new Plugin(name, manifest);
   }
 
+  /**
+   * Register a handler invoked when statico sends the `init` request.
+   *
+   * The SDK still responds with the manifest automatically — your handler
+   * runs **before** that response is written, so any state you set up here
+   * (most commonly: parsing `params.pluginSettings`) is ready before the
+   * first hook call. Synchronous and async handlers both work.
+   *
+   * The handler's return value is ignored — use it for side effects.
+   */
+  onInit(handler: HookHandler<InitParams, void>): this {
+    this.handlers.set("init", handler as HookHandler<unknown, unknown>);
+    return this;
+  }
+
   /** Register a handler for the analyze_file hook. */
   onAnalyzeFile(handler: HookHandler<AnalyzeFileParams, AnalyzeFileResult>): this {
     this.handlers.set("analyze_file", handler as HookHandler<unknown, unknown>);
@@ -275,6 +304,26 @@ export class Plugin {
 
       // Built-in: init
       if (method === "init") {
+        // Run user `onInit` handler first (if any) so plugin state is
+        // ready before the SDK reports its capabilities. Errors thrown
+        // inside the handler are returned as JSON-RPC errors instead of
+        // crashing the subprocess.
+        const initHandler = this.handlers.get("init");
+        if (initHandler) {
+          try {
+            await initHandler(params);
+          } catch (err) {
+            writeResponse({
+              jsonrpc: "2.0",
+              id,
+              error: {
+                code: -32603,
+                message: `init handler failed: ${err instanceof Error ? err.message : String(err)}`,
+              },
+            });
+            return;
+          }
+        }
         writeResponse({
           jsonrpc: "2.0",
           id,

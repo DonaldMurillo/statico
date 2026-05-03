@@ -1,101 +1,161 @@
-# Getting Started
+# Getting started
 
-**statico** is a static code analyzer for TypeScript and Rust projects. It detects dead code, unused exports and types, circular dependencies, code duplication, framework-specific gotchas, and computes an overall code health score — all from a single fast Rust binary.
+> ⚠️ **statico is in early alpha.** Use it on real projects, but pin a version
+> in CI — output schemas and CLI flags can change before `v1.0.0`.
+
+statico is a static code analyzer for TypeScript and Rust projects. It detects
+dead code, unused exports/types, circular dependencies, code duplication, and
+framework-specific gotchas, then computes a 0–100 health score. Outputs are
+designed for both humans and LLMs.
+
+[← Back to README](../README.md)
 
 ---
 
 ## Installation
 
+### Cargo (any platform with Rust)
+
+```bash
+cargo install statico
+```
+
+### npm (macOS / Linux × x86_64 / aarch64)
+
+```bash
+npm install -D @statico/cli
+npx statico analyze .
+```
+
+### Prebuilt release tarball
+
+```bash
+# macOS arm64 example — pick the matching tarball from the releases page
+curl -fsSL https://github.com/DonaldMurillo/statico/releases/latest/download/statico-macos-aarch64.tar.gz \
+  | tar -xz
+sudo install -m 0755 statico /usr/local/bin/statico
+```
+
+> If macOS Gatekeeper blocks a browser-downloaded tarball, run
+> `xattr -d com.apple.quarantine /usr/local/bin/statico` once. The
+> `cargo install`, `npx`, and `curl | tar` paths above don't trigger this.
+
 ### From source
 
 ```bash
-git clone https://github.com/nickelc/statico.git
+git clone https://github.com/DonaldMurillo/statico.git
 cd statico
-cargo build --release
+cargo install --path .
 ```
 
-The binary installs to `~/.statico/bin/statico`.
+Prerequisites for source builds: [Rust](https://rustup.rs/) 1.91+ (Edition 2024).
 
-## Quick Start
+---
+
+## Verify the install
 
 ```bash
-# Analyze the current directory
+statico --version
+statico doctor       # checks PATH, completions, and shell integration
+```
+
+If `doctor` reports anything missing, run `statico init` once — it sets up
+shell completions and a `st` alias.
+
+---
+
+## Your first analysis
+
+```bash
+cd path/to/your-project
 statico analyze .
-
-# Analyze with markdown output
-statico analyze . --format markdown
-
-# Get JSON output (great for CI)
-statico analyze . --format json
-
-# Interactive TUI mode
-statico tui .
 ```
 
-## What It Detects
-
-| Feature | Description |
-|---------|-------------|
-| **Dead code** | Files unreachable from any entry point |
-| **Unused exports** | Named exports never imported elsewhere |
-| **Unused types** | Exported TypeScript interfaces/types never referenced |
-| **Unused dependencies** | Packages in `package.json` never imported |
-| **Circular dependencies** | Import cycles between files |
-| **Code duplication** | Similar code blocks across your project |
-| **Framework gotchas** | Common error-prone patterns specific to your framework |
-| **Health score** | A single 0–100 metric combining issue density and duplication |
-
-## Supported Frameworks
-
-statico automatically detects your framework:
-
-- **Next.js** — pages/app router entries, API routes
-- **Angular** — bootstrap modules, lazy routes
-- **Vue** — main.ts entries, router pages
-- **Svelte** — SvelteKit routes
-- **Astro** — pages directory
-- **Remix** — route entries
-- **NestJS** — module graph entries
-- **Payload CMS** — config entries
-- **shadcn/ui** — component registry
-
-## Output Formats
+In a terminal you'll see a Markdown report with a health-score dashboard and
+tables for each issue category. The same command piped to a file produces
+JSON instead, so it's safe in scripts:
 
 ```bash
---format json      # Machine-readable JSON
---format markdown  # GitHub-flavored Markdown
---format sarif     # SARIF 2.1.0 (GitHub Code Scanning)
---format html      # Self-contained interactive report
---format ai        # Compact JSON for LLM consumption (~500 tokens)
---format mermaid   # Dependency graph visualization
+statico analyze . > report.json
 ```
 
-## Configuration
+Run with `--format ai` for a compressed (~500 token) summary suitable for
+feeding to a coding assistant:
 
-Create a `.statico.toml` in your project root:
+```bash
+statico analyze . --format ai
+```
+
+---
+
+## Tune the noise floor
+
+By default, statico reports every detected issue, including low-confidence
+gotchas. To drop everything below a threshold, set `--min-confidence`:
+
+```bash
+statico analyze . --min-confidence 0.7
+```
+
+`0.7` is a sensible starting point — the gotcha detector emits a lot of
+0.4–0.6 stylistic hints that are noisy in CI.
+
+Make it the default in `.statico.toml`:
 
 ```toml
-[analysis]
 min_confidence = 0.7
-ignore = ["**/generated/**", "**/*.d.ts"]
-
-[framework]
-name = "nextjs"  # or "auto" for auto-detection
 ```
 
-## Monorepo Support
+---
 
-statico detects and handles monorepo structures:
+## Wire it into CI without flake
 
-- **pnpm workspaces** — `pnpm-workspace.yaml`
-- **npm/yarn workspaces** — `workspaces` in root `package.json`
-- **Nx** — `nx.json` + workspace config
-- **Turborepo** — `turbo.json`
+The naive approach (`statico analyze . --exit-code`) breaks any time someone
+introduces a new — even harmless — finding. Use a baseline file instead:
 
-Each package is analyzed independently with its own entry points.
+```bash
+# one-time, locally
+statico analyze . --update-baseline statico-baseline.json --min-confidence 0.7
+git add statico-baseline.json
+git commit -m "chore: statico baseline"
+```
 
-## Next Steps
+Then in CI:
 
-- [CI/CD Integration](/docs/ci-integration) — Set up statico in your pipeline
-- [Plugin System](/docs/plugins) — Extend analysis with custom rules
-- [Configuration](/docs/configuration) — Fine-tune analysis settings
+```bash
+statico analyze . \
+  --baseline statico-baseline.json \
+  --min-confidence 0.7 \
+  --exit-code
+```
+
+Only **new** issues fail the build. To accept new findings as the new
+baseline, regenerate and commit.
+
+---
+
+## Apply safe automated fixes
+
+`statico fix` removes the `export` keyword from declarations whose export is
+unused, and drops unused entries from `package.json`. Default is dry-run —
+pass `--apply` to actually rewrite files:
+
+```bash
+statico fix .             # dry-run; prints what it would do
+statico fix . --apply     # rewrite files
+```
+
+It refuses to touch anything ambiguous (named re-exports, `export default`,
+`export *`, multiple matches on the same identifier). Skipped items are
+listed with a reason.
+
+---
+
+## Where to next
+
+- **[Configuration](configuration.md)** — `.statico.toml` schema reference
+- **[Output formats](output-formats.md)** — when to use each `--format`
+- **[CI integration](ci-integration.md)** — GitHub Actions, GitLab, SARIF
+- **[Plugins](plugins.md)** — write project-specific rules in any language
+- **[Audit (May 2026)](audit-2026-05.md)** — current state, known limitations,
+  what's stable, what's not

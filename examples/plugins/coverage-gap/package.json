@@ -1,0 +1,10 @@
+{
+  "name": "coverage-gap",
+  "version": "0.1.0",
+  "description": "statico plugin that flags exported TypeScript identifiers with no matching test reference",
+  "license": "MIT OR Apache-2.0",
+  "private": true,
+  "dependencies": {
+    "@statico/plugin-sdk": "../../../sdks/typescript"
+  }
+}

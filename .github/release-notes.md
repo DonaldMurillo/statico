@@ -3,6 +3,10 @@ This file is the body of every release. Edit it before tagging to call out
 breaking changes or notable additions; the changelog is in CHANGELOG.md.
 -->
 
+> ⚠️ **Early alpha — not production-ready.** Output schemas, plugin protocol,
+> and CLI flags can change between releases until `v1.0.0`. Pin a version if
+> you depend on it.
+
 See [`CHANGELOG.md`](https://github.com/DonaldMurillo/statico/blob/main/CHANGELOG.md) for the full list of changes.
 
 ## Install

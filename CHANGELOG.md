@@ -8,6 +8,30 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- TypeScript plugin SDK exposes `Plugin.onInit(handler)` so plugin authors
+  can read `pluginSettings` from `.statico.toml` before any hook fires.
+- Multi-hook plugin example at `examples/plugins/coverage-gap/` —
+  uses `init` + `analyze_file` + `post_analysis` together with
+  configurable settings. Documented in `docs/plugins.md`.
+- `.claude/skills/docs-sync/` — proactive skill that audits doc surfaces
+  whenever CLI flags, config keys, output formats, or the plugin protocol
+  change.
+
+### Changed
+
+- Repositioned README and metadata. statico now leads with **early-alpha,
+  customizable, AI-forward** rather than "single fast Rust binary". Honest
+  comparisons against knip / oxlint added; an explicit "What statico is not
+  good at" section calls out speed and pre-1.0 stability.
+- Cargo and npm package descriptions updated to match.
+- `docs/configuration.md` rewritten — the previous file documented a
+  `[analysis]` / `[framework]` / `[duplication]` schema that doesn't exist.
+  Current schema is flat top-level keys plus `[[plugin]]` arrays.
+- `docs/output-formats.md` and `docs/getting-started.md` refreshed for the
+  current command surface (`fix`, `--watch`, `--baseline`, tty-aware
+  default format).
+- `docs/plugins.md` refreshed; points at the new complex example.
+
 - `statico fix` subcommand for safe automated fixes (unused exports + unused
   npm dependencies, dry-run by default, `--apply` to write).
 - `analyze --baseline <path>` and `analyze --update-baseline <path>` to
