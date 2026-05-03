@@ -33,7 +33,11 @@ jobs:
             runner: ubuntu-24.04-arm
           - target: macos-x86_64
             rust-target: x86_64-apple-darwin
-            runner: macos-26-intel
+            # `macos-26-intel` (the newer Intel pool) hung indefinitely on
+            # `cargo build --release` during rc1. Switching to
+            # `macos-15-intel` which has more capacity and a more stable
+            # cargo-build profile.
+            runner: macos-15-intel
           - target: macos-aarch64
             rust-target: aarch64-apple-darwin
             runner: macos-latest
