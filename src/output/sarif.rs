@@ -100,10 +100,39 @@ impl OutputFormatter for SarifFormatter {
             "warning",
         ));
         for de in &output.issues.duplicate_exports {
+            // SARIF requires every result to carry at least one location.
+            // Emit one location per file that defines the duplicate name —
+            // GitHub Code Scanning surfaces the first as the primary site
+            // and lists the rest as related locations in the same alert.
+            let locations: Vec<Value> = de
+                .locations
+                .iter()
+                .map(|file| {
+                    json!({
+                        "physicalLocation": {
+                            "artifactLocation": { "uri": sanitize_uri(file) },
+                            "region": { "startLine": 1 }
+                        }
+                    })
+                })
+                .collect();
+            // Defensive: if we somehow have zero locations, fall back to
+            // package.json so the result still validates.
+            let locations = if locations.is_empty() {
+                vec![json!({
+                    "physicalLocation": {
+                        "artifactLocation": { "uri": "package.json" },
+                        "region": { "startLine": 1 }
+                    }
+                })]
+            } else {
+                locations
+            };
             results.push(json!({
                 "ruleId": "duplicate_export",
                 "level": "warning",
                 "message": { "text": sanitize_message(&format!("Export '{}' defined in {} locations", de.name, de.locations.len())) },
+                "locations": locations,
             }));
         }
 
@@ -138,6 +167,12 @@ impl OutputFormatter for SarifFormatter {
                 "ruleId": "unused_dependency",
                 "level": "note",
                 "message": { "text": sanitize_message(&format!("Package '{}' is listed but never imported", ud.package_name)) },
+                // Surface the alert against package.json — that's where the
+                // unused entry actually lives. SARIF requires a location.
+                "locations": [{ "physicalLocation": {
+                    "artifactLocation": { "uri": "package.json" },
+                    "region": { "startLine": 1 }
+                }}],
             }));
         }
 
@@ -152,6 +187,12 @@ impl OutputFormatter for SarifFormatter {
                 "ruleId": "unlisted_dependency",
                 "level": "warning",
                 "message": { "text": sanitize_message(&format!("'{}' imported by {} but not in package.json", ud.package_name, ud.imported_by)) },
+                // Surface the alert against the file that did the import,
+                // not against package.json — easier to act on.
+                "locations": [{ "physicalLocation": {
+                    "artifactLocation": { "uri": sanitize_uri(&ud.imported_by) },
+                    "region": { "startLine": 1 }
+                }}],
             }));
         }
 
