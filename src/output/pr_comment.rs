@@ -115,7 +115,7 @@ impl OutputFormatter for PrCommentFormatter {
             md.push_str("| File | LOC | Confidence | Reason |\n");
             md.push_str("|---|---|---|---|\n");
             let mut sorted = output.issues.dead_code.clone();
-            sorted.sort_by(|a, b| b.lines_of_code.cmp(&a.lines_of_code));
+            sorted.sort_by_key(|d| std::cmp::Reverse(d.lines_of_code));
             for dc in sorted.iter().take(10) {
                 md.push_str(&format!(
                     "| `{}` | {} | {:.0}% | {} |\n",
@@ -149,7 +149,7 @@ fn build_impactful_issues(output: &AnalysisOutput) -> Vec<RankedIssue> {
 
     // Dead code — impact is LOC wasted
     let mut dead = output.issues.dead_code.clone();
-    dead.sort_by(|a, b| b.lines_of_code.cmp(&a.lines_of_code));
+    dead.sort_by_key(|d| std::cmp::Reverse(d.lines_of_code));
     for dc in dead.iter().take(3) {
         issues.push(RankedIssue {
             category: "☠️ dead_code".to_string(),
@@ -172,7 +172,10 @@ fn build_impactful_issues(output: &AnalysisOutput) -> Vec<RankedIssue> {
 
     // Gotchas — top by confidence
     let mut gotchas = output.issues.gotchas.clone();
-    gotchas.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap_or(std::cmp::Ordering::Equal));
+    // f64 doesn't implement Ord, so sort_by_key isn't an option here.
+    // `total_cmp` gives a deterministic ordering even on NaN, which is
+    // what we want for stable PR-comment output.
+    gotchas.sort_by(|a, b| b.confidence.total_cmp(&a.confidence));
     for g in gotchas.iter().take(2) {
         issues.push(RankedIssue {
             category: format!("⚠️ {}", g.rule),
@@ -208,7 +211,7 @@ fn count_unused_exports_per_file(output: &AnalysisOutput) -> Vec<(String, usize)
     }
 
     let mut entries: Vec<(String, usize)> = counts.into_iter().collect();
-    entries.sort_by(|a, b| b.1.cmp(&a.1));
+    entries.sort_by_key(|e| std::cmp::Reverse(e.1));
     entries
 }
 

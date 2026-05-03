@@ -120,11 +120,23 @@ impl PipelineResults {
     }
 
     /// Sort all collections for deterministic output.
+    ///
+    /// This includes sorting each file's dep targets so the dep graph itself
+    /// is deterministic — without this, parallel parsing via rayon plus
+    /// non-deterministic resolver ordering could yield different cycle
+    /// reports on different runs (an SCC has many possible representative
+    /// cycles, and the DFS picks whichever back-edge it sees first).
     pub fn sort(&mut self) {
         self.dependencies.imports.sort_by(|a, b| a.source.cmp(&b.source));
+        for fi in &mut self.dependencies.imports {
+            fi.targets.sort();
+        }
         self.dependencies.external.sort();
         self.quality.files.sort_by(|a, b| a.path.cmp(&b.path));
         self.file_sources.sort_by(|a, b| a.0.cmp(&b.0));
+        for targets in self.dep_graph.values_mut() {
+            targets.sort();
+        }
     }
 }
 

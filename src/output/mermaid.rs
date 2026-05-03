@@ -140,7 +140,7 @@ impl OutputFormatter for MermaidFormatter {
             .filter(|(p, _)| visible_files.contains(*p) && !entry_set.contains(*p) && !dead_set.contains(*p))
             .map(|(p, c)| (p.clone(), *c))
             .collect();
-        hotspot_candidates.sort_by(|a, b| b.1.cmp(&a.1));
+        hotspot_candidates.sort_by_key(|c| std::cmp::Reverse(c.1));
         for (path, _count) in hotspot_candidates.iter().take(5) {
             if let Some(id) = id_map.get(path) {
                 buf.push_str(&format!("    style {} fill:#ffa726\n", id));
@@ -235,7 +235,7 @@ fn select_important_files(
     // 4. Top 10 files by issue count
     let mut by_issues: Vec<(String, usize)> =
         issue_counts.iter().filter(|(p, _)| all_files.contains(*p)).map(|(p, c)| (p.clone(), *c)).collect();
-    by_issues.sort_by(|a, b| b.1.cmp(&a.1));
+    by_issues.sort_by_key(|x| std::cmp::Reverse(x.1));
     for (path, _) in by_issues.iter().take(10) {
         important.insert(path.clone());
     }

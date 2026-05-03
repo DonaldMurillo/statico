@@ -70,7 +70,7 @@ pub fn detect_mirrored_directories(groups: &[CloneGroup]) -> Vec<MirroredDirecto
         .collect();
 
     // Sort by total_lines descending.
-    mirrors.sort_by(|a, b| b.total_lines.cmp(&a.total_lines));
+    mirrors.sort_by_key(|m| std::cmp::Reverse(m.total_lines));
     mirrors
 }
 

@@ -54,7 +54,7 @@ impl OutputFormatter for MarkdownFormatter {
             md.push_str("## Dead Code\n\n");
             md.push_str("| File | Lines | Confidence | Reason |\n|---|---|---|---|\n");
             let mut sorted = output.issues.dead_code.clone();
-            sorted.sort_by(|a, b| b.lines_of_code.cmp(&a.lines_of_code));
+            sorted.sort_by_key(|d| std::cmp::Reverse(d.lines_of_code));
             for dc in sorted.iter().take(50) {
                 md.push_str(&format!(
                     "| `{}` | {} | {:.0}% | {} |\n",
@@ -104,7 +104,7 @@ impl OutputFormatter for MarkdownFormatter {
             md.push_str("### Top 10 Clone Groups\n\n");
             md.push_str("| # | Files | Lines |\n|---|---|---|\n");
             let mut groups = output.duplication.clone_groups.clone();
-            groups.sort_by(|a, b| b.line_count.cmp(&a.line_count));
+            groups.sort_by_key(|g| std::cmp::Reverse(g.line_count));
             for (i, g) in groups.iter().take(10).enumerate() {
                 let files: Vec<String> = g
                     .instances

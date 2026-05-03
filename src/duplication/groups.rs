@@ -106,7 +106,7 @@ pub fn build_clone_groups(issues: &[DuplicateCodeIssue]) -> Vec<CloneGroup> {
         .collect();
 
     // Sort by line count descending (biggest duplications first).
-    groups.sort_by(|a, b| b.line_count.cmp(&a.line_count));
+    groups.sort_by_key(|g| std::cmp::Reverse(g.line_count));
     groups
 }
 

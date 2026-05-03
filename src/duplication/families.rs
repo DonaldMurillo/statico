@@ -48,7 +48,7 @@ pub fn build_clone_families(groups: &[CloneGroup]) -> Vec<CloneFamily> {
         .collect();
 
     // Sort by total_duplicated_lines descending.
-    families.sort_by(|a, b| b.total_duplicated_lines.cmp(&a.total_duplicated_lines));
+    families.sort_by_key(|f| std::cmp::Reverse(f.total_duplicated_lines));
     families
 }
 
