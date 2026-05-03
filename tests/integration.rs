@@ -349,7 +349,16 @@ fn cli_version_flag_works() {
 
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
     assert!(output.status.success(), "--version should exit 0");
-    assert!(stdout.contains("0.1.0"), "version should contain 0.1.0, got: {stdout}");
+    // Don't pin a specific version — the release script bumps `Cargo.toml`
+    // and runs the test suite before committing, so any literal version
+    // here would break every cut. Just check the output looks like a
+    // version line.
+    let expected = env!("CARGO_PKG_VERSION");
+    assert!(
+        stdout.contains(expected),
+        "version output should contain Cargo.toml version `{expected}`, got: {stdout}"
+    );
+    assert!(stdout.starts_with("statico "), "version line should start with 'statico ', got: {stdout}");
 }
 
 #[test]
