@@ -41,6 +41,20 @@ statico analyze . --format markdown | head -40
 The plugin auto-loads on the next `statico analyze` thanks to the
 `.statico/plugins/` symlink and the `package.json` in the example dir.
 
+## Run the test suite
+
+The plugin ships with end-to-end JSON-RPC tests in `index.test.ts` —
+they spawn the plugin as a subprocess (just like statico does) and
+verify the `init` → `analyze_file` → `post_analysis` flow with several
+configurations.
+
+```bash
+bun install   # if you haven't already
+bun test
+```
+
+These tests run in CI on every push as part of the main `ci` workflow.
+
 ## Configure
 
 Drop a `[[plugin]]` block in your project's `.statico.toml`:

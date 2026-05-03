@@ -63,6 +63,15 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: cargo fmt --all -- --check
 
+      - name: Test the coverage-gap plugin example
+        # End-to-end JSON-RPC tests that spawn the plugin and verify the
+        # init + analyze_file + post_analysis flow. Bun-only — already
+        # installed by the setup-bun step above.
+        working-directory: examples/plugins/coverage-gap
+        run: |
+          bun install
+          bun test
+
   msrv:
     name: MSRV check (1.91)
     runs-on: ubuntu-latest

@@ -52,3 +52,10 @@ website/screenshots/
 website/test-results/
 website/playwright-report/
 website/.angular/
+
+# Plugin example node_modules / bun lockfiles. The lockfiles in particular
+# pin our local-path SDK link by absolute path, so committing them would
+# break for other contributors.
+examples/plugins/*/node_modules/
+examples/plugins/*/bun.lock
+examples/plugins/*/bun.lockb
