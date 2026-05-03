@@ -122,6 +122,77 @@ jobs:
             --min-confidence 0.7 \
             --format markdown
 
+  sdks:
+    # Standalone gate for the two plugin SDKs we publish to crates.io and
+    # npm. Verifies tests, manifest sanity (cargo publish --dry-run /
+    # npm pack --dry-run), and that the TS build produces the expected
+    # dist artifacts. Catches manifest regressions before tagging.
+    name: plugin SDKs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Cargo cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: sdks
+          workspaces: sdks/rust
+
+      - name: Install bun
+        uses: oven-sh/setup-bun@v2
+
+      # ─── Rust SDK ──────────────────────────────────────────────────
+      - name: rust SDK — cargo test
+        working-directory: sdks/rust
+        run: cargo test
+
+      - name: rust SDK — cargo clippy
+        working-directory: sdks/rust
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: rust SDK — cargo fmt --check
+        working-directory: sdks/rust
+        run: cargo fmt -- --check
+
+      - name: rust SDK — cargo publish --dry-run
+        working-directory: sdks/rust
+        run: cargo publish --dry-run
+
+      # ─── TypeScript SDK ────────────────────────────────────────────
+      - name: ts SDK — bun install
+        working-directory: sdks/typescript
+        run: bun install
+
+      - name: ts SDK — typecheck
+        working-directory: sdks/typescript
+        run: bun run check
+
+      - name: ts SDK — bun test
+        working-directory: sdks/typescript
+        run: bun test
+
+      - name: ts SDK — build (emits dist/)
+        working-directory: sdks/typescript
+        run: bun run build
+
+      - name: ts SDK — assert dist artifacts exist
+        working-directory: sdks/typescript
+        run: |
+          set -euo pipefail
+          test -f dist/index.js
+          test -f dist/index.d.ts
+          test -f dist/index.js.map
+          test -f dist/index.d.ts.map
+
+      - name: ts SDK — npm pack --dry-run
+        working-directory: sdks/typescript
+        run: npm pack --dry-run
+
   website-build:
     # Smoke-build the Angular SSG site so we catch website breakage in CI
     # rather than discovering it the moment the Pages deploy fails. Same

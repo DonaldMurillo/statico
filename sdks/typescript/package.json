@@ -1,17 +1,53 @@
 {
   "name": "@statico/plugin-sdk",
   "version": "0.1.0",
-  "description": "SDK for building statico plugins in TypeScript",
-  "main": "src/index.ts",
-  "types": "src/index.ts",
-  "scripts": {
-    "build": "bun build src/index.ts --outdir dist --target bun",
-    "check": "bun tsc --noEmit"
+  "description": "SDK for building statico static-analyzer plugins in TypeScript (JSON-RPC over stdin/stdout)",
+  "license": "(MIT OR Apache-2.0)",
+  "homepage": "https://github.com/DonaldMurillo/statico",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/DonaldMurillo/statico.git",
+    "directory": "sdks/typescript"
   },
-  "keywords": ["statico", "plugin", "sdk", "analysis", "linting"],
-  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/DonaldMurillo/statico/issues"
+  },
+  "keywords": [
+    "statico",
+    "plugin",
+    "sdk",
+    "static-analysis",
+    "linter",
+    "code-analysis"
+  ],
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE-MIT",
+    "LICENSE-APACHE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "check": "tsc --noEmit -p tsconfig.json",
+    "test": "bun test",
+    "prepublishOnly": "bun run build && bun run check && bun test"
+  },
+  "engines": {
+    "node": ">=18"
+  },
   "devDependencies": {
     "@types/bun": "latest",
+    "@types/node": "^20",
     "typescript": "^5"
   }
 }

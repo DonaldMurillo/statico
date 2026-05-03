@@ -76,7 +76,11 @@ pub struct PluginManifest {
 }
 
 /// A single issue reported by a plugin.
+///
+/// Field names serialize to camelCase on the wire (e.g. `rule_id` → `ruleId`)
+/// to match the JSON-RPC protocol the host expects.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Issue {
     pub rule_id: String,
     pub severity: Severity,
@@ -116,6 +120,7 @@ pub struct FileMetrics {
 
 /// analyze_file params.
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AnalyzeFileParams {
     pub path: String,
     pub source: String,
@@ -139,6 +144,7 @@ pub struct AnalyzeFileResult {
 
 /// discover_entries params.
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DiscoverEntriesParams {
     pub root: String,
     #[serde(default)]
@@ -149,6 +155,7 @@ pub struct DiscoverEntriesParams {
 
 /// discover_entries result.
 #[derive(Debug, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DiscoverEntriesResult {
     #[serde(default)]
     pub entry_points: Vec<EntryPoint>,
@@ -156,6 +163,7 @@ pub struct DiscoverEntriesResult {
 
 /// resolve_import params.
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ResolveImportParams {
     pub from_file: String,
     pub specifier: String,
@@ -164,6 +172,7 @@ pub struct ResolveImportParams {
 
 /// resolve_import result.
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ResolveImportResult {
     pub resolved_path: String,
     pub external: bool,
@@ -171,6 +180,7 @@ pub struct ResolveImportResult {
 
 /// post_analysis params.
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PostAnalysisParams {
     pub results: serde_json::Value,
     pub health_score: f64,
@@ -190,6 +200,7 @@ pub struct PostAnalysisResult {
 
 /// format_output params.
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct FormatOutputParams {
     pub results: serde_json::Value,
     pub format: String,
@@ -198,6 +209,7 @@ pub struct FormatOutputParams {
 
 /// format_output result.
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct FormatOutputResult {
     pub output: String,
     #[serde(default)]
@@ -221,11 +233,7 @@ pub struct Plugin {
 impl Plugin {
     /// Create a new plugin instance.
     pub fn create(name: &str, manifest: PluginManifest) -> Self {
-        Plugin {
-            name: name.to_string(),
-            manifest,
-            handlers: HashMap::new(),
-        }
+        Plugin { name: name.to_string(), manifest, handlers: HashMap::new() }
     }
 
     /// Register a handler for the `analyze_file` hook.
@@ -236,8 +244,7 @@ impl Plugin {
         self.handlers.insert(
             "analyze_file".to_string(),
             Box::new(move |params| {
-                let p: AnalyzeFileParams =
-                    serde_json::from_value(params).map_err(|e| e.to_string())?;
+                let p: AnalyzeFileParams = serde_json::from_value(params).map_err(|e| e.to_string())?;
                 let result = handler(p);
                 serde_json::to_value(result).map_err(|e| e.to_string())
             }),
@@ -252,8 +259,7 @@ impl Plugin {
         self.handlers.insert(
             "discover_entries".to_string(),
             Box::new(move |params| {
-                let p: DiscoverEntriesParams =
-                    serde_json::from_value(params).map_err(|e| e.to_string())?;
+                let p: DiscoverEntriesParams = serde_json::from_value(params).map_err(|e| e.to_string())?;
                 let result = handler(p);
                 serde_json::to_value(result).map_err(|e| e.to_string())
             }),
@@ -268,8 +274,7 @@ impl Plugin {
         self.handlers.insert(
             "resolve_import".to_string(),
             Box::new(move |params| {
-                let p: ResolveImportParams =
-                    serde_json::from_value(params).map_err(|e| e.to_string())?;
+                let p: ResolveImportParams = serde_json::from_value(params).map_err(|e| e.to_string())?;
                 let result = handler(p);
                 serde_json::to_value(result).map_err(|e| e.to_string())
             }),
@@ -284,8 +289,7 @@ impl Plugin {
         self.handlers.insert(
             "post_analysis".to_string(),
             Box::new(move |params| {
-                let p: PostAnalysisParams =
-                    serde_json::from_value(params).map_err(|e| e.to_string())?;
+                let p: PostAnalysisParams = serde_json::from_value(params).map_err(|e| e.to_string())?;
                 let result = handler(p);
                 serde_json::to_value(result).map_err(|e| e.to_string())
             }),
@@ -300,12 +304,73 @@ impl Plugin {
         self.handlers.insert(
             "format_output".to_string(),
             Box::new(move |params| {
-                let p: FormatOutputParams =
-                    serde_json::from_value(params).map_err(|e| e.to_string())?;
+                let p: FormatOutputParams = serde_json::from_value(params).map_err(|e| e.to_string())?;
                 let result = handler(p);
                 serde_json::to_value(result).map_err(|e| e.to_string())
             }),
         );
+    }
+
+    /// Process a single JSON-RPC request line and return the response plus
+    /// a flag indicating whether the host has asked the plugin to shut down.
+    ///
+    /// This is the unit-testable core of the SDK — `start()` is just a
+    /// stdin/stdout loop wrapped around it.
+    pub fn process_request(&self, line: &str) -> ProcessOutcome {
+        let raw: serde_json::Value = match serde_json::from_str(line) {
+            Ok(r) => r,
+            Err(e) => {
+                return ProcessOutcome {
+                    response: serde_json::json!({
+                        "jsonrpc": "2.0",
+                        "id": 0,
+                        "error": { "code": -32700, "message": format!("Parse error: {}", e) }
+                    })
+                    .to_string(),
+                    shutdown: false,
+                };
+            }
+        };
+        let id = raw.get("id").and_then(|v| v.as_u64()).unwrap_or(0);
+        let method = raw.get("method").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let params = raw.get("params").cloned().unwrap_or(serde_json::Value::Null);
+
+        let (response, shutdown) = match method.as_str() {
+            "init" => {
+                let caps = serde_json::json!({
+                    "name": self.name,
+                    "version": self.manifest.version,
+                    "hooks": self.manifest.hooks.iter().map(|(k, v)| {
+                        (serde_json::to_value(k).unwrap_or_default().as_str().unwrap_or("").to_string(), serde_json::to_value(v).unwrap_or_default())
+                    }).collect::<HashMap<String, serde_json::Value>>(),
+                    "languages": self.manifest.languages,
+                    "rules": self.manifest.rules,
+                });
+                (serde_json::json!({ "jsonrpc": "2.0", "id": id, "result": caps }), false)
+            }
+            "shutdown" => (serde_json::json!({ "jsonrpc": "2.0", "id": id, "result": null }), true),
+            _ => {
+                let resp = if let Some(handler) = self.handlers.get(&method) {
+                    match handler(params) {
+                        Ok(result) => {
+                            serde_json::json!({ "jsonrpc": "2.0", "id": id, "result": result })
+                        }
+                        Err(msg) => {
+                            serde_json::json!({ "jsonrpc": "2.0", "id": id, "error": { "code": -32000, "message": msg } })
+                        }
+                    }
+                } else {
+                    serde_json::json!({
+                        "jsonrpc": "2.0",
+                        "id": id,
+                        "error": { "code": -32601, "message": format!("Method not found: {}", method) }
+                    })
+                };
+                (resp, false)
+            }
+        };
+
+        ProcessOutcome { response: response.to_string(), shutdown }
     }
 
     /// Start the JSON-RPC read loop.
@@ -332,73 +397,29 @@ impl Plugin {
                 }
             }
 
-            let line = line.trim();
-            if line.is_empty() {
+            let trimmed = line.trim();
+            if trimmed.is_empty() {
                 continue;
             }
 
-            let raw: serde_json::Value = match serde_json::from_str(line) {
-                Ok(r) => r,
-                Err(e) => {
-                    let resp = serde_json::json!({
-                        "jsonrpc": "2.0",
-                        "id": 0,
-                        "error": { "code": -32700, "message": format!("Parse error: {}", e) }
-                    });
-                    let _ = writeln!(stdout, "{}", resp);
-                    let _ = stdout.flush();
-                    continue;
-                }
-            };
-            let id = raw.get("id").and_then(|v| v.as_u64()).unwrap_or(0);
-            let method = raw
-                .get("method")
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string();
-            let params = raw.get("params").cloned().unwrap_or(serde_json::Value::Null);
-
-            let response = match method.as_str() {
-                "init" => {
-                    let caps = serde_json::json!({
-                        "name": self.name,
-                        "version": self.manifest.version,
-                        "hooks": self.manifest.hooks.iter().map(|(k, v)| {
-                            (serde_json::to_value(k).unwrap_or_default().as_str().unwrap_or("").to_string(), serde_json::to_value(v).unwrap_or_default())
-                        }).collect::<HashMap<String, serde_json::Value>>(),
-                        "languages": self.manifest.languages,
-                        "rules": self.manifest.rules,
-                    });
-                    serde_json::json!({ "jsonrpc": "2.0", "id": id, "result": caps })
-                }
-                "shutdown" => {
-                    let resp = serde_json::json!({ "jsonrpc": "2.0", "id": id, "result": null });
-                    let _ = writeln!(stdout, "{}", resp);
-                    let _ = stdout.flush();
-                    std::process::exit(0);
-                }
-                _ => {
-                    if let Some(handler) = self.handlers.get(&method) {
-                        match handler(params) {
-                            Ok(result) => {
-                                serde_json::json!({ "jsonrpc": "2.0", "id": id, "result": result })
-                            }
-                            Err(msg) => {
-                                serde_json::json!({ "jsonrpc": "2.0", "id": id, "error": { "code": -32000, "message": msg } })
-                            }
-                        }
-                    } else {
-                        serde_json::json!({
-                            "jsonrpc": "2.0",
-                            "id": id,
-                            "error": { "code": -32601, "message": format!("Method not found: {}", method) }
-                        })
-                    }
-                }
-            };
-
-            let _ = writeln!(stdout, "{}", response);
+            let outcome = self.process_request(trimmed);
+            let _ = writeln!(stdout, "{}", outcome.response);
             let _ = stdout.flush();
+            if outcome.shutdown {
+                std::process::exit(0);
+            }
         }
     }
+}
+
+/// Result of dispatching a single JSON-RPC request.
+///
+/// `response` is the line that should be written to stdout (without
+/// trailing newline). `shutdown` is `true` only for the `shutdown`
+/// method — when set, the host expects the plugin to exit after the
+/// response is written.
+#[derive(Debug, Clone)]
+pub struct ProcessOutcome {
+    pub response: String,
+    pub shutdown: bool,
 }

@@ -192,8 +192,16 @@ interface JsonRpcErrorResponse {
 
 type JsonRpcResponse = JsonRpcSuccessResponse | JsonRpcErrorResponse;
 
-function isErrorResponse(resp: JsonRpcResponse): resp is JsonRpcErrorResponse {
-  return "error" in resp;
+/**
+ * Result of dispatching a single JSON-RPC request.
+ *
+ * `response` is the line that should be written to stdout (no trailing
+ * newline). `shutdown` is `true` only for the `shutdown` method — when
+ * set, the host expects the plugin to exit after the response is written.
+ */
+export interface ProcessOutcome {
+  response: string;
+  shutdown: boolean;
 }
 
 // ─── Plugin class ────────────────────────────────────────────────
@@ -269,62 +277,50 @@ export class Plugin {
   }
 
   /**
-   * Start the JSON-RPC read loop.
+   * Process a single JSON-RPC request line and return the response plus
+   * a flag indicating whether the host has asked the plugin to shut down.
    *
-   * Reads newline-delimited JSON from stdin, dispatches to registered
-   * handlers, and writes responses to stdout.
-   *
-   * Handles the "init" and "shutdown" methods automatically.
+   * This is the unit-testable core of the SDK — `start()` is just a
+   * stdin/stdout loop wrapped around it.
    */
-  start(): void {
-    const decoder = new TextDecoder();
-    const encoder = new TextEncoder();
-
-    let buffer = "";
-
-    const writeResponse = (resp: JsonRpcSuccessResponse | JsonRpcErrorResponse) => {
-      const line = JSON.stringify(resp) + "\n";
-      Bun.write(Bun.stdout, encoder.encode(line));
-    };
-
-    const handleLine = async (line: string) => {
-      let req: JsonRpcRequest;
-      try {
-        req = JSON.parse(line);
-      } catch {
-        writeResponse({
+  async processRequest(line: string): Promise<ProcessOutcome> {
+    let req: JsonRpcRequest;
+    try {
+      req = JSON.parse(line);
+    } catch {
+      return {
+        response: JSON.stringify({
           jsonrpc: "2.0",
           id: 0,
           error: { code: -32700, message: "Parse error" },
-        });
-        return;
-      }
+        }),
+        shutdown: false,
+      };
+    }
 
-      const { id, method, params } = req;
+    const { id, method, params } = req;
 
-      // Built-in: init
-      if (method === "init") {
-        // Run user `onInit` handler first (if any) so plugin state is
-        // ready before the SDK reports its capabilities. Errors thrown
-        // inside the handler are returned as JSON-RPC errors instead of
-        // crashing the subprocess.
-        const initHandler = this.handlers.get("init");
-        if (initHandler) {
-          try {
-            await initHandler(params);
-          } catch (err) {
-            writeResponse({
+    if (method === "init") {
+      const initHandler = this.handlers.get("init");
+      if (initHandler) {
+        try {
+          await initHandler(params);
+        } catch (err) {
+          return {
+            response: JSON.stringify({
               jsonrpc: "2.0",
               id,
               error: {
                 code: -32603,
                 message: `init handler failed: ${err instanceof Error ? err.message : String(err)}`,
               },
-            });
-            return;
-          }
+            }),
+            shutdown: false,
+          };
         }
-        writeResponse({
+      }
+      return {
+        response: JSON.stringify({
           jsonrpc: "2.0",
           id,
           result: {
@@ -334,62 +330,91 @@ export class Plugin {
             languages: this.manifest.languages ?? [],
             rules: this.manifest.rules ?? [],
           },
-        });
-        return;
-      }
+        }),
+        shutdown: false,
+      };
+    }
 
-      // Built-in: shutdown
-      if (method === "shutdown") {
-        writeResponse({ jsonrpc: "2.0", id, result: null });
-        process.exit(0);
-      }
+    if (method === "shutdown") {
+      return {
+        response: JSON.stringify({ jsonrpc: "2.0", id, result: null }),
+        shutdown: true,
+      };
+    }
 
-      // Dispatch to registered handler
-      const handler = this.handlers.get(method);
-      if (!handler) {
-        writeResponse({
+    const handler = this.handlers.get(method);
+    if (!handler) {
+      return {
+        response: JSON.stringify({
           jsonrpc: "2.0",
           id,
           error: { code: -32601, message: `Method not found: ${method}` },
-        });
-        return;
-      }
+        }),
+        shutdown: false,
+      };
+    }
 
-      try {
-        const result = await handler(params);
-        writeResponse({ jsonrpc: "2.0", id, result });
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : String(err);
-        writeResponse({
+    try {
+      const result = await handler(params);
+      return {
+        response: JSON.stringify({ jsonrpc: "2.0", id, result }),
+        shutdown: false,
+      };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      return {
+        response: JSON.stringify({
           jsonrpc: "2.0",
           id,
           error: { code: -32000, message },
-        });
+        }),
+        shutdown: false,
+      };
+    }
+  }
+
+  /**
+   * Start the JSON-RPC read loop.
+   *
+   * Reads newline-delimited JSON from stdin, dispatches to registered
+   * handlers, and writes responses to stdout.
+   *
+   * Handles the "init" and "shutdown" methods automatically.
+   */
+  start(): void {
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    // Use Node-compatible stdin/stdout APIs so the compiled package
+    // works on both Bun and Node. Bun provides full Node compat for
+    // `process.stdin` / `process.stdout`.
+    const stdout = process.stdout;
+    const stdin = process.stdin;
+
+    const writeResponse = (line: string): void => {
+      stdout.write(line + "\n");
+    };
+
+    const handleLine = async (line: string): Promise<void> => {
+      const outcome = await this.processRequest(line);
+      writeResponse(outcome.response);
+      if (outcome.shutdown) {
+        process.exit(0);
       }
     };
 
-    // Read stdin line by line using Bun's streaming API.
-    const reader = Bun.stdin.stream().getReader();
-
-    const pump = async () => {
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        // Keep the last (potentially incomplete) line in the buffer.
-        buffer = lines.pop() ?? "";
-
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (trimmed) {
-            await handleLine(trimmed);
-          }
+    stdin.on("data", async (chunk: Buffer) => {
+      buffer += decoder.decode(chunk, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (trimmed) {
+          await handleLine(trimmed);
         }
       }
-    };
-
-    pump().catch(() => process.exit(0));
+    });
+    stdin.on("end", () => process.exit(0));
+    stdin.on("error", () => process.exit(0));
   }
 }

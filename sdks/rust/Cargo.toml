@@ -2,9 +2,27 @@
 name = "statico-plugin-sdk"
 version = "0.1.0"
 edition = "2024"
-description = "SDK for building statico plugins in Rust"
-license = "MIT"
-keywords = ["statico", "plugin", "sdk", "analysis", "linting"]
+rust-version = "1.91"
+description = "SDK for building statico static-analyzer plugins in Rust (JSON-RPC over stdin/stdout)"
+authors = ["Donald Murillo <donald.murillo07@gmail.com>"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/DonaldMurillo/statico"
+homepage = "https://github.com/DonaldMurillo/statico"
+documentation = "https://docs.rs/statico-plugin-sdk"
+readme = "README.md"
+keywords = ["statico", "plugin", "sdk", "static-analysis", "linter"]
+categories = ["development-tools", "api-bindings"]
+
+# Limit what ships in the .crate file. We want the source, license,
+# README, and the integration tests — nothing else.
+include = [
+    "src/**/*.rs",
+    "tests/**/*.rs",
+    "README.md",
+    "LICENSE-MIT",
+    "LICENSE-APACHE",
+    "Cargo.toml",
+]
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
