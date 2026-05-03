@@ -41,6 +41,13 @@ jobs:
           - target: macos-aarch64
             rust-target: aarch64-apple-darwin
             runner: macos-latest
+          - target: windows-x86_64
+            rust-target: x86_64-pc-windows-msvc
+            runner: windows-latest
+            # Windows binaries get a `.exe` suffix; tarball is still .tar.gz
+            # for consistency with the other platforms (windows-latest ships
+            # GNU tar via Git Bash).
+            binary: statico.exe
 
     steps:
       - uses: actions/checkout@v4
@@ -69,12 +76,16 @@ jobs:
           set -euo pipefail
           name="statico-${{ matrix.target }}.tar.gz"
           stage="$(mktemp -d)"
-          cp target/${{ matrix.rust-target }}/release/statico "$stage/statico"
+          # `bin` is `statico` everywhere except Windows, where it's
+          # `statico.exe`. The matrix entry sets it explicitly.
+          bin="${{ matrix.binary || 'statico' }}"
+          cp "target/${{ matrix.rust-target }}/release/$bin" "$stage/$bin"
           cp LICENSE-MIT LICENSE-APACHE README.md "$stage/"
           tar -C "$stage" -czf "$name" .
           # Per-asset checksum file makes it easy for the GitHub Action /
           # npm postinstall to verify a single download without pulling
-          # SHASUMS256.txt.
+          # SHASUMS256.txt. `shasum` ships on every runner image we use
+          # (it's a Perl tool that comes with Git for Windows).
           shasum -a 256 "$name" > "$name.sha256"
           echo "name=$name" >>"$GITHUB_OUTPUT"
 

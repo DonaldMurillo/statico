@@ -48,20 +48,28 @@ runs:
       shell: bash
       env:
         STATICO_VERSION: ${{ inputs.version }}
+        # `RUNNER_OS` is set by GitHub Actions on every runner — use it
+        # for the OS detection so the Windows-vs-macOS-vs-Linux split is
+        # unambiguous (uname under Git Bash on Windows reports MINGW64_NT
+        # which is awkward to match).
+        RUNNER_OS: ${{ runner.os }}
       run: |
         set -euo pipefail
-        os="$(uname -s | tr '[:upper:]' '[:lower:]')"
-        arch="$(uname -m)"
-        case "$os" in
-          darwin) os=macos ;;
-          linux)  os=linux ;;
-          *) echo "::error::unsupported OS: $os"; exit 1 ;;
+
+        case "$RUNNER_OS" in
+          macOS)   os=macos ;;
+          Linux)   os=linux ;;
+          Windows) os=windows ;;
+          *) echo "::error::unsupported runner OS: $RUNNER_OS"; exit 1 ;;
         esac
+
+        arch="$(uname -m)"
         case "$arch" in
           arm64|aarch64) arch=aarch64 ;;
           x86_64|amd64)  arch=x86_64 ;;
           *) echo "::error::unsupported arch: $arch"; exit 1 ;;
         esac
+
         version="${STATICO_VERSION#v}"
         if [ "$version" = "latest" ]; then
           tag_path="latest/download"
@@ -70,16 +78,31 @@ runs:
         fi
         url="https://github.com/DonaldMurillo/statico/releases/${tag_path}/statico-${os}-${arch}.tar.gz"
         echo "Downloading $url"
-        curl -fsSL "$url" -o /tmp/statico.tar.gz
-        # Extract just the binary; --no-same-owner / --no-same-permissions
-        # avoid "Cannot utime" / "Cannot change mode" errors that fire when
-        # the tar's `.` entry tries to apply metadata to /tmp (a sticky
-        # directory the runner doesn't own).
-        tar -xzf /tmp/statico.tar.gz -C /tmp \
-          --no-same-owner --no-same-permissions \
-          ./statico
-        sudo install -m 0755 /tmp/statico /usr/local/bin/statico
-        statico --version
+
+        # Stage in a runner-agnostic temp dir. RUNNER_TEMP is provided by
+        # GitHub on every OS and avoids `/tmp` permission quirks on
+        # Windows (where /tmp maps oddly under Git Bash).
+        stage="${RUNNER_TEMP:-/tmp}/statico-install"
+        mkdir -p "$stage"
+        curl -fsSL "$url" -o "$stage/statico.tar.gz"
+
+        # Pick the binary name + install dir per OS. Windows install
+        # goes into RUNNER_TEMP and we add it to $GITHUB_PATH; the
+        # POSIX path uses /usr/local/bin.
+        if [ "$os" = "windows" ]; then
+          bin=statico.exe
+          tar -xzf "$stage/statico.tar.gz" -C "$stage" \
+            --no-same-owner --no-same-permissions "./$bin"
+          mv "$stage/$bin" "$stage/$bin"   # already there; explicit for clarity
+          echo "$stage" >>"$GITHUB_PATH"
+          "$stage/$bin" --version
+        else
+          bin=statico
+          tar -xzf "$stage/statico.tar.gz" -C "$stage" \
+            --no-same-owner --no-same-permissions "./$bin"
+          sudo install -m 0755 "$stage/$bin" "/usr/local/bin/$bin"
+          statico --version
+        fi
 
     - name: Run statico analyze
       id: run

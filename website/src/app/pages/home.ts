@@ -1,11 +1,12 @@
 import { Component } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { Grid, GridRow, GridCell } from '@angular/aria/grid';
+import { DownloadCtaComponent } from '../components/download-cta';
 
 @Component({
   selector: 'app-home',
   standalone: true,
-  imports: [RouterLink, Grid, GridRow, GridCell],
+  imports: [RouterLink, Grid, GridRow, GridCell, DownloadCtaComponent],
   template: `
     <main class="hero">
       <div class="hero-inner">
@@ -36,14 +37,17 @@ import { Grid, GridRow, GridCell } from '@angular/aria/grid';
           and framework-specific gotchas. Get a code health score from 0–100.
         </p>
 
-        <!-- CTAs -->
+        <!-- CTAs: smart-download primary, two secondary anchors -->
         <div class="hero-actions">
-          <a class="cmd-btn cmd-btn-primary" routerLink="/docs/getting-started">
-            <span class="cmd-prompt" aria-hidden="true">$</span> get started
-          </a>
-          <a class="cmd-btn cmd-btn-secondary" href="https://github.com/nickelc/statico" target="_blank" rel="noopener">
-            <span class="cmd-prompt" aria-hidden="true">//</span> view source
-          </a>
+          <app-download-cta />
+          <div class="hero-secondary-actions">
+            <a class="cmd-btn cmd-btn-secondary" routerLink="/docs/getting-started">
+              <span class="cmd-prompt" aria-hidden="true">$</span> get started
+            </a>
+            <a class="cmd-btn cmd-btn-secondary" href="https://github.com/DonaldMurillo/statico" target="_blank" rel="noopener">
+              <span class="cmd-prompt" aria-hidden="true">//</span> view source
+            </a>
+          </div>
         </div>
 
         <!-- Features with 2D keyboard navigation -->
@@ -193,9 +197,18 @@ import { Grid, GridRow, GridCell } from '@angular/aria/grid';
     /* --- CTAs --- */
     .hero-actions {
       display: flex;
+      flex-direction: column;
       gap: var(--sp-4);
+      align-items: center;
       justify-content: center;
       margin-bottom: var(--sp-16);
+    }
+
+    .hero-secondary-actions {
+      display: flex;
+      gap: var(--sp-4);
+      flex-wrap: wrap;
+      justify-content: center;
     }
 
     .cmd-btn {

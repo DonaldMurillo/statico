@@ -1,189 +1,232 @@
-# CI/CD Integration Guide
+# CI integration
 
-Integrate **statico** into your continuous integration pipeline to catch TypeScript issues before they reach production.
+Run statico in CI to catch dead code, unused exports, and framework gotchas
+before they ship. statico fits anywhere you can run a binary and read JSON or
+SARIF — examples below for GitHub Actions, GitLab CI, and Docker.
 
----
+> ⚠️ **Pre-1.0.** Output schemas can shift between minor releases. Pin a
+> statico version in CI (`v0.1.x`) instead of `latest` if your downstream
+> tooling is sensitive to schema drift.
 
-## Table of Contents
-
-1. [Quick Start – GitHub Actions (5 minutes)](#quick-start--github-actions)
-2. [Exit Code Semantics](#exit-code-semantics)
-3. [SARIF Integration with GitHub Code Scanning](#sarif-integration-with-github-code-scanning)
-4. [GitLab CI Setup](#gitlab-ci-setup)
-5. [Custom Thresholds with `--min-confidence`](#custom-thresholds-with---min-confidence)
-6. [Running in Docker](#running-in-docker)
-7. [Caching Strategies for Large Monorepos](#caching-strategies-for-large-monorepos)
-8. [Monorepo Tips](#monorepo-tips)
+[← Back to README](../README.md)
 
 ---
 
-## Quick Start – GitHub Actions
+## Table of contents
 
-Drop the following into `.github/workflows/statico.yml` in your TypeScript project:
+1. [GitHub Actions — the official Action](#github-actions--the-official-action)
+2. [GitHub Actions — manual install](#github-actions--manual-install)
+3. [Exit-code semantics](#exit-code-semantics)
+4. [Baseline-gated CI (recommended)](#baseline-gated-ci-recommended)
+5. [SARIF + GitHub Code Scanning](#sarif--github-code-scanning)
+6. [GitLab CI](#gitlab-ci)
+7. [Docker](#docker)
+8. [Confidence thresholds](#confidence-thresholds)
+9. [Monorepo tips](#monorepo-tips)
+
+---
+
+## GitHub Actions — the official Action
+
+The repo ships a composite action at `.github/actions/statico/`. From any
+other repo:
 
 ```yaml
-name: Statico
-
-on:
-  pull_request:
-    branches: [main]
-  push:
-    branches: [main]
+name: statico
+on: [push, pull_request]
 
 permissions:
   contents: read
-  security-events: write
-  pull-requests: write
+  security-events: write   # only if you upload SARIF
 
 jobs:
   analyze:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - uses: dtolnay/rust-toolchain@stable
-
-      - uses: actions/cache@v4
+      - uses: DonaldMurillo/statico/.github/actions/statico@v0.1.1
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: statico-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          format: sarif
+          min-confidence: '0.7'
+          exit-code: 'false'           # set 'true' to fail the build
+          upload-sarif: 'true'         # default; set 'false' to skip Code Scanning
+```
 
-      - run: cargo build --release
+The Action installs the prebuilt binary for the runner's OS/arch
+(macOS / Linux × x86_64 / aarch64) — no Rust toolchain needed.
 
-      - name: Run statico (SARIF)
+**Inputs:**
+
+| Name | Default | Description |
+|---|---|---|
+| `version` | `latest` | Release tag (e.g. `v0.1.1`) or `latest` |
+| `path` | `.` | Project path to analyze |
+| `format` | `sarif` | Any `--format` value: `json`, `sarif`, `markdown`, `html`, `ai`, `context`, `mermaid`, `pr-comment`, `fix` |
+| `output-file` | `statico-results.sarif` | Where to write the analysis |
+| `min-confidence` | `0.0` | Drop issues below this confidence |
+| `exit-code` | `false` | Fail the step on any reported issue |
+| `upload-sarif` | `true` | When format is `sarif`, upload to Code Scanning |
+
+**Outputs:**
+
+| Name | Description |
+|---|---|
+| `output-file` | Path of the file the action wrote |
+
+---
+
+## GitHub Actions — manual install
+
+If you can't use the composite action (custom runner, hardened policy,
+mirror), install the binary directly:
+
+```yaml
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install statico
         run: |
-          ./target/release/statico analyze . \
-            --format sarif \
-            --exit-code \
-            --min-confidence 0.7 \
-            --output results.sarif
+          # Pin a version — `latest` will follow new releases including breaking changes.
+          VERSION=v0.1.1
+          os=linux ; arch=$(uname -m | sed 's/aarch64/aarch64/;s/x86_64/x86_64/')
+          curl -fsSL "https://github.com/DonaldMurillo/statico/releases/download/${VERSION}/statico-${os}-${arch}.tar.gz" \
+            -o /tmp/statico.tar.gz
+          tar -xzf /tmp/statico.tar.gz -C /tmp \
+            --no-same-owner --no-same-permissions ./statico
+          sudo install -m 0755 /tmp/statico /usr/local/bin/statico
 
-      - name: Upload to Code Scanning
-        if: always()
+      - name: Analyze
+        run: statico analyze . --format sarif --min-confidence 0.7 > results.sarif
+
+      - name: Upload SARIF
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: results.sarif
           category: statico
 ```
 
-That's it. Every PR and push to `main` will now be analyzed. Issues appear inline in the **Security → Code scanning alerts** tab.
+Or via npm:
 
-> **Tip:** For a richer setup with PR comments and configurable inputs, use the full template in `templates/github-action.yml`.
-
----
-
-## Exit Code Semantics
-
-Statico uses exit codes to gate your CI pipeline:
-
-| Exit Code | Meaning |
-|-----------|---------|
-| `0` | No issues found (or analysis completed without `--exit-code`) |
-| `1` | Issues found above the configured confidence threshold |
-| `2` | Invalid arguments or configuration error |
-| `>2` | Internal error (panic, I/O failure, etc.) |
-
-### Enabling exit-code gating
-
-By default, statico exits with `0` even if issues are found (useful for report generation). Add `--exit-code` to make it return `1` when issues exceed the threshold:
-
-```bash
-# Fails (exit 1) if any issue has confidence ≥ 0.7
-statico analyze . --format sarif --exit-code --min-confidence 0.7
+```yaml
+- uses: actions/setup-node@v4
+  with: { node-version: '22' }
+- run: npm install -g @statico/cli
+- run: statico analyze . --format sarif > results.sarif
 ```
 
-In CI, this naturally fails the pipeline step. To allow the pipeline to continue (e.g., to upload artifacts), use `continue-on-error: true` in GitHub Actions or `|| true` in shell scripts.
+---
+
+## Exit-code semantics
+
+| Exit code | Meaning |
+|---|---|
+| `0` | Analysis completed. Issues may still be present — this is the default. |
+| `1` | `--exit-code` was set and at least one issue passed `--baseline` + `--min-confidence` filtering. |
+| Non-zero (other) | Internal error (panic, bad arguments, IO failure). |
+
+By default `statico analyze` does **not** gate on findings. Add `--exit-code`
+when you want CI to fail on issues:
+
+```bash
+statico analyze . --min-confidence 0.7 --exit-code
+```
+
+To allow the pipeline to continue past a non-zero exit (e.g. so you can
+upload the report as an artifact), use `continue-on-error: true` in GitHub
+Actions or `|| true` in shell scripts.
 
 ---
 
-## SARIF Integration with GitHub Code Scanning
+## Baseline-gated CI (recommended)
 
-Statico outputs [SARIF](https://sarifweb.azurewebsites.net/) (Static Analysis Results Interchange Format), which GitHub Code Scanning consumes natively.
+Naive `--exit-code` gates fail the moment anyone introduces a new — even
+harmless — finding. Use a baseline file so only **new** issues fail the
+build.
 
-### How it works
+```bash
+# One-time, locally:
+statico analyze . --update-baseline statico-baseline.json --min-confidence 0.7
+git add statico-baseline.json
+git commit -m "chore: statico baseline"
+```
 
-1. **Generate the SARIF file:**
-   ```bash
-   statico analyze . --format sarif --output results.sarif
-   ```
+```yaml
+- run: statico analyze . --baseline statico-baseline.json --min-confidence 0.7 --exit-code
+```
 
-2. **Upload with the CodeQL action:**
-   ```yaml
-   - uses: github/codeql-action/upload-sarif@v3
-     with:
-       sarif_file: results.sarif
-       category: statico   # Distinguishes statico from other tools
-   ```
+To accept new findings (after a deliberate refactor), regenerate the
+baseline locally and commit it.
 
-3. **View results:** Navigate to your repository → **Security** → **Code scanning alerts**.
+The baseline file is a list of stable per-issue fingerprints — see
+[Configuration](configuration.md) for the schema.
 
-### Required permissions
+---
 
-Your workflow needs these permissions:
+## SARIF + GitHub Code Scanning
+
+`--format sarif` produces SARIF 2.1.0, which Code Scanning consumes natively
+and surfaces inline on PRs and in the **Security → Code scanning** tab.
 
 ```yaml
 permissions:
   contents: read
-  security-events: write   # Upload SARIF
-  actions: read             # Needed by upload-sarif action
+  security-events: write    # required for upload-sarif
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DonaldMurillo/statico/.github/actions/statico@v0.1.1
+        with:
+          format: sarif
+          upload-sarif: 'true'
 ```
 
-### Category naming
+The Action's `upload-sarif: true` (default) wraps `github/codeql-action/upload-sarif@v3`
+with `category: statico` so multiple analyzers don't collide.
 
-The `category` field lets you run multiple static analysis tools without conflicts. Use a unique category per tool (e.g., `statico`, `eslint`, `codeql`).
+**SARIF mapping** (rule IDs you'll see in alerts):
+
+| Rule ID | Source category |
+|---|---|
+| `dead_code` | `issues.dead_code` |
+| `unused_export` | `issues.unused_exports` |
+| `unused_type` | `issues.unused_types` |
+| `duplicate_export` | `issues.duplicate_exports` |
+| `duplicate_code` | `issues.duplicate_code` |
+| `gotcha` | `issues.gotchas` |
+| `circular_dependency` | `issues.circular_dependencies` |
+| `unused_dependency` | `issues.unused_dependencies` |
+| `unlisted_dependency` | `issues.unlisted_dependencies` |
+| `unresolved_import` | `issues.unresolved_imports` |
 
 ---
 
-## GitLab CI Setup
-
-Use the template at `templates/gitlab-ci.yml` for a complete pipeline, or add these jobs to your existing `.gitlab-ci.yml`:
+## GitLab CI
 
 ```yaml
-stages:
-  - build
-  - analyze
+stages: [analyze]
 
-# Build statico
-statico:build:
-  stage: build
-  image: rust:latest
-  script:
-    - cargo build --release
-  artifacts:
-    paths:
-      - target/release/statico
-    expire_in: 1 day
-  cache:
-    key:
-      files:
-        - Cargo.lock
-    paths:
-      - .cargo/registry
-      - .cargo/git
-      - target
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-
-# Run analysis
-statico:analyze:
+statico:
   stage: analyze
-  image: node:20-bookworm
-  needs:
-    - job: statico:build
-      artifacts: true
+  image: ubuntu:24.04
+  before_script:
+    - apt-get update && apt-get install -y curl ca-certificates
+    - VERSION=v0.1.1
+    - arch=$(uname -m); [ "$arch" = "aarch64" ] || arch=x86_64
+    - curl -fsSL "https://github.com/DonaldMurillo/statico/releases/download/${VERSION}/statico-linux-${arch}.tar.gz" -o /tmp/s.tgz
+    - tar -xzf /tmp/s.tgz -C /tmp --no-same-owner --no-same-permissions ./statico
+    - install -m 0755 /tmp/statico /usr/local/bin/statico
   script:
-    - chmod +x target/release/statico
-    # Generate HTML report (always)
-    - target/release/statico analyze . --format html --output report.html || true
-    # Gate with exit code
-    - target/release/statico analyze . --format console --exit-code --min-confidence 0.7
+    - statico analyze . --format markdown
+    - statico analyze . --format html > report.html
+    - statico analyze . --baseline statico-baseline.json --min-confidence 0.7 --exit-code
   artifacts:
-    paths:
-      - report.html
+    paths: [report.html]
     expire_in: 30 days
     when: always
   rules:
@@ -191,245 +234,112 @@ statico:analyze:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
 ```
 
-### Accessing the HTML report
-
-After the pipeline runs, download the HTML report from:
-
-**CI/CD → Pipelines → [your pipeline] → `statico:analyze` job → Job artifacts → `report.html`**
-
-Open it in any browser for a styled, interactive view of all findings.
+Download `report.html` from **CI/CD → Pipelines → [pipeline] → statico job
+→ Job artifacts**.
 
 ---
 
-## Custom Thresholds with `--min-confidence`
+## Docker
 
-Statico assigns a confidence score (0.0 – 1.0) to each finding. The `--min-confidence` flag filters out noise:
-
-```bash
-# Only report high-confidence issues (strict)
-statico analyze . --min-confidence 0.9 --exit-code
-
-# Default: moderate threshold
-statico analyze . --min-confidence 0.7 --exit-code
-
-# Show everything including low-confidence hints (permissive)
-statico analyze . --min-confidence 0.0 --exit-code
-```
-
-### Recommended thresholds
-
-| Threshold | Use case |
-|-----------|----------|
-| `0.9` | Release branches, production gates — only critical issues |
-| `0.7` | PR reviews — balanced signal-to-noise ratio (default) |
-| `0.5` | Development — catch potential issues early |
-| `0.0` | Full audit — inspect everything |
-
-### CI strategy
-
-Start permissive (`0.5`) during adoption, then tighten as you address findings. This avoids blocking developers while you build trust in the tool.
-
----
-
-## Running in Docker
-
-Build statico into a Docker image for consistent CI execution without compiling on every run.
-
-### Dockerfile
+If you need an isolated runtime, build statico into a slim image:
 
 ```dockerfile
-# ---- Build stage ----
-FROM rust:1.78-bookworm AS builder
-
-WORKDIR /usr/src/statico
+FROM rust:1.91-bookworm AS build
+WORKDIR /src
 COPY . .
+RUN cargo build --release --bin statico
 
-RUN cargo build --release
-
-# ---- Runtime stage ----
-FROM node:20-bookworm-slim
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates \
+FROM debian:bookworm-slim
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/*
-
-COPY --from=builder /usr/src/statico/target/release/statico /usr/local/bin/statico
-
+COPY --from=build /src/target/release/statico /usr/local/bin/statico
 ENTRYPOINT ["statico"]
-CMD ["analyze", ".", "--format", "console"]
+CMD ["analyze", ".", "--format", "markdown"]
 ```
-
-### Building and running
 
 ```bash
-# Build the image
-docker build -t statico .
-
-# Run against a local project
-docker run --rm -v "$(pwd):/project" -w /project statico \
-  analyze . --format html --output /project/report.html --exit-code
+docker build -t statico:local .
+docker run --rm -v "$(pwd):/project" -w /project statico:local \
+  analyze . --format sarif --min-confidence 0.7 > results.sarif
 ```
 
-### Using the Docker image in CI
-
-**GitHub Actions:**
-
-```yaml
-- name: Run statico
-  run: |
-    docker run --rm -v "$(pwd):/project" -w /project statico:latest \
-      analyze . --format sarif --exit-code --output results.sarif
-```
-
-**GitLab CI:**
-
-```yaml
-statico:analyze:
-  stage: analyze
-  image: your-registry/statico:latest
-  script:
-    - statico analyze . --format html --output report.html --exit-code
-  artifacts:
-    paths:
-      - report.html
-```
+For most cases the prebuilt tarball is faster than building inside Docker
+on every run — pick the build approach only when you need image isolation.
 
 ---
 
-## Caching Strategies for Large Monorepos
+## Confidence thresholds
 
-Building statico from source on every CI run takes time. These strategies reduce build times significantly.
+statico assigns a confidence score (0.0–1.0) to each issue. Use
+`--min-confidence` to drop low-signal noise:
 
-### GitHub Actions – Cargo cache
+| Threshold | Use case |
+|---|---|
+| `0.9` | Release branches — only critical issues |
+| `0.7` | Default for PR review — balanced (matches Action default) |
+| `0.5` | Development — catch potential issues early |
+| `0.0` | Full audit — show everything |
 
-```yaml
-- uses: actions/cache@v4
-  with:
-    path: |
-      ~/.cargo/registry
-      ~/.cargo/git
-      target
-    key: statico-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
-    restore-keys: |
-      statico-${{ runner.os }}-
-```
-
-This caches the Cargo registry, git checkouts, and compiled artifacts. Cache hits on unchanged `Cargo.lock` files skip compilation entirely.
-
-### GitLab CI – Cache per lockfile
-
-```yaml
-cache:
-  key:
-    files:
-      - Cargo.lock
-  paths:
-    - .cargo/registry
-    - .cargo/git
-    - target
-```
-
-### Pre-built binary strategy
-
-For the fastest CI, build statico once and distribute the binary:
-
-1. **Create a release binary** (in a separate workflow or manually):
-   ```bash
-   cargo build --release
-   tar czf statico-linux-x86_64.tar.gz target/release/statico
-   ```
-
-2. **Upload as a GitHub Release asset** or store in your artifact registry.
-
-3. **Download in CI:**
-   ```yaml
-   - name: Install statico
-     run: |
-       curl -sL https://github.com/your-org/statico/releases/latest/download/statico-linux-x86_64.tar.gz | tar xz
-       chmod +x statico
-       sudo mv statico /usr/local/bin/
-   ```
-
-This avoids the Rust toolchain installation entirely and cuts ~2–5 minutes from each run.
+The gotcha detector emits many low-confidence patterns (e.g. `console.log`
+in non-test code at 0.4). At 0.7 most of those drop out. Tune to taste.
 
 ---
 
-## Monorepo Tips
+## Monorepo tips
 
-Statico works well in monorepos. Here are patterns for analyzing specific subprojects and excluding others.
-
-### Analyzing a single subproject
+### Analyze one subproject
 
 ```bash
-# Only analyze the "frontend" package
-statico analyze ./apps/frontend --format sarif --exit-code
+statico analyze ./apps/web
 ```
 
-### Excluding subprojects
+### Exclude paths
 
-Use `--exclude` to skip directories:
+Add to `.statico.toml`:
 
-```bash
-# Analyze everything except legacy and vendor code
-statico analyze . \
-  --exclude "legacy/*" \
-  --exclude "vendor/*" \
-  --exclude "**/node_modules" \
-  --format sarif \
-  --exit-code
+```toml
+exclude = [
+  "vendor/**",
+  "**/*.generated.ts",
+  "apps/legacy/**",
+]
 ```
 
-### Per-project CI matrix
+CLI flag form is not currently available — exclude lists must live in
+`.statico.toml`.
 
-In GitHub Actions, use a matrix to analyze each project independently:
+### Per-project matrix
 
 ```yaml
 strategy:
   matrix:
-    project:
-      - apps/web
-      - apps/mobile
-      - packages/ui
+    project: [apps/web, apps/mobile, packages/ui]
 steps:
-  - run: |
-      ./target/release/statico analyze "${{ matrix.project }}" \
-        --format sarif \
-        --exit-code \
-        --output "results-${{ matrix.project }}.sarif"
+  - uses: actions/checkout@v4
+  - uses: DonaldMurillo/statico/.github/actions/statico@v0.1.1
+    with:
+      path: ${{ matrix.project }}
+      output-file: results-${{ matrix.project }}.sarif
 ```
 
-### Selective analysis with path filters
+### Path-filter the workflow
 
-Only run statico when relevant files change:
+Only run when relevant files change:
 
 ```yaml
 on:
   pull_request:
     paths:
-      - 'apps/web/**/*.ts'
-      - 'apps/web/**/*.tsx'
-      - 'packages/shared/**/*.ts'
+      - 'apps/web/**'
+      - 'packages/shared/**'
 ```
 
-### Confidence tuning per project
-
-Different projects may have different quality thresholds:
+### Per-project thresholds
 
 ```yaml
 # Strict for production code
-statico analyze ./apps/api --min-confidence 0.9 --exit-code
+- run: statico analyze ./apps/api --min-confidence 0.9 --exit-code
 
 # Relaxed for prototypes
-statico analyze ./apps/playground --min-confidence 0.5 --exit-code
+- run: statico analyze ./apps/playground --min-confidence 0.5
 ```
-
----
-
-## Template Reference
-
-| Template | Path | Description |
-|----------|------|-------------|
-| GitHub Actions | `templates/github-action.yml` | Full reusable workflow with SARIF upload, PR comments, caching |
-| GitLab CI | `templates/gitlab-ci.yml` | Two-stage pipeline with HTML artifacts and exit-code gating |
-
-Copy these templates into your project and customize as needed.
