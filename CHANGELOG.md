@@ -8,6 +8,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [0.0.0-rc1] - 2026-05-03
 
+## [0.0.0-rc1] - 2026-05-03
+
 ### Added
 
 - TypeScript plugin SDK exposes `Plugin.onInit(handler)` so plugin authors
