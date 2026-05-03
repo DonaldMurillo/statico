@@ -374,19 +374,26 @@ fn cli_help_lists_new_commands() {
 }
 
 #[test]
-fn cli_update_check_handles_missing_releases() {
+fn cli_update_check_does_not_crash() {
+    // Originally this test asserted on non-zero exit because no releases
+    // existed yet. Now that v0.1.0+ is published, the real GitHub API
+    // succeeds and `--check` exits 0. The relevant guarantee — and the
+    // one we still want to enforce — is that the command never panics.
+    // For a deterministic offline check use STATICO_UPDATE_API_URL in
+    // a separate test that runs against a mock server; that already
+    // exists as `cli_update_downloads_and_extracts_from_mock_server`.
     let output = Command::new(statico_bin())
         .args(["update", "--check"])
         .output()
         .expect("failed to execute statico update --check");
 
-    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-    assert!(!output.status.success(), "expected non-zero exit for missing releases");
-    assert!(
-        stderr.contains("failed to check for updates") || stderr.contains("404"),
-        "expected error message about update failure, got: {stderr}"
+    let combined = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr),
     );
-    assert!(!stderr.contains("panic"), "should not panic");
+    assert!(!combined.contains("panicked at"), "should not panic, got: {combined}");
+    assert!(!combined.contains("RUST_BACKTRACE"), "should not panic, got: {combined}");
 }
 
 #[test]

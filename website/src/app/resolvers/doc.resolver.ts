@@ -23,8 +23,9 @@ export const docResolver: ResolveFn<DocData | null> = async (route) => {
 
   // HttpClient works on both server (prerender) and browser (hydration).
   // TransferCache automatically serializes the response from server → client.
+  // resolveAssetUrl prefixes APP_BASE_HREF so `/statico/` deploys work too.
   const md = await firstValueFrom(
-    http.get(entry.path, { responseType: 'text' })
+    http.get(docs.resolveAssetUrl(entry.assetPath), { responseType: 'text' })
   );
   const html = await marked.parse(md, { async: true }) as string;
 

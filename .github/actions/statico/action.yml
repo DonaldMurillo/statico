@@ -71,7 +71,13 @@ runs:
         url="https://github.com/DonaldMurillo/statico/releases/${tag_path}/statico-${os}-${arch}.tar.gz"
         echo "Downloading $url"
         curl -fsSL "$url" -o /tmp/statico.tar.gz
-        tar -xzf /tmp/statico.tar.gz -C /tmp
+        # Extract just the binary; --no-same-owner / --no-same-permissions
+        # avoid "Cannot utime" / "Cannot change mode" errors that fire when
+        # the tar's `.` entry tries to apply metadata to /tmp (a sticky
+        # directory the runner doesn't own).
+        tar -xzf /tmp/statico.tar.gz -C /tmp \
+          --no-same-owner --no-same-permissions \
+          ./statico
         sudo install -m 0755 /tmp/statico /usr/local/bin/statico
         statico --version
 
