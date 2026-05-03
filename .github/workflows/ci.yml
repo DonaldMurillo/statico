@@ -121,3 +121,27 @@ jobs:
             --baseline statico-baseline.json \
             --min-confidence 0.7 \
             --format markdown
+
+  website-build:
+    # Smoke-build the Angular SSG site so we catch website breakage in CI
+    # rather than discovering it the moment the Pages deploy fails. Same
+    # `ng build` invocation Pages uses.
+    name: website build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: website
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+
+      - name: npm ci
+        run: npm ci
+
+      - name: ng build (with /statico/ base-href, same as Pages)
+        run: npm run build -- --base-href "/statico/"
