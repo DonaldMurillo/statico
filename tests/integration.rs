@@ -354,10 +354,7 @@ fn cli_version_flag_works() {
     // here would break every cut. Just check the output looks like a
     // version line.
     let expected = env!("CARGO_PKG_VERSION");
-    assert!(
-        stdout.contains(expected),
-        "version output should contain Cargo.toml version `{expected}`, got: {stdout}"
-    );
+    assert!(stdout.contains(expected), "version output should contain Cargo.toml version `{expected}`, got: {stdout}");
     assert!(stdout.starts_with("statico "), "version line should start with 'statico ', got: {stdout}");
 }
 
@@ -387,11 +384,7 @@ fn cli_update_check_does_not_crash() {
         .output()
         .expect("failed to execute statico update --check");
 
-    let combined = format!(
-        "{}{}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr),
-    );
+    let combined = format!("{}{}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr),);
     assert!(!combined.contains("panicked at"), "should not panic, got: {combined}");
     assert!(!combined.contains("RUST_BACKTRACE"), "should not panic, got: {combined}");
 }
