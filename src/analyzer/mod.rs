@@ -130,7 +130,7 @@ pub fn analyze_with_options(root: &Path, exclude: &[String], no_cache: bool) -> 
 
     // Detect monorepo setup.
     let monorepo = crate::monorepo::detect_monorepo(root)
-        .map(|info| MonorepoInfoData { kind: info.kind.to_string(), packages: info.packages.clone() });
+        .map(|info| MonorepoInfoData { kind: info.kind.clone(), packages: info.packages.clone() });
 
     // Framework names derived from profiles detected earlier.
     let detected_frameworks: Vec<String> = fw_profiles.iter().map(|p| p.name.to_string()).collect();

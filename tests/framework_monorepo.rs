@@ -101,7 +101,7 @@ fn nestjs_monorepo_not_detected() {
 #[test]
 fn pnpm_monorepo_detected() {
     let info = statico::monorepo::detect_monorepo(&fixture("pnpm-monorepo")).expect("should detect pnpm monorepo");
-    assert_eq!(info.kind, statico::monorepo::MonorepoKind::Pnpm);
+    assert_eq!(info.kind, "pnpm");
     assert!(info.packages.contains(&"packages/".to_string()), "packages: {:?}", info.packages);
     assert!(info.packages.contains(&"apps/".to_string()), "packages: {:?}", info.packages);
 }
@@ -109,14 +109,14 @@ fn pnpm_monorepo_detected() {
 #[test]
 fn npm_monorepo_detected() {
     let info = statico::monorepo::detect_monorepo(&fixture("npm-monorepo")).expect("should detect npm monorepo");
-    assert_eq!(info.kind, statico::monorepo::MonorepoKind::Npm);
+    assert_eq!(info.kind, "npm/yarn");
     assert!(info.packages.contains(&"packages/".to_string()), "packages: {:?}", info.packages);
 }
 
 #[test]
 fn nx_monorepo_detected() {
     let info = statico::monorepo::detect_monorepo(&fixture("nx-monorepo")).expect("should detect nx monorepo");
-    assert_eq!(info.kind, statico::monorepo::MonorepoKind::Nx);
+    assert_eq!(info.kind, "nx");
     assert!(info.packages.contains(&"packages/".to_string()), "packages: {:?}", info.packages);
 }
 
@@ -209,7 +209,7 @@ fn angular_includes_detected_frameworks() {
 #[test]
 fn turborepo_monorepo_detected() {
     let info = statico::monorepo::detect_monorepo(&fixture("turborepo-monorepo")).expect("should detect turborepo");
-    assert_eq!(info.kind, statico::monorepo::MonorepoKind::Turborepo);
+    assert_eq!(info.kind, "turborepo");
 }
 
 #[test]

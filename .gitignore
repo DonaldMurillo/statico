@@ -68,3 +68,5 @@ sdks/typescript/node_modules/
 sdks/typescript/bun.lock
 sdks/typescript/bun.lockb
 sdks/rust/target/
+# pi agent state (auto-added)
+.pi/
