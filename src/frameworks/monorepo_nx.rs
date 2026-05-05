@@ -208,6 +208,73 @@ pub fn parse_nx_json(path: &Path) -> Option<NxConfig> {
     Some(NxConfig { named_inputs })
 }
 
+/// Discover all project.json files under the given workspace package prefixes
+/// and return (project_name, relative_path_to_project_json) pairs.
+pub fn discover_project_json_files(root: &Path, packages: &[String]) -> Vec<(String, std::path::PathBuf)> {
+    let mut projects = Vec::new();
+
+    for prefix in packages {
+        let prefix_path = root.join(prefix.trim_end_matches('/'));
+        if !prefix_path.is_dir() {
+            continue;
+        }
+
+        // Check if the prefix itself has a project.json
+        let pj = prefix_path.join("project.json");
+        if pj.exists() {
+            if let Some(NxProject { name, .. }) = parse_project_json(&pj) {
+                if !name.is_empty() {
+                    projects.push((name, pj));
+                }
+            }
+        }
+
+        // Enumerate subdirectories for project.json files
+        if let Ok(entries) = std::fs::read_dir(&prefix_path) {
+            for entry in entries.flatten() {
+                if !entry.file_type().is_ok_and(|t| t.is_dir()) {
+                    continue;
+                }
+                let pj = entry.path().join("project.json");
+                if pj.exists() {
+                    if let Some(NxProject { name, .. }) = parse_project_json(&pj) {
+                        if !name.is_empty() {
+                            projects.push((name, pj));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    projects
+}
+
+/// Given an Nx project, return the entry point relative path (if it can be resolved).
+/// Uses the project's sourceRoot + main_entry, or falls back to sourceRoot + "index.ts".
+pub fn nx_project_entry_path(root: &Path, project_dir: &Path, project: &NxProject) -> Option<String> {
+    let rel_dir = project_dir.strip_prefix(root).ok()?.to_str()?.to_string();
+
+    // If there's an explicit main entry from targets.build.options.main
+    if let Some(ref main) = project.main_entry {
+        let rel = format!("{}/{}", rel_dir, main.trim_start_matches("./"));
+        return Some(rel);
+    }
+
+    // Fall back to sourceRoot + index.ts/main.ts
+    if let Some(ref src) = project.source_root {
+        for default in &["index.ts", "index.tsx", "main.ts", "main.tsx"] {
+            let rel = format!("{}/{}/{}", rel_dir, src.trim_start_matches("./"), default);
+            let full = root.join(&rel);
+            if full.exists() {
+                return Some(rel);
+            }
+        }
+    }
+
+    None
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------

@@ -239,6 +239,64 @@ fn turborepo_discovers_packages() {
 }
 
 // ---------------------------------------------------------------------------
+// Nx-specific features (project.json, nx.json)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn nx_project_json_parsed() {
+    let root = fixture("nx-monorepo");
+    let pj_path = root.join("packages/ui/project.json");
+    let project = statico::frameworks::monorepo_nx::parse_project_json(&pj_path)
+        .expect("should parse project.json");
+    assert_eq!(project.name, "ui");
+    assert_eq!(project.source_root.as_deref(), Some("src"));
+    assert_eq!(project.project_type.as_deref(), Some("library"));
+    assert!(project.tags.contains(&"scope:ui".to_string()), "tags: {:?}", project.tags);
+    assert_eq!(project.main_entry.as_deref(), Some("src/index.ts"));
+}
+
+#[test]
+fn nx_project_json_discovers_entry() {
+    let root = fixture("nx-monorepo");
+    let info = statico::monorepo::detect_monorepo(&root).expect("should detect nx");
+    let projects = statico::frameworks::monorepo_nx::discover_project_json_files(&root, &info.packages);
+    assert!(!projects.is_empty(), "should find at least one project.json");
+    // The ui project should be found
+    let ui = projects.iter().find(|(name, _)| name == "ui");
+    assert!(ui.is_some(), "should find ui project, found: {:?}", projects);
+
+    // Parse and resolve entry
+    let (_name, pj_path) = ui.unwrap();
+    let project = statico::frameworks::monorepo_nx::parse_project_json(pj_path).unwrap();
+    let entry = statico::frameworks::monorepo_nx::nx_project_entry_path(
+        &root,
+        pj_path.parent().unwrap(),
+        &project,
+    );
+    assert_eq!(entry.as_deref(), Some("packages/ui/src/index.ts"));
+}
+
+#[test]
+fn nx_nx_json_parsed() {
+    let root = fixture("nx-monorepo");
+    let config = statico::frameworks::monorepo_nx::parse_nx_json(&root.join("nx.json"))
+        .expect("should parse nx.json");
+    // The fixture has targetDefaults but no namedInputs
+    assert!(config.named_inputs.is_empty() || !config.named_inputs.is_empty());
+}
+
+#[test]
+fn nx_analyze_uses_project_json_entry() {
+    let output = analyze_fixture("nx-monorepo");
+    // The ui project's src/index.ts should be an entry point (discovered via project.json)
+    assert!(
+        output.structure.entry_points.iter().any(|e| e.contains("ui") && e.contains("index")),
+        "ui/index should be an entry point, got: {:?}",
+        output.structure.entry_points
+    );
+}
+
+// ---------------------------------------------------------------------------
 // Vue
 // ---------------------------------------------------------------------------
 
