@@ -63,6 +63,14 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: cargo fmt --all -- --check
 
+      - name: Build TS plugin SDK (needed by coverage-gap example)
+        # The SDK's package.json points main → dist/index.js, so the
+        # coverage-gap plugin can't import it until we build.
+        working-directory: sdks/typescript
+        run: |
+          bun install
+          bun run build
+
       - name: Test the coverage-gap plugin example
         # End-to-end JSON-RPC tests that spawn the plugin and verify the
         # init + analyze_file + post_analysis flow. Bun-only — already
