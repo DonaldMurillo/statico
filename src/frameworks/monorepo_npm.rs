@@ -52,17 +52,11 @@ fn parse_npm_workspaces(root: &Path) -> Vec<String> {
         None => return Vec::new(),
     };
     let items = match ws {
-        serde_json::Value::Array(arr) => arr
-            .iter()
-            .filter_map(|v| v.as_str().map(|s| s.to_string()))
-            .collect(),
+        serde_json::Value::Array(arr) => arr.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect(),
         serde_json::Value::Object(obj) => {
             // yarn workspaces: { packages: [...] }
             if let Some(packages) = obj.get("packages").and_then(|p| p.as_array()) {
-                packages
-                    .iter()
-                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
-                    .collect()
+                packages.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect()
             } else {
                 return Vec::new();
             }
@@ -96,11 +90,7 @@ mod tests {
         let tmp = std::env::temp_dir().join("statico_test_npm_ws");
         let _ = std::fs::remove_dir_all(&tmp);
         std::fs::create_dir_all(&tmp).unwrap();
-        std::fs::write(
-            tmp.join("package.json"),
-            r#"{"workspaces": ["packages/*", "apps/*"]}"#,
-        )
-        .unwrap();
+        std::fs::write(tmp.join("package.json"), r#"{"workspaces": ["packages/*", "apps/*"]}"#).unwrap();
         let profile = NpmProfile;
         let packages = profile.parse_workspaces(&tmp);
         assert_eq!(packages, vec!["packages/", "apps/"]);
@@ -112,11 +102,7 @@ mod tests {
         let tmp = std::env::temp_dir().join("statico_test_npm_ws_obj");
         let _ = std::fs::remove_dir_all(&tmp);
         std::fs::create_dir_all(&tmp).unwrap();
-        std::fs::write(
-            tmp.join("package.json"),
-            r#"{"workspaces": {"packages": ["packages/*"]}}"#,
-        )
-        .unwrap();
+        std::fs::write(tmp.join("package.json"), r#"{"workspaces": {"packages": ["packages/*"]}}"#).unwrap();
         let profile = NpmProfile;
         let packages = profile.parse_workspaces(&tmp);
         assert_eq!(packages, vec!["packages/"]);

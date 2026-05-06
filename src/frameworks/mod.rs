@@ -185,10 +185,7 @@ pub fn detect_monorepo(root: &Path) -> Option<MonorepoInfo> {
     for profile in all_monorepo_profiles().iter() {
         if profile.detect(root, pkg_deps.as_ref()) {
             let packages = profile.parse_workspaces(root);
-            return Some(MonorepoInfo {
-                kind: profile.name().to_string(),
-                packages,
-            });
+            return Some(MonorepoInfo { kind: profile.name().to_string(), packages });
         }
     }
     None

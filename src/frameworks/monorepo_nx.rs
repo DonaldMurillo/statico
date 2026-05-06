@@ -93,17 +93,11 @@ fn parse_package_json_workspaces(root: &Path) -> Vec<String> {
         None => return Vec::new(),
     };
     let items = match ws {
-        serde_json::Value::Array(arr) => arr
-            .iter()
-            .filter_map(|v| v.as_str().map(|s| s.to_string()))
-            .collect(),
+        serde_json::Value::Array(arr) => arr.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect(),
         serde_json::Value::Object(obj) => {
             // yarn workspaces: { packages: [...] }
             if let Some(packages) = obj.get("packages").and_then(|p| p.as_array()) {
-                packages
-                    .iter()
-                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
-                    .collect()
+                packages.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect()
             } else {
                 return Vec::new();
             }
@@ -211,16 +205,8 @@ pub fn parse_project_json(path: &Path) -> Option<NxProject> {
         .and_then(|m| m.as_str())
         .map(|s| s.to_string());
 
-    Some(NxProject {
-        name,
-        source_root,
-        project_type,
-        tags,
-        main_entry,
-    })
+    Some(NxProject { name, source_root, project_type, tags, main_entry })
 }
-
-
 
 /// Given an Nx project, return the entry point relative path (if it can be resolved).
 /// Uses the project's sourceRoot + main_entry, or falls back to sourceRoot + "index.ts".
@@ -326,6 +312,4 @@ mod tests {
         assert_eq!(project.main_entry.as_deref(), Some("src/index.ts"));
         let _ = std::fs::remove_dir_all(&tmp);
     }
-
-
 }

@@ -44,16 +44,10 @@ fn parse_package_json_workspaces(root: &Path) -> Vec<String> {
         None => return Vec::new(),
     };
     let items = match ws {
-        serde_json::Value::Array(arr) => arr
-            .iter()
-            .filter_map(|v| v.as_str().map(|s| s.to_string()))
-            .collect(),
+        serde_json::Value::Array(arr) => arr.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect(),
         serde_json::Value::Object(obj) => {
             if let Some(packages) = obj.get("packages").and_then(|p| p.as_array()) {
-                packages
-                    .iter()
-                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
-                    .collect()
+                packages.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect()
             } else {
                 return Vec::new();
             }

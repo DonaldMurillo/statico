@@ -246,8 +246,7 @@ fn turborepo_discovers_packages() {
 fn nx_project_json_parsed() {
     let root = fixture("nx-monorepo");
     let pj_path = root.join("packages/ui/project.json");
-    let project = statico::frameworks::monorepo_nx::parse_project_json(&pj_path)
-        .expect("should parse project.json");
+    let project = statico::frameworks::monorepo_nx::parse_project_json(&pj_path).expect("should parse project.json");
     assert_eq!(project.name, "ui");
     assert_eq!(project.source_root.as_deref(), Some("src"));
     assert_eq!(project.project_type.as_deref(), Some("library"));
@@ -280,11 +279,7 @@ fn nx_plugins_in_detected_frameworks() {
     let output = analyze_fixture("nx-monorepo");
     let frameworks = output.detected_frameworks.expect("should have frameworks");
     // The fixture has @nx/js in devDependencies
-    assert!(
-        frameworks.iter().any(|f| f == "nx-js"),
-        "should detect nx-js plugin, got: {:?}",
-        frameworks
-    );
+    assert!(frameworks.iter().any(|f| f == "nx-js"), "should detect nx-js plugin, got: {:?}", frameworks);
 }
 
 // ---------------------------------------------------------------------------
