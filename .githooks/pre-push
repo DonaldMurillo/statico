@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
-# pre-push hook: runs clippy + tests before allowing a push.
+# pre-push hook: runs fmt + clippy + tests before allowing a push.
 # Install: git config core.hooksPath .githooks
 set -euo pipefail
+
+echo "==> Checking formatting..."
+cargo fmt --all -- --check
 
 echo "==> Running clippy..."
 cargo clippy --all-targets -- -D warnings
