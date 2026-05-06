@@ -296,6 +296,27 @@ fn nx_analyze_uses_project_json_entry() {
     );
 }
 
+#[test]
+fn nx_plugin_detection() {
+    use std::collections::HashSet;
+    let deps: HashSet<String> = ["@nx/js".to_string(), "@nx/react".to_string()].into();
+    let plugins = statico::frameworks::monorepo_nx::detect_nx_plugins(&deps);
+    assert!(plugins.contains(&"nx-js"), "should detect nx-js, got: {:?}", plugins);
+    assert!(plugins.contains(&"nx-react"), "should detect nx-react, got: {:?}", plugins);
+}
+
+#[test]
+fn nx_plugins_in_detected_frameworks() {
+    let output = analyze_fixture("nx-monorepo");
+    let frameworks = output.detected_frameworks.expect("should have frameworks");
+    // The fixture has @nx/js in devDependencies
+    assert!(
+        frameworks.iter().any(|f| f == "nx-js"),
+        "should detect nx-js plugin, got: {:?}",
+        frameworks
+    );
+}
+
 // ---------------------------------------------------------------------------
 // Vue
 // ---------------------------------------------------------------------------

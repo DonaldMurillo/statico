@@ -3,11 +3,46 @@
 //! Detects: nx.json or nx/@nrwl/workspace in package.json deps
 //! Workspaces: parsed from package.json workspaces or pnpm-workspace.yaml
 //! Enhanced: parses nx.json and project.json for deeper project info
+//! Plugins: detects @nx/* deps and maps them to framework names
 
 use std::collections::HashSet;
 use std::path::Path;
 
 use super::MonorepoProfile;
+
+/// Mapping from Nx plugin dependency names to framework names.
+const NX_PLUGIN_MAP: &[(&str, &str)] = &[
+    ("@nx/react", "nx-react"),
+    ("@nx/next", "nx-next"),
+    ("@nx/angular", "nx-angular"),
+    ("@nx/vue", "nx-vue"),
+    ("@nx/express", "nx-express"),
+    ("@nx/nest", "nx-nest"),
+    ("@nx/node", "nx-node"),
+    ("@nx/web", "nx-web"),
+    ("@nx/js", "nx-js"),
+    ("@nx/storybook", "nx-storybook"),
+    ("@nrwl/react", "nx-react"),
+    ("@nrwl/angular", "nx-angular"),
+    ("@nrwl/vue", "nx-vue"),
+    ("@nrwl/express", "nx-express"),
+    ("@nrwl/nest", "nx-nest"),
+    ("@nrwl/node", "nx-node"),
+    ("@nrwl/web", "nx-web"),
+];
+
+/// Detect Nx plugins from dependency names. Returns framework name strings.
+pub fn detect_nx_plugins(pkg_deps: &HashSet<String>) -> Vec<&'static str> {
+    let mut plugins = Vec::new();
+    for (dep, name) in NX_PLUGIN_MAP {
+        if pkg_deps.contains(*dep) {
+            if !plugins.iter().any(|p| *p == *name) {
+                plugins.push(*name);
+            }
+        }
+    }
+    plugins
+}
 
 /// Nx monorepo profile.
 pub struct NxProfile;
