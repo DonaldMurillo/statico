@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# pre-commit hook: reject commits with unformatted Rust code.
+# Install: git config core.hooksPath .githooks
+set -euo pipefail
+
+# Only check formatting if Rust files are staged.
+rust_files=$(git diff --cached --name-only --diff-filter=ACM -- '*.rs')
+if [ -z "$rust_files" ]; then
+    exit 0
+fi
+
+if ! cargo fmt --all -- --check; then
+    echo ""
+    echo "❌ Rust formatting check failed. Run 'cargo fmt' and re-stage."
+    exit 1
+fi
