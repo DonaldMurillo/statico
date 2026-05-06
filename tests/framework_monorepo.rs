@@ -101,7 +101,7 @@ fn nestjs_monorepo_not_detected() {
 #[test]
 fn pnpm_monorepo_detected() {
     let info = statico::monorepo::detect_monorepo(&fixture("pnpm-monorepo")).expect("should detect pnpm monorepo");
-    assert_eq!(info.kind, statico::monorepo::MonorepoKind::Pnpm);
+    assert_eq!(info.kind, "pnpm");
     assert!(info.packages.contains(&"packages/".to_string()), "packages: {:?}", info.packages);
     assert!(info.packages.contains(&"apps/".to_string()), "packages: {:?}", info.packages);
 }
@@ -109,14 +109,14 @@ fn pnpm_monorepo_detected() {
 #[test]
 fn npm_monorepo_detected() {
     let info = statico::monorepo::detect_monorepo(&fixture("npm-monorepo")).expect("should detect npm monorepo");
-    assert_eq!(info.kind, statico::monorepo::MonorepoKind::Npm);
+    assert_eq!(info.kind, "npm/yarn");
     assert!(info.packages.contains(&"packages/".to_string()), "packages: {:?}", info.packages);
 }
 
 #[test]
 fn nx_monorepo_detected() {
     let info = statico::monorepo::detect_monorepo(&fixture("nx-monorepo")).expect("should detect nx monorepo");
-    assert_eq!(info.kind, statico::monorepo::MonorepoKind::Nx);
+    assert_eq!(info.kind, "nx");
     assert!(info.packages.contains(&"packages/".to_string()), "packages: {:?}", info.packages);
 }
 
@@ -209,7 +209,7 @@ fn angular_includes_detected_frameworks() {
 #[test]
 fn turborepo_monorepo_detected() {
     let info = statico::monorepo::detect_monorepo(&fixture("turborepo-monorepo")).expect("should detect turborepo");
-    assert_eq!(info.kind, statico::monorepo::MonorepoKind::Turborepo);
+    assert_eq!(info.kind, "turborepo");
 }
 
 #[test]
@@ -236,6 +236,55 @@ fn turborepo_discovers_packages() {
     let info = statico::monorepo::detect_monorepo(&root).unwrap();
     let roots = statico::monorepo::discover_workspace_roots(&root, &info.packages);
     assert!(roots.len() >= 2, "should find at least 2 packages, found {}", roots.len());
+}
+
+// ---------------------------------------------------------------------------
+// Nx-specific features (project.json, nx.json)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn nx_project_json_parsed() {
+    let root = fixture("nx-monorepo");
+    let pj_path = root.join("packages/ui/project.json");
+    let project = statico::frameworks::monorepo_nx::parse_project_json(&pj_path)
+        .expect("should parse project.json");
+    assert_eq!(project.name, "ui");
+    assert_eq!(project.source_root.as_deref(), Some("src"));
+    assert_eq!(project.project_type.as_deref(), Some("library"));
+    assert!(project.tags.contains(&"scope:ui".to_string()), "tags: {:?}", project.tags);
+    assert_eq!(project.main_entry.as_deref(), Some("src/index.ts"));
+}
+
+#[test]
+fn nx_analyze_uses_project_json_entry() {
+    let output = analyze_fixture("nx-monorepo");
+    // The ui project's src/index.ts should be an entry point (discovered via project.json)
+    assert!(
+        output.structure.entry_points.iter().any(|e| e.contains("ui") && e.contains("index")),
+        "ui/index should be an entry point, got: {:?}",
+        output.structure.entry_points
+    );
+}
+
+#[test]
+fn nx_plugin_detection() {
+    use std::collections::HashSet;
+    let deps: HashSet<String> = ["@nx/js".to_string(), "@nx/react".to_string()].into();
+    let plugins = statico::frameworks::monorepo_nx::detect_nx_plugins(&deps);
+    assert!(plugins.contains(&"nx-js"), "should detect nx-js, got: {:?}", plugins);
+    assert!(plugins.contains(&"nx-react"), "should detect nx-react, got: {:?}", plugins);
+}
+
+#[test]
+fn nx_plugins_in_detected_frameworks() {
+    let output = analyze_fixture("nx-monorepo");
+    let frameworks = output.detected_frameworks.expect("should have frameworks");
+    // The fixture has @nx/js in devDependencies
+    assert!(
+        frameworks.iter().any(|f| f == "nx-js"),
+        "should detect nx-js plugin, got: {:?}",
+        frameworks
+    );
 }
 
 // ---------------------------------------------------------------------------

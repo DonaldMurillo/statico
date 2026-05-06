@@ -13,6 +13,10 @@ use std::path::Path;
 pub mod angular;
 pub mod astro;
 pub mod generic;
+pub mod monorepo_npm;
+pub mod monorepo_nx;
+pub mod monorepo_pnpm;
+pub mod monorepo_turbo;
 pub mod nestjs;
 pub mod nextjs;
 pub mod payload;
@@ -139,6 +143,147 @@ pub struct FrameworkProfile {
 }
 
 // ---------------------------------------------------------------------------
+// MonorepoProfile — monorepo tool detection
+// ---------------------------------------------------------------------------
+
+/// A monorepo profile describes how to detect and parse a monorepo tool's
+/// workspace configuration. Unlike FrameworkProfile, this is a trait because
+/// each tool parses its config differently (YAML vs JSON vs package.json).
+pub trait MonorepoProfile: Send + Sync {
+    /// Human-readable name ("nx", "pnpm", "turborepo", "npm").
+    fn name(&self) -> &'static str;
+
+    /// Check if this monorepo tool is present at the given root.
+    fn detect(&self, root: &Path, pkg_deps: Option<&HashSet<String>>) -> bool;
+
+    /// Parse workspace package directory prefixes from the monorepo config.
+    /// Returns root-relative directory prefixes like `["packages/", "apps/"]`.
+    fn parse_workspaces(&self, root: &Path) -> Vec<String>;
+}
+
+/// All known monorepo profiles, ordered by detection priority.
+/// Most specific first: pnpm > turbo > nx > npm.
+pub fn all_monorepo_profiles() -> &'static [Box<dyn MonorepoProfile>] {
+    // Lazily initialized to avoid heap allocation when monorepo detection isn't needed.
+    use std::sync::LazyLock;
+    static PROFILES: LazyLock<Vec<Box<dyn MonorepoProfile>>> = LazyLock::new(|| {
+        vec![
+            Box::new(monorepo_pnpm::PnpmProfile),
+            Box::new(monorepo_turbo::TurboProfile),
+            Box::new(monorepo_nx::NxProfile),
+            Box::new(monorepo_npm::NpmProfile),
+        ]
+    });
+    &PROFILES
+}
+
+/// Detect monorepo configuration at the project root.
+/// Returns `None` if no monorepo setup is found.
+/// Delegates to each MonorepoProfile in priority order.
+pub fn detect_monorepo(root: &Path) -> Option<MonorepoInfo> {
+    let pkg_deps = load_package_deps(root);
+    for profile in all_monorepo_profiles().iter() {
+        if profile.detect(root, pkg_deps.as_ref()) {
+            let packages = profile.parse_workspaces(root);
+            return Some(MonorepoInfo {
+                kind: profile.name().to_string(),
+                packages,
+            });
+        }
+    }
+    None
+}
+
+/// Monorepo information returned by detection.
+#[derive(Debug, Clone)]
+pub struct MonorepoInfo {
+    /// The monorepo tool name ("pnpm", "nx", "turborepo", "npm/yarn").
+    pub kind: String,
+    /// Root-relative directory prefixes for workspace packages.
+    pub packages: Vec<String>,
+}
+
+/// Check if a path is inside a known workspace package directory.
+pub fn is_workspace_package_file(rel: &str, packages: &[String]) -> bool {
+    for pkg in packages {
+        if rel.starts_with(pkg.as_str()) {
+            return true;
+        }
+    }
+    false
+}
+
+/// Given a monorepo root, find the package.json directories that are
+/// workspace members.
+pub fn discover_workspace_roots(root: &Path, packages: &[String]) -> Vec<std::path::PathBuf> {
+    let mut roots = Vec::new();
+    for pkg_pattern in packages {
+        // Reject patterns with path traversal.
+        if pkg_pattern.split(['/', '\\']).any(|c| c == "..") {
+            continue;
+        }
+        if pkg_pattern.starts_with('/') {
+            continue;
+        }
+        if pkg_pattern.ends_with('/') {
+            // Directory prefix like "packages/" — enumerate subdirs with package.json.
+            let dir = root.join(pkg_pattern.trim_end_matches('/'));
+            if dir.is_dir()
+                && let Ok(entries) = std::fs::read_dir(&dir)
+            {
+                for entry in entries.flatten() {
+                    if entry.path().is_dir() && entry.path().join("package.json").exists() {
+                        roots.push(entry.path());
+                    }
+                }
+            }
+        } else if pkg_pattern.contains('*') {
+            // Handle glob patterns like "packages/*".
+            if let Some(parent) = pkg_pattern.trim_end_matches("/*").strip_suffix('*') {
+                let parent = parent.trim_end_matches('/');
+                let parent_dir = root.join(parent);
+                if parent_dir.is_dir()
+                    && let Ok(entries) = std::fs::read_dir(&parent_dir)
+                {
+                    for entry in entries.flatten() {
+                        if entry.path().is_dir() && entry.path().join("package.json").exists() {
+                            roots.push(entry.path());
+                        }
+                    }
+                }
+            }
+        } else {
+            let pkg_dir = root.join(pkg_pattern);
+            if pkg_dir.join("package.json").exists() {
+                roots.push(pkg_dir);
+            }
+        }
+    }
+    roots.sort();
+    roots.dedup();
+    roots
+}
+
+/// Convert glob patterns like "packages/*" to directory prefixes like "packages/".
+/// Handles double-star patterns like "packages/**" and "packages/**/".
+pub fn glob_to_prefix(patterns: Vec<String>) -> Vec<String> {
+    patterns
+        .into_iter()
+        .map(|p| {
+            if p.ends_with("/*") {
+                format!("{}/", &p[..p.len() - 2])
+            } else if p.ends_with("/**/") {
+                format!("{}/", &p[..p.len() - 4])
+            } else if p.ends_with("/**") {
+                format!("{}/", &p[..p.len() - 3])
+            } else {
+                p
+            }
+        })
+        .collect()
+}
+
+// ---------------------------------------------------------------------------
 // Auto-detection
 // ---------------------------------------------------------------------------
 
@@ -174,8 +319,8 @@ pub fn detect_profiles(root: &Path) -> Vec<&'static FrameworkProfile> {
     // 2. If this is a monorepo, also scan workspace package dirs for markers.
     if matched.len() <= 1 {
         // <=1 means only generic matched
-        if let Some(mono) = crate::monorepo::detect_monorepo(root) {
-            let ws_roots = crate::monorepo::discover_workspace_roots(root, &mono.packages);
+        if let Some(mono) = detect_monorepo(root) {
+            let ws_roots = discover_workspace_roots(root, &mono.packages);
             for ws_root in &ws_roots {
                 let ws_deps = load_package_deps(ws_root);
                 for profile in all {

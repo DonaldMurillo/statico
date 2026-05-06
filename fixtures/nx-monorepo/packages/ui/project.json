@@ -2,10 +2,12 @@
   "name": "ui",
   "sourceRoot": "src",
   "projectType": "library",
+  "tags": ["scope:ui", "type:feature"],
   "targets": {
     "build": {
       "executor": "@nx/js:tsc",
       "options": {
+        "main": "src/index.ts",
         "outputPath": "dist/packages/ui"
       }
     }
