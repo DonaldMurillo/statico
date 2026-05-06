@@ -222,68 +222,7 @@ pub fn parse_project_json(path: &Path) -> Option<NxProject> {
     })
 }
 
-/// Parse nx.json for workspace-level configuration.
-#[derive(Debug, Clone)]
-pub struct NxConfig {
-    /// Named inputs defined at the workspace level.
-    pub named_inputs: Vec<String>,
-}
 
-/// Parse nx.json into structured config.
-pub fn parse_nx_json(path: &Path) -> Option<NxConfig> {
-    let content = std::fs::read_to_string(path).ok()?;
-    let val: serde_json::Value = serde_json::from_str(&content).ok()?;
-
-    let named_inputs = val
-        .get("namedInputs")
-        .and_then(|v| v.as_object())
-        .map(|obj| obj.keys().cloned().collect())
-        .unwrap_or_default();
-
-    Some(NxConfig { named_inputs })
-}
-
-/// Discover all project.json files under the given workspace package prefixes
-/// and return (project_name, relative_path_to_project_json) pairs.
-pub fn discover_project_json_files(root: &Path, packages: &[String]) -> Vec<(String, std::path::PathBuf)> {
-    let mut projects = Vec::new();
-
-    for prefix in packages {
-        let prefix_path = root.join(prefix.trim_end_matches('/'));
-        if !prefix_path.is_dir() {
-            continue;
-        }
-
-        // Check if the prefix itself has a project.json
-        let pj = prefix_path.join("project.json");
-        if pj.exists() {
-            if let Some(NxProject { name, .. }) = parse_project_json(&pj) {
-                if !name.is_empty() {
-                    projects.push((name, pj));
-                }
-            }
-        }
-
-        // Enumerate subdirectories for project.json files
-        if let Ok(entries) = std::fs::read_dir(&prefix_path) {
-            for entry in entries.flatten() {
-                if !entry.file_type().is_ok_and(|t| t.is_dir()) {
-                    continue;
-                }
-                let pj = entry.path().join("project.json");
-                if pj.exists() {
-                    if let Some(NxProject { name, .. }) = parse_project_json(&pj) {
-                        if !name.is_empty() {
-                            projects.push((name, pj));
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    projects
-}
 
 /// Given an Nx project, return the entry point relative path (if it can be resolved).
 /// Uses the project's sourceRoot + main_entry, or falls back to sourceRoot + "index.ts".
@@ -390,27 +329,5 @@ mod tests {
         let _ = std::fs::remove_dir_all(&tmp);
     }
 
-    #[test]
-    fn nx_parse_nx_json() {
-        let tmp = std::env::temp_dir().join("statico_test_nx_config");
-        let _ = std::fs::remove_dir_all(&tmp);
-        std::fs::create_dir_all(&tmp).unwrap();
-        std::fs::write(
-            tmp.join("nx.json"),
-            r#"{
-                "namedInputs": {
-                    "default": ["{projectRoot}/**/*"],
-                    "production": ["!{projectRoot}/**/*.spec.ts"]
-                },
-                "targetDefaults": {
-                    "build": { "dependsOn": ["^build"] }
-                }
-            }"#,
-        )
-        .unwrap();
-        let config = parse_nx_json(&tmp.join("nx.json")).expect("should parse");
-        assert!(config.named_inputs.contains(&"default".to_string()));
-        assert!(config.named_inputs.contains(&"production".to_string()));
-        let _ = std::fs::remove_dir_all(&tmp);
-    }
+
 }
