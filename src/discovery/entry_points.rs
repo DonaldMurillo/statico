@@ -241,23 +241,22 @@ fn add_workspace_entries(
 
         // Nx-specific: try project.json for build targets and sourceRoot.
         let project_json_path = root.join(pkg_dir).join("project.json");
-        if project_json_path.exists() {
-            if let Some(project) = crate::frameworks::monorepo_nx::parse_project_json(&project_json_path) {
-                if let Some(entry_rel) = crate::frameworks::monorepo_nx::nx_project_entry_path(
-                    root,
-                    &root.join(pkg_dir),
-                    &project,
-                ) {
-                    let resolved = resolve_to_source(&entry_rel, source_set);
-                    if let Some(r) = resolved {
-                        entry_points.insert(r.clone());
-                        if project.project_type.as_deref() == Some("library") {
-                            public_api.insert(r);
-                        }
-                    } else {
-                        entry_points.insert(entry_rel);
-                    }
+        if project_json_path.exists()
+            && let Some(project) = crate::frameworks::monorepo_nx::parse_project_json(&project_json_path)
+            && let Some(entry_rel) = crate::frameworks::monorepo_nx::nx_project_entry_path(
+                root,
+                &root.join(pkg_dir),
+                &project,
+            )
+        {
+            let resolved = resolve_to_source(&entry_rel, source_set);
+            if let Some(r) = resolved {
+                entry_points.insert(r.clone());
+                if project.project_type.as_deref() == Some("library") {
+                    public_api.insert(r);
                 }
+            } else {
+                entry_points.insert(entry_rel);
             }
         }
     }

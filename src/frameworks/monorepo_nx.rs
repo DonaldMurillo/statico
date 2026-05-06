@@ -35,10 +35,8 @@ const NX_PLUGIN_MAP: &[(&str, &str)] = &[
 pub fn detect_nx_plugins(pkg_deps: &HashSet<String>) -> Vec<&'static str> {
     let mut plugins = Vec::new();
     for (dep, name) in NX_PLUGIN_MAP {
-        if pkg_deps.contains(*dep) {
-            if !plugins.iter().any(|p| *p == *name) {
-                plugins.push(*name);
-            }
+        if pkg_deps.contains(*dep) && !plugins.contains(name) {
+            plugins.push(*name);
         }
     }
     plugins
@@ -58,10 +56,10 @@ impl MonorepoProfile for NxProfile {
             return true;
         }
         // nx or @nrwl/workspace in dependencies/devDependencies
-        if let Some(deps) = pkg_deps {
-            if deps.contains("nx") || deps.contains("@nrwl/workspace") {
-                return true;
-            }
+        if let Some(deps) = pkg_deps
+            && (deps.contains("nx") || deps.contains("@nrwl/workspace"))
+        {
+            return true;
         }
         false
     }

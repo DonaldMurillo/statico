@@ -136,24 +136,22 @@ pub fn analyze_with_options(root: &Path, exclude: &[String], no_cache: bool) -> 
     let mut detected_frameworks: Vec<String> = fw_profiles.iter().map(|p| p.name.to_string()).collect();
 
     // If this is an Nx monorepo, also detect Nx plugins (e.g., @nx/react → "nx-react").
-    if let Some(ref mono) = monorepo {
-        if mono.kind == "nx" {
-            if let Ok(content) = std::fs::read_to_string(root.join("package.json")) {
-                if let Ok(pkg) = serde_json::from_str::<serde_json::Value>(&content) {
-                    let mut deps = std::collections::HashSet::new();
-                    if let Some(obj) = pkg.get("dependencies").and_then(|v| v.as_object()) {
-                        deps.extend(obj.keys().cloned());
-                    }
-                    if let Some(obj) = pkg.get("devDependencies").and_then(|v| v.as_object()) {
-                        deps.extend(obj.keys().cloned());
-                    }
-                    let nx_plugins = crate::frameworks::monorepo_nx::detect_nx_plugins(&deps);
-                    for plugin in nx_plugins {
-                        if !detected_frameworks.iter().any(|f| f == plugin) {
-                            detected_frameworks.push(plugin.to_string());
-                        }
-                    }
-                }
+    if let Some(ref mono) = monorepo
+        && mono.kind == "nx"
+        && let Ok(content) = std::fs::read_to_string(root.join("package.json"))
+        && let Ok(pkg) = serde_json::from_str::<serde_json::Value>(&content)
+    {
+        let mut deps = std::collections::HashSet::new();
+        if let Some(obj) = pkg.get("dependencies").and_then(|v| v.as_object()) {
+            deps.extend(obj.keys().cloned());
+        }
+        if let Some(obj) = pkg.get("devDependencies").and_then(|v| v.as_object()) {
+            deps.extend(obj.keys().cloned());
+        }
+        let nx_plugins = crate::frameworks::monorepo_nx::detect_nx_plugins(&deps);
+        for plugin in nx_plugins {
+            if !detected_frameworks.iter().any(|f| f == plugin) {
+                detected_frameworks.push(plugin.to_string());
             }
         }
     }
