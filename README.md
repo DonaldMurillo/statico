@@ -378,6 +378,9 @@ statico is designed to be readable by both humans and LLMs:
 See [`CONTRIBUTING.md`](CONTRIBUTING.md). The bar for changes is `cargo test`
 + `cargo clippy --all-targets -- -D warnings` clean, both enforced in CI.
 
+**Git hooks** (recommended): `scripts/setup-hooks.sh` — installs a pre-push
+hook that runs clippy + tests before every push.
+
 For security issues, see [`SECURITY.md`](SECURITY.md). **Don't open public
 GitHub issues** for security bugs — use private vulnerability reporting.
 
