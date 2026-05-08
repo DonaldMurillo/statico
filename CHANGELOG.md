@@ -8,6 +8,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [0.1.5] - 2026-05-08
 
+## [0.1.5] - 2026-05-08
+
 ### Fixed
 - tsconfig discovery: `load_all_tsconfig_paths` now matches `tsconfig*.json` (not just
   `tsconfig.json`), so `tsconfig.base.json` used by Nx/Turborepo/Lerna monorepos is

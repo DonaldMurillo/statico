@@ -1,8 +1,4 @@
-## [0.1.4] - 2026-05-08
-
-### Fixed
-- Windows release build: `shasum` not available on Windows runner — use
-  `sha256sum` as fallback for per-asset checksum generation.
+## [0.1.5] - 2026-05-08
 
 ---
 
