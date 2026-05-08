@@ -6,7 +6,28 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-05-08
+
+### Fixed
+- Windows cross-compilation: added `BUN_URL_TEMPLATE` cfg for `target_os = "windows"`
+  so the release build succeeds on all 5 targets.
+
+### Added
+- Release notes are now generated from `CHANGELOG.md` — GitHub releases show actual
+  changes instead of just the static install boilerplate.
+- New `.github/release-notes-template.md` holds the install/verification boilerplate;
+  `scripts/release.sh` prepends the version's changelog section automatically.
+
 ## [0.1.3] - 2026-05-08
+
+### Fixed
+- `resolve_import` plugin hook wired into the analysis pipeline.
+- `analyze_file` dispatch now guarded by `has_hook(&HookName::AnalyzeFile)`.
+- macOS Bun download URL fixed (`bun-{arch}.zip` → `bun-darwin-{arch}.zip`).
+- `.gitignore` mutation now checks `.git/info/exclude` before writing.
+
+### Added
+- 11 new tests (407 → 418 unit tests, 603 total).
 
 ## [0.1.2] - 2026-05-03
 

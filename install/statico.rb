@@ -1,7 +1,7 @@
 class Statico < Formula
   desc "Static code analyzer for TypeScript and Rust projects"
   homepage "https://github.com/DonaldMurillo/statico"
-  url "https://github.com/DonaldMurillo/statico/releases/download/v0.1.3/statico-macos-#{Hardware::CPU.arch}.tar.gz"
+  url "https://github.com/DonaldMurillo/statico/releases/download/v0.1.4/statico-macos-#{Hardware::CPU.arch}.tar.gz"
   sha256 "PLACEHOLDER_SHA256"
   version "0.1.0"
 

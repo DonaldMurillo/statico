@@ -204,7 +204,7 @@ if [ -f "$RELEASE_NOTES_TEMPLATE" ] && [ -f CHANGELOG.md ]; then
     }
     capturing { print }
   ' CHANGELOG.md)"
-  if [ -z "$CHANGES" ] || [ -z "$found" ]; then
+  if [ -z "$CHANGES" ]; then
     warn "no ## [$VERSION] section found in CHANGELOG.md — using template as-is"
     if $DRY_RUN; then
       dim "  would copy $RELEASE_NOTES_TEMPLATE → $RELEASE_NOTES_FILE"
