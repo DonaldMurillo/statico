@@ -189,6 +189,44 @@ if [ -f CHANGELOG.md ]; then
   fi
 fi
 
+# ── .github/release-notes.md: extract version section from CHANGELOG ───────
+RELEASE_NOTES_TEMPLATE=".github/release-notes-template.md"
+RELEASE_NOTES_FILE=".github/release-notes.md"
+if [ -f "$RELEASE_NOTES_TEMPLATE" ] && [ -f CHANGELOG.md ]; then
+  say "Generating $RELEASE_NOTES_FILE"
+  # Extract everything between ## [VERSION] and the next ## [ heading.
+  # Includes the heading line itself.
+  CHANGES="$(awk -v v="$VERSION" '
+    BEGIN { capturing = 0; found = 0 }
+    /^## \[/ {
+      if (capturing) { capturing = 0; next }
+      if ($0 ~ "\\[" v "\\]") { capturing = 1; found = 1; print; next }
+    }
+    capturing { print }
+  ' CHANGELOG.md)"
+  if [ -z "$CHANGES" ] || [ -z "$found" ]; then
+    warn "no ## [$VERSION] section found in CHANGELOG.md — using template as-is"
+    if $DRY_RUN; then
+      dim "  would copy $RELEASE_NOTES_TEMPLATE → $RELEASE_NOTES_FILE"
+    else
+      cp "$RELEASE_NOTES_TEMPLATE" "$RELEASE_NOTES_FILE"
+    fi
+  else
+    # Build the final release notes: changelog section + horizontal rule + template boilerplate.
+  TEMPLATE_CONTENT="$(cat "$RELEASE_NOTES_TEMPLATE")"
+    NOTES="${CHANGES}
+
+---
+
+${TEMPLATE_CONTENT}"
+    write_file "$RELEASE_NOTES_FILE" "$NOTES"
+  fi
+  ok "$RELEASE_NOTES_FILE generated"
+elif [ -f "$RELEASE_NOTES_FILE" ]; then
+  say "Generating $RELEASE_NOTES_FILE"
+  warn "$RELEASE_NOTES_TEMPLATE not found — leaving $RELEASE_NOTES_FILE unchanged"
+fi
+
 # ── Refresh Cargo.lock ──────────────────────────────────────────────────────
 say "Refreshing Cargo.lock"
 if $DRY_RUN; then
@@ -225,13 +263,14 @@ ok "release build OK"
 # ── Commit ──────────────────────────────────────────────────────────────────
 say "Committing"
 if $DRY_RUN; then
-  dim "  would: git add Cargo.toml Cargo.lock npm/package.json CHANGELOG.md install/statico.rb"
+  dim "  would: git add Cargo.toml Cargo.lock npm/package.json CHANGELOG.md install/statico.rb .github/release-notes.md"
   dim "  would: git commit -m 'chore: release $TAG'"
 else
   git add Cargo.toml Cargo.lock 2>/dev/null || true
   [ -f npm/package.json ]      && git add npm/package.json
   [ -f CHANGELOG.md ]          && git add CHANGELOG.md
   [ -f install/statico.rb ]    && git add install/statico.rb
+  [ -f .github/release-notes.md ] && git add .github/release-notes.md
   if git diff --cached --quiet; then
     die "nothing staged — version files were already up to date?"
   fi
