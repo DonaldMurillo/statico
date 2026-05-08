@@ -1,6 +1,6 @@
 [package]
 name = "statico"
-version = "0.1.2"
+version = "0.1.3"
 edition = "2024"
 rust-version = "1.91"
 description = "Customizable, AI-forward static analyzer for TypeScript and Rust projects (early alpha)"
