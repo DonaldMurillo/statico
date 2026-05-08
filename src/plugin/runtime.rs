@@ -305,7 +305,8 @@ mod tests {
     #[test]
     fn test_bun_path_is_under_home() {
         let path = bun_path();
-        assert!(path.to_string_lossy().contains(".statico/runtimes/bun"));
+        let s = path.to_string_lossy().replace('\\', "/");
+        assert!(s.contains(".statico/runtimes/bun"), "unexpected bun path: {s}");
     }
 
     #[test]
@@ -432,7 +433,11 @@ mod tests {
     fn test_bun_url_contains_platform() {
         let arch = arch_suffix();
         let url = BUN_URL_TEMPLATE.replace("{arch}", arch);
-        assert!(url.contains("darwin") || url.contains("linux"), "URL should contain platform: {}", url);
+        assert!(
+            url.contains("darwin") || url.contains("linux") || url.contains("windows"),
+            "URL should contain a platform tag: {}",
+            url
+        );
         assert!(url.contains("bun-"), "URL should contain bun- prefix: {}", url);
     }
 

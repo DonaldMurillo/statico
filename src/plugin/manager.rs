@@ -360,7 +360,11 @@ fn toml_to_json_value_depth(val: &toml::Value, depth: usize) -> Result<serde_jso
     Ok(result)
 }
 
-#[cfg(test)]
+// The manager tests build executable plugins via `chmod +x`, which is
+// Unix-only. Gate the module so the new `windows-build` CI job's
+// `cargo test --lib` step doesn't run them. Integration coverage runs
+// on macOS + Linux as before.
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
     use std::path::PathBuf;

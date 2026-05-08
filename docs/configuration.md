@@ -187,7 +187,7 @@ Explicitly listed `[[plugin]]` entries are still respected.
 statico is forgiving about config errors:
 
 - Missing `.statico.toml` → defaults are used silently.
-- Unparseable `.statico.toml` → defaults are used; a warning is printed to
+- Unparsable `.statico.toml` → defaults are used; a warning is printed to
   stderr.
 - Invalid values → coerced where reasonable (NaN `min_confidence` becomes
   `0.0`; oversized `max_file_size` is clamped to 50 MB).
