@@ -3,6 +3,8 @@
 //! Finds external imports that are NOT listed in `package.json`'s
 //! `dependencies` or `devDependencies`. These would fail on a clean install.
 
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+
 use std::collections::BTreeSet;
 use std::path::Path;
 

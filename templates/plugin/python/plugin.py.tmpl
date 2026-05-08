@@ -1,0 +1,65 @@
+#!/usr/bin/env python3
+"""Statico plugin: {name}"""
+
+import sys
+import json
+
+def send_response(result, req_id):
+    msg = json.dumps({"jsonrpc": "2.0", "id": req_id, "result": result})
+    sys.stdout.write(msg + "\n")
+    sys.stdout.flush()
+
+def send_error(code, message, req_id):
+    msg = json.dumps({"jsonrpc": "2.0", "id": req_id, "error": {"code": code, "message": message}})
+    sys.stdout.write(msg + "\n")
+    sys.stdout.flush()
+
+def analyze_file(params):
+    source = params.get("source", "")
+    path = params.get("path", "")
+    issues = []
+
+    # TODO: implement your detection logic
+    # Example: detect bare except clauses
+    # for i, line in enumerate(source.splitlines(), 1):
+    #     if line.strip() == "except:":
+    #         issues.append({
+    #             "ruleId": "{name}",
+    #             "severity": "warning",
+    #             "message": "Bare except clause",
+    #             "file": path,
+    #             "line": i,
+    #             "confidence": 0.9,
+    #         })
+
+    return {"issues": issues}
+
+def main():
+    for line in sys.stdin:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            req = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+
+        method = req.get("method", "")
+        req_id = req.get("id")
+        params = req.get("params", {})
+
+        if method == "init":
+            send_response({
+                "name": "{name}",
+                "version": "0.1.0",
+                "hooks": {"analyze_file": "add"},
+                "languages": ["python"],
+                "rules": [],
+            }, req_id)
+        elif method == "analyze_file":
+            send_response(analyze_file(params), req_id)
+        else:
+            send_error(-32601, f"Method not found: {method}", req_id)
+
+if __name__ == "__main__":
+    main()

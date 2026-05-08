@@ -1,5 +1,7 @@
 //! File-level metrics: lines of code, function count, class count.
 
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+
 use tree_sitter::Node;
 
 use super::collect_nodes;

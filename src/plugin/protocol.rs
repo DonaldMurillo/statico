@@ -3,6 +3,8 @@
 //! Every message between statico and a plugin follows the JSON-RPC 2.0 spec.
 //! Plugins read newline-delimited JSON from stdin and write to stdout.
 
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 

@@ -7,12 +7,11 @@
 //!
 //! 2. **Fragment-level**: Sliding window at multiple sizes over each file's source
 //!    lines. Finds sub-function duplicated code of any length ≥ 5 lines.
-//!    Delegated to `duplicate_code_fragments`.
+//!    Delegated to the `fragments` submodule.
 //!
 //! Results are merged: block-level matches suppress overlapping fragment matches.
 
-#[path = "duplicate_code_fragments.rs"]
-mod duplicate_code_fragments;
+mod fragments;
 
 use std::collections::{BTreeMap, HashSet};
 
@@ -56,7 +55,7 @@ pub fn detect(
     issues.extend(block_issues);
 
     // Strategy 2: Fragment-level duplicates (variable-size sliding window).
-    let fragment_issues = duplicate_code_fragments::detect_fragments(file_sources);
+    let fragment_issues = fragments::detect_fragments(file_sources);
 
     // Merge: keep fragment matches that aren't already covered by block matches.
     let block_ranges = build_range_set(&issues);

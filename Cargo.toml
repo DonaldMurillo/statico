@@ -48,7 +48,7 @@ path = "src/main.rs"
 proptest = "1"
 criterion = { version = "0.5", features = ["html_reports"] }
 tempfile = "3"
-tiny_http = "0.2"
+tiny_http = "0.12"
 
 [dependencies]
 clap = { version = "4", features = ["derive", "color", "unstable-styles"] }
@@ -64,7 +64,6 @@ tree-sitter = "0.25"
 tree-sitter-typescript = "0.23"
 indicatif = "0.17"
 colored = "3"
-atty = "0.2"
 oxc_resolver = { version = "11", optional = true }
 tree-sitter-rust = "0.24"
 ureq = { version = "3", features = ["json"] }

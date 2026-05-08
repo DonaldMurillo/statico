@@ -1,5 +1,7 @@
 //! Cyclomatic complexity and nesting depth measurement.
 
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+
 use tree_sitter::Node;
 
 /// Complexity + nesting metrics for a code unit (function, file, etc).

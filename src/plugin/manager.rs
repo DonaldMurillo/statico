@@ -5,6 +5,8 @@
 //! - 30s read timeout prevents blocking on unresponsive plugins
 //! - Error messages truncate raw responses to 200 chars
 
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::Path;
@@ -358,7 +360,11 @@ fn toml_to_json_value_depth(val: &toml::Value, depth: usize) -> Result<serde_jso
     Ok(result)
 }
 
-#[cfg(test)]
+// The manager tests build executable plugins via `chmod +x`, which is
+// Unix-only. Gate the module so the new `windows-build` CI job's
+// `cargo test --lib` step doesn't run them. Integration coverage runs
+// on macOS + Linux as before.
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
     use std::path::PathBuf;

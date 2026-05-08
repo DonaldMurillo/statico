@@ -347,3 +347,70 @@ fn test_minimal_output_json_keys() {
     assert!(parsed.get("issues").is_some());
     assert!(parsed.get("duplication").is_some());
 }
+
+// ---------------------------------------------------------------------------
+// Formatter coverage: context, mermaid, pr-comment.
+// Each previously had no test referencing the format string at all.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_context_formatter_smoke() {
+    let formatter = statico::output::context::ContextFormatter;
+    let result = formatter.format(&minimal_output()).expect("context format");
+    // `context` is the ~100-token system-prompt formatter; output is a fixed
+    // 3–4 line shape regardless of repo size. Assert the load-bearing parts.
+    assert!(result.contains("Statico Code Health"), "context output should start with health header: {result}");
+    assert!(result.contains("/100"), "context output should include /100 scale: {result}");
+    assert!(result.contains("Issues:"), "context output should include the issues line: {result}");
+}
+
+#[test]
+fn test_context_formatter_with_issues_surfaces_top_risk() {
+    let formatter = statico::output::context::ContextFormatter;
+    let result = formatter.format(&output_with_issues()).expect("context format");
+    // output_with_issues() includes one unused export at src/utils.ts. The
+    // formatter calls that out as the top-risk file.
+    assert!(result.contains("Top risk: src/utils.ts"), "context should surface unused-export hot file: {result}");
+}
+
+#[test]
+fn test_mermaid_formatter_emits_graph_td() {
+    let formatter = statico::output::mermaid::MermaidFormatter;
+    let result = formatter.format(&minimal_output()).expect("mermaid format");
+    // Mermaid flowchart header must be present so renderers (GitHub, GitLab,
+    // mermaid-cli) actually parse the output.
+    assert!(result.starts_with("graph TD"), "mermaid output must start with 'graph TD', got: {result}");
+}
+
+#[test]
+fn test_mermaid_formatter_marks_dead_nodes() {
+    let formatter = statico::output::mermaid::MermaidFormatter;
+    // output_with_issues() includes one dead-code node.
+    let mut output = output_with_issues();
+    // Mermaid only renders nodes that appear in the dependency graph, so
+    // splice the dead file into imports first.
+    output
+        .dependencies
+        .imports
+        .push(statico::types::FileImports { source: "src/dead.ts".into(), targets: vec!["src/index.ts".into()] });
+    let result = formatter.format(&output).expect("mermaid format");
+    // Dead nodes are styled red — the formatter writes a `style ... fill:#ff6b6b`
+    // line for each. Asserting the colour prevents silent regressions where
+    // the encoding changes without the docs noting it.
+    assert!(result.contains("ff6b6b"), "mermaid output should style dead nodes red: {result}");
+}
+
+#[test]
+fn test_pr_comment_formatter_smoke() {
+    let formatter = statico::output::pr_comment::PrCommentFormatter;
+    let result = formatter.format(&output_with_issues()).expect("pr-comment format");
+    // PR comment is GitHub-flavoured Markdown — must contain at least one
+    // header and the project's identifying string.
+    assert!(!result.is_empty(), "pr-comment output should not be empty");
+    assert!(result.contains("statico"), "pr-comment should mention statico: {result}");
+    // Some Markdown structure (headers / tables / list items).
+    assert!(
+        result.contains("##") || result.contains("|") || result.contains("- "),
+        "pr-comment should contain GFM markdown structure: {result}"
+    );
+}

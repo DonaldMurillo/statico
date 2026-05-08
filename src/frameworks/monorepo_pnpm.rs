@@ -3,6 +3,8 @@
 //! Detects: pnpm-workspace.yaml or pnpm-workspace.yml
 //! Workspaces: parsed from pnpm-workspace.yaml
 
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+
 use std::collections::HashSet;
 use std::path::Path;
 

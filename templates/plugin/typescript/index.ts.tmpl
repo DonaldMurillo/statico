@@ -1,0 +1,28 @@
+import { Plugin } from "@statico/plugin-sdk";
+
+const plugin = Plugin.create("{name}", {
+  hooks: { analyze_file: "add" },
+  languages: ["typescript"],
+  rules: [
+    { id: "{name}", severity: "warning", description: "TODO: describe your rule" },
+  ],
+});
+
+plugin.onAnalyzeFile((params) => {
+  const issues = [];
+  // TODO: implement your detection logic
+  // Example: detect console.log
+  // if (params.source.includes("console.log")) {
+  //   issues.push({
+  //     ruleId: "{name}",
+  //     severity: "warning",
+  //     message: "Found console.log",
+  //     file: params.path,
+  //     line: 1,
+  //     confidence: 0.9,
+  //   });
+  // }
+  return { issues };
+});
+
+plugin.start();

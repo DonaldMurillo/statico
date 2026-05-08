@@ -1,0 +1,7 @@
+{
+  "name": "shadcn-fixture",
+  "version": "0.0.0",
+  "dependencies": {
+    "shadcn": "^2.0.0"
+  }
+}

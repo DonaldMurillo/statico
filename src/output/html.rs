@@ -1,5 +1,7 @@
 //! Self-contained HTML interactive report formatter.
 
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+
 use crate::output::{OutputFormatter, compute_summary};
 use crate::types::AnalysisOutput;
 

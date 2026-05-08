@@ -2,6 +2,8 @@
 //!
 //! Produces ~100 tokens of plain text summarizing code health.
 
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+
 use crate::output::{OutputFormatter, compute_summary};
 use crate::types::AnalysisOutput;
 

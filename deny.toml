@@ -1,0 +1,56 @@
+# cargo-deny configuration.
+# https://embarkstudios.github.io/cargo-deny/
+
+[graph]
+all-features = false
+
+[advisories]
+version = 2
+yanked = "warn"
+ignore = [
+    # `number_prefix` is unmaintained; pulled in transitively via `indicatif`.
+    # Nothing we can fix at this level until indicatif drops it. The crate is
+    # tiny and well-tested; risk is low. Re-evaluate when indicatif moves.
+    "RUSTSEC-2025-0119",
+]
+
+[licenses]
+version = 2
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-DFS-2016",
+    "Unicode-3.0",
+    "Zlib",
+    "MPL-2.0",
+    "CC0-1.0",
+    "0BSD",
+    # webpki-roots ships under the Common Data License Agreement —
+    # it's a permissive Mozilla-aligned license. Required transitively
+    # via ureq.
+    "CDLA-Permissive-2.0",
+]
+confidence-threshold = 0.93
+
+[[licenses.exceptions]]
+# `ring` ships under its own historical license. Allow it here rather than
+# globally relaxing the allow-list.
+allow = ["LicenseRef-ring"]
+crate = "ring"
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+deny = []
+skip = []
+skip-tree = []
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

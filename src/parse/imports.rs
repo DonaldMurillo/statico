@@ -1,5 +1,7 @@
 //! Import extraction from AST.
 
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+
 use std::collections::BTreeMap;
 
 use tree_sitter::Node;

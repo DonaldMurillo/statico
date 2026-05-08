@@ -90,7 +90,7 @@ fn nestjs_main_is_entry_point() {
 #[test]
 fn nestjs_monorepo_not_detected() {
     // NestJS fixture is NOT a monorepo.
-    let info = statico::monorepo::detect_monorepo(&fixture("nestjs-project"));
+    let info = statico::workspace::detect_monorepo(&fixture("nestjs-project"));
     assert!(info.is_none(), "standalone NestJS should not be detected as monorepo");
 }
 
@@ -100,7 +100,7 @@ fn nestjs_monorepo_not_detected() {
 
 #[test]
 fn pnpm_monorepo_detected() {
-    let info = statico::monorepo::detect_monorepo(&fixture("pnpm-monorepo")).expect("should detect pnpm monorepo");
+    let info = statico::workspace::detect_monorepo(&fixture("pnpm-monorepo")).expect("should detect pnpm monorepo");
     assert_eq!(info.kind, "pnpm");
     assert!(info.packages.contains(&"packages/".to_string()), "packages: {:?}", info.packages);
     assert!(info.packages.contains(&"apps/".to_string()), "packages: {:?}", info.packages);
@@ -108,14 +108,14 @@ fn pnpm_monorepo_detected() {
 
 #[test]
 fn npm_monorepo_detected() {
-    let info = statico::monorepo::detect_monorepo(&fixture("npm-monorepo")).expect("should detect npm monorepo");
+    let info = statico::workspace::detect_monorepo(&fixture("npm-monorepo")).expect("should detect npm monorepo");
     assert_eq!(info.kind, "npm/yarn");
     assert!(info.packages.contains(&"packages/".to_string()), "packages: {:?}", info.packages);
 }
 
 #[test]
 fn nx_monorepo_detected() {
-    let info = statico::monorepo::detect_monorepo(&fixture("nx-monorepo")).expect("should detect nx monorepo");
+    let info = statico::workspace::detect_monorepo(&fixture("nx-monorepo")).expect("should detect nx monorepo");
     assert_eq!(info.kind, "nx");
     assert!(info.packages.contains(&"packages/".to_string()), "packages: {:?}", info.packages);
 }
@@ -146,8 +146,8 @@ fn nx_monorepo_analyze_succeeds() {
 #[test]
 fn pnpm_monorepo_discovers_packages() {
     let root = fixture("pnpm-monorepo");
-    let info = statico::monorepo::detect_monorepo(&root).unwrap();
-    let roots = statico::monorepo::discover_workspace_roots(&root, &info.packages);
+    let info = statico::workspace::detect_monorepo(&root).unwrap();
+    let roots = statico::workspace::discover_workspace_roots(&root, &info.packages);
     assert!(roots.len() >= 2, "should find at least 2 packages (ui, shared), found {}", roots.len());
 }
 
@@ -208,7 +208,7 @@ fn angular_includes_detected_frameworks() {
 
 #[test]
 fn turborepo_monorepo_detected() {
-    let info = statico::monorepo::detect_monorepo(&fixture("turborepo-monorepo")).expect("should detect turborepo");
+    let info = statico::workspace::detect_monorepo(&fixture("turborepo-monorepo")).expect("should detect turborepo");
     assert_eq!(info.kind, "turborepo");
 }
 
@@ -233,8 +233,8 @@ fn turborepo_detects_dead_code() {
 #[test]
 fn turborepo_discovers_packages() {
     let root = fixture("turborepo-monorepo");
-    let info = statico::monorepo::detect_monorepo(&root).unwrap();
-    let roots = statico::monorepo::discover_workspace_roots(&root, &info.packages);
+    let info = statico::workspace::detect_monorepo(&root).unwrap();
+    let roots = statico::workspace::discover_workspace_roots(&root, &info.packages);
     assert!(roots.len() >= 2, "should find at least 2 packages, found {}", roots.len());
 }
 

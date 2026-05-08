@@ -1,5 +1,7 @@
 //! Rust-specific parsing: extract exports (pub items) and imports (use statements).
 
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+
 use tree_sitter::{Node, Parser, Tree};
 
 /// Wrapper around tree-sitter for Rust parsing.

@@ -5,6 +5,8 @@
 //! Enhanced: parses nx.json and project.json for deeper project info
 //! Plugins: detects @nx/* deps and maps them to framework names
 
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+
 use std::collections::HashSet;
 use std::path::Path;
 

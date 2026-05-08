@@ -20,9 +20,7 @@ impl LanguagePlugin for RustPlugin {
     }
 
     fn analyze_file(&self, root: &Path, rel_path: &str, source: &str) -> Option<FileAnalysis> {
-        // Delegate to the existing Rust analysis in the analyzer module.
-        // This reuses all the import resolution, mod declaration handling, etc.
-        crate::analyzer::parse_rust_file_standalone(root, rel_path, source)
+        super::rust_parser::parse_rust_file_standalone(root, rel_path, source)
     }
 
     fn config_files(&self) -> &[&str] {
@@ -34,6 +32,6 @@ impl LanguagePlugin for RustPlugin {
     }
 
     fn resolve_import(&self, root: &Path, from_file: &str, spec: &str) -> Option<String> {
-        crate::analyzer::resolve_rust_use_path_public(root, from_file, spec)
+        super::rust_parser::resolve_rust_use_path_public(root, from_file, spec)
     }
 }

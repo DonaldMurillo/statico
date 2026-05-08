@@ -3,6 +3,8 @@
 //! Produces a schema-versioned JSON payload stripped of verbose details,
 //! designed to fit within ~500 tokens while remaining actionable.
 
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+
 use crate::output::{OutputFormatter, compute_summary};
 use crate::types::AnalysisOutput;
 use serde_json::{Value, json};

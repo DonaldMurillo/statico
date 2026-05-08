@@ -1,7 +1,48 @@
 #!/usr/bin/env bash
-# pre-push hook: runs clippy + tests before allowing a push.
-# Install: git config core.hooksPath .githooks
+# pre-push: clippy + tests when Rust changed; skip on docs-only / config-only pushes.
+# Install: scripts/setup-hooks.sh (sets core.hooksPath = .githooks)
 set -euo pipefail
+
+# Determine the commit range being pushed. Read each (local_ref local_sha
+# remote_ref remote_sha) line from stdin (git's pre-push contract). Build a
+# union of changed files across all refs.
+changed=""
+while read -r _local_ref local_sha _remote_ref remote_sha; do
+    if [ "$local_sha" = "0000000000000000000000000000000000000000" ]; then
+        # Branch deletion — nothing to check.
+        continue
+    fi
+    if [ "$remote_sha" = "0000000000000000000000000000000000000000" ]; then
+        # New branch — diff against the upstream merge base if known, else
+        # fall back to "all files in this commit" (HEAD~..HEAD diff).
+        range="$(git merge-base "$local_sha" origin/HEAD 2>/dev/null || echo "")"
+        if [ -n "$range" ]; then
+            files=$(git diff --name-only "$range" "$local_sha")
+        else
+            files=$(git show --name-only --pretty=format: "$local_sha")
+        fi
+    else
+        files=$(git diff --name-only "$remote_sha" "$local_sha")
+    fi
+    changed="$changed
+$files"
+done
+
+# If `changed` is empty (no refs read) treat as a force-run — better safe.
+if [ -z "$(echo "$changed" | tr -d '[:space:]')" ]; then
+    echo "==> Couldn't determine changed files; running full gate."
+    rust_changed=1
+else
+    rust_changed=0
+    if echo "$changed" | grep -qE '\.rs$|^Cargo\.(toml|lock)$|/Cargo\.(toml|lock)$|^rustfmt\.toml$|^clippy\.toml$|^deny\.toml$'; then
+        rust_changed=1
+    fi
+fi
+
+if [ "$rust_changed" -eq 0 ]; then
+    echo "==> No Rust / cargo changes in this push; skipping clippy + tests."
+    exit 0
+fi
 
 echo "==> Running clippy..."
 cargo clippy --all-targets -- -D warnings

@@ -1,0 +1,4 @@
+
+# statico — cache + downloaded runtimes (regenerated on demand)
+.statico/cache/
+.statico/runtimes/

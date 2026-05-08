@@ -3,6 +3,8 @@
 //! Handles lazy download and verification of language runtimes
 //! (e.g. Bun for TypeScript plugins).
 
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+
 use std::path::PathBuf;
 
 /// Directory where statico stores downloaded runtimes.
@@ -134,15 +136,13 @@ fn download_bun() -> Result<PathBuf, String> {
     let archive_sha = sha256_file(&tmp_zip)?;
     eprintln!("  archive SHA-256: {}", archive_sha);
     if let Ok(expected) = std::env::var(TRUSTED_SHA_ENV) {
-        let expected_norm = expected.trim().to_ascii_lowercase();
-        if expected_norm != archive_sha {
-            let _ = std::fs::remove_file(&tmp_zip);
-            return Err(format!(
-                "Bun archive SHA-256 mismatch — expected {}, got {} (set via {})",
-                expected_norm, archive_sha, TRUSTED_SHA_ENV
-            ));
+        match verify_archive_sha(&archive_sha, &expected) {
+            Ok(()) => eprintln!("  ✓ archive SHA-256 matched {}", TRUSTED_SHA_ENV),
+            Err(e) => {
+                let _ = std::fs::remove_file(&tmp_zip);
+                return Err(e);
+            }
         }
-        eprintln!("  ✓ archive SHA-256 matched {}", TRUSTED_SHA_ENV);
     }
 
     // Extract using the pure-Rust `zip` crate. Each entry path is checked for
@@ -183,6 +183,24 @@ fn download_bun() -> Result<PathBuf, String> {
     eprintln!("Bun {} installed successfully.", version);
 
     Ok(target)
+}
+
+/// Compare a computed archive SHA-256 (lowercase hex) against an expected
+/// value from `STATICO_TRUSTED_BUN_SHA256`. Trims the expected value and
+/// compares case-insensitively. Returns the canonical "mismatch" error
+/// string when they disagree so the test suite can pin the message.
+///
+/// Extracted from `download_bun` so the verification gate can be unit-tested
+/// without standing up a network mock.
+fn verify_archive_sha(archive_sha: &str, expected: &str) -> Result<(), String> {
+    let expected_norm = expected.trim().to_ascii_lowercase();
+    if expected_norm != archive_sha {
+        return Err(format!(
+            "Bun archive SHA-256 mismatch — expected {}, got {} (set via {})",
+            expected_norm, archive_sha, TRUSTED_SHA_ENV
+        ));
+    }
+    Ok(())
 }
 
 /// Compute the SHA-256 of a file, returned as a lowercase hex string.
@@ -287,7 +305,8 @@ mod tests {
     #[test]
     fn test_bun_path_is_under_home() {
         let path = bun_path();
-        assert!(path.to_string_lossy().contains(".statico/runtimes/bun"));
+        let s = path.to_string_lossy().replace('\\', "/");
+        assert!(s.contains(".statico/runtimes/bun"), "unexpected bun path: {s}");
     }
 
     #[test]
@@ -374,10 +393,51 @@ mod tests {
     }
 
     #[test]
+    fn sec_verify_archive_sha_accepts_match() {
+        let archive = "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824";
+        assert!(verify_archive_sha(archive, archive).is_ok());
+    }
+
+    #[test]
+    fn sec_verify_archive_sha_accepts_uppercase_and_whitespace() {
+        // Users frequently paste hashes with extra whitespace or in upper
+        // case (e.g. from shasum output). Both should still match.
+        let archive = "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824";
+        let expected = "  2CF24DBA5FB0A30E26E83B2AC5B9E29E1B161E5C1FA7425E73043362938B9824\n";
+        assert!(verify_archive_sha(archive, expected).is_ok());
+    }
+
+    #[test]
+    fn sec_verify_archive_sha_rejects_mismatch() {
+        // The audit's S4.1 contract: a tampered archive must not extract.
+        // If this test ever passes a mismatched hash, statico has lost its
+        // Bun-runtime integrity gate.
+        let archive = "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824";
+        let attacker = "0000000000000000000000000000000000000000000000000000000000000000";
+        let err = verify_archive_sha(archive, attacker).unwrap_err();
+        assert!(err.to_lowercase().contains("mismatch"), "error must mention mismatch: {err}");
+        assert!(err.contains(attacker), "error must include the expected hash: {err}");
+        assert!(err.contains(archive), "error must include the actual hash: {err}");
+        assert!(err.contains(TRUSTED_SHA_ENV), "error should reference the env var name: {err}");
+    }
+
+    #[test]
+    fn sec_verify_archive_sha_empty_expected_rejected() {
+        // Empty / whitespace-only env value must not be treated as "no check".
+        let archive = "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824";
+        assert!(verify_archive_sha(archive, "").is_err());
+        assert!(verify_archive_sha(archive, "   ").is_err());
+    }
+
+    #[test]
     fn test_bun_url_contains_platform() {
         let arch = arch_suffix();
         let url = BUN_URL_TEMPLATE.replace("{arch}", arch);
-        assert!(url.contains("darwin") || url.contains("linux"), "URL should contain platform: {}", url);
+        assert!(
+            url.contains("darwin") || url.contains("linux") || url.contains("windows"),
+            "URL should contain a platform tag: {}",
+            url
+        );
         assert!(url.contains("bun-"), "URL should contain bun- prefix: {}", url);
     }
 

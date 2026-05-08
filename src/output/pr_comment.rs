@@ -3,6 +3,8 @@
 //! Produces a rich comment with emoji indicators, tables, and actionable items
 //! suitable for posting as a PR review comment.
 
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+
 use crate::output::{OutputFormatter, compute_summary};
 use crate::types::AnalysisOutput;
 

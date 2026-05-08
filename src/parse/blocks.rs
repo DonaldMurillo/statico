@@ -1,6 +1,8 @@
 //! Code block extraction — pull named functions, methods, and arrow-function const
 //! declarations from an AST so we can fingerprint them for duplicate detection.
 
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+
 use serde::{Deserialize, Serialize};
 use tree_sitter::Node;
 

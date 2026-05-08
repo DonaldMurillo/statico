@@ -9,6 +9,8 @@
 //! - Issue hotspots → orange nodes (`fill:#ffa726`)
 //! - Circular deps  → thick red arrows (`stroke:red,stroke-width:3px`)
 
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use super::OutputFormatter;

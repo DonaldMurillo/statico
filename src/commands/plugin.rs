@@ -1,5 +1,7 @@
 //! `statico plugin *` commands.
 
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+
 use std::process;
 
 pub fn run_plugin_list(path: &str) {
@@ -206,86 +208,24 @@ pub fn run_plugin_init(name: &str, lang: &str, path: &str) {
     }
 }
 
+/// Render a template by substituting `{name}` with the plugin name.
+fn render(tmpl: &str, name: &str) -> String {
+    tmpl.replace("{name}", name)
+}
+
 fn scaffold_typescript_plugin(name: &str, dir: &std::path::Path) {
-    std::fs::create_dir_all(dir).unwrap();
+    const PACKAGE_JSON: &str = include_str!("../../templates/plugin/typescript/package.json.tmpl");
+    const TSCONFIG_JSON: &str = include_str!("../../templates/plugin/typescript/tsconfig.json");
+    const INDEX_TS: &str = include_str!("../../templates/plugin/typescript/index.ts.tmpl");
+    const SAMPLE_TS: &str = include_str!("../../templates/plugin/typescript/fixtures/sample.ts");
+    const README_MD: &str = include_str!("../../templates/plugin/typescript/README.md.tmpl");
+
     std::fs::create_dir_all(dir.join("fixtures")).unwrap();
-
-    std::fs::write(
-        dir.join("package.json"),
-        serde_json::to_string_pretty(&serde_json::json!({
-            "name": name,
-            "version": "0.1.0",
-            "main": "index.ts",
-            "dependencies": {
-                "@statico/plugin-sdk": "../../sdks/typescript"
-            }
-        }))
-        .unwrap(),
-    )
-    .unwrap();
-
-    std::fs::write(
-        dir.join("tsconfig.json"),
-        r#"{
-  "compilerOptions": {
-    "target": "ESNext",
-    "module": "ESNext",
-    "moduleResolution": "bundler",
-    "strict": true
-  },
-  "include": ["index.ts"]
-}"#,
-    )
-    .unwrap();
-
-    std::fs::write(
-        dir.join("index.ts"),
-        format!(
-            r#"import {{ Plugin }} from "@statico/plugin-sdk";
-
-const plugin = Plugin.create("{name}", {{
-  hooks: {{ analyze_file: "add" }},
-  languages: ["typescript"],
-  rules: [
-    {{ id: "{name}", severity: "warning", description: "TODO: describe your rule" }},
-  ],
-}});
-
-plugin.onAnalyzeFile((params) => {{
-  const issues = [];
-  // TODO: implement your detection logic
-  // Example: detect console.log
-  // if (params.source.includes("console.log")) {{
-  //   issues.push({{
-  //     ruleId: "{name}",
-  //     severity: "warning",
-  //     message: "Found console.log",
-  //     file: params.path,
-  //     line: 1,
-  //     confidence: 0.9,
-  //   }});
-  // }}
-  return {{ issues }};
-}});
-
-plugin.start();
-"#
-        ),
-    )
-    .unwrap();
-
-    std::fs::write(
-        dir.join("fixtures").join("sample.ts"),
-        "// Test fixture for plugin development\nexport function hello() {\n  console.log('hello');\n}\n",
-    )
-    .unwrap();
-
-    std::fs::write(
-        dir.join("README.md"),
-        format!(
-            "# {name}\n\nA statico plugin.\n\n## Development\n\n```bash\nstatico plugin run {name} --file fixtures/sample.ts\n```\n\n## Protocol\n\nRun `statico plugin docs` for the full protocol reference.\n"
-        ),
-    ).unwrap();
+    std::fs::write(dir.join("package.json"), render(PACKAGE_JSON, name)).unwrap();
+    std::fs::write(dir.join("tsconfig.json"), TSCONFIG_JSON).unwrap();
+    std::fs::write(dir.join("index.ts"), render(INDEX_TS, name)).unwrap();
+    std::fs::write(dir.join("fixtures").join("sample.ts"), SAMPLE_TS).unwrap();
+    std::fs::write(dir.join("README.md"), render(README_MD, name)).unwrap();
 
     println!("Created TypeScript plugin: {}", dir.display());
     println!("\nNext steps:");
@@ -295,54 +235,17 @@ plugin.start();
 }
 
 fn scaffold_rust_plugin(name: &str, dir: &std::path::Path) {
+    const CARGO_TOML: &str = include_str!("../../templates/plugin/rust/Cargo.toml.tmpl");
+    const MAIN_RS: &str = include_str!("../../templates/plugin/rust/src/main.rs.tmpl");
+    const SAMPLE_RS: &str = include_str!("../../templates/plugin/rust/fixtures/sample.rs");
+    const README_MD: &str = include_str!("../../templates/plugin/rust/README.md.tmpl");
+
     std::fs::create_dir_all(dir.join("src")).unwrap();
     std::fs::create_dir_all(dir.join("fixtures")).unwrap();
-
-    std::fs::write(
-        dir.join("Cargo.toml"),
-        format!(
-            r#"[package]\nname = "{name}"\nversion = "0.1.0"\nedition = "2024"\n\n[dependencies]\nstatico-plugin-sdk = {{ path = "../../sdks/rust" }}\nserde_json = "1"\n"#
-        ),
-    ).unwrap();
-
-    std::fs::write(
-        dir.join("src").join("main.rs"),
-        format!(
-            r#"use statico_plugin_sdk::{{Plugin, PluginManifest, HookName, HookMode}};
-use std::collections::HashMap;
-
-fn main() {{
-    let mut plugin = Plugin::create("{name}", PluginManifest {{
-        version: Some("0.1.0".to_string()),
-        hooks: HashMap::from([(HookName::AnalyzeFile, HookMode::Add)]),
-        languages: vec!["rust".to_string()],
-        rules: vec![],
-    }});
-
-    plugin.on_analyze_file(|params| {{
-        // TODO: implement your detection logic
-        statico_plugin_sdk::AnalyzeFileResult::default()
-    }});
-
-    plugin.start();
-}}
-"#
-        ),
-    )
-    .unwrap();
-
-    std::fs::write(
-        dir.join("fixtures").join("sample.rs"),
-        "// Test fixture for plugin development\nfn main() {\n    println!(\"hello\");\n}\n",
-    )
-    .unwrap();
-
-    std::fs::write(
-        dir.join("README.md"),
-        format!(
-            "# {name}\n\nA statico Rust plugin.\n\n## Development\n\n```bash\ncargo build --release\nstatico plugin run {name} --file fixtures/sample.rs\n```\n\n## Protocol\n\nRun `statico plugin docs` for the full protocol reference.\n"
-        ),
-    ).unwrap();
+    std::fs::write(dir.join("Cargo.toml"), render(CARGO_TOML, name)).unwrap();
+    std::fs::write(dir.join("src").join("main.rs"), render(MAIN_RS, name)).unwrap();
+    std::fs::write(dir.join("fixtures").join("sample.rs"), SAMPLE_RS).unwrap();
+    std::fs::write(dir.join("README.md"), render(README_MD, name)).unwrap();
 
     println!("Created Rust plugin: {}", dir.display());
     println!("\nNext steps:");
@@ -352,108 +255,16 @@ fn main() {{
 }
 
 fn scaffold_python_plugin(name: &str, dir: &std::path::Path) {
-    std::fs::create_dir_all(dir).unwrap();
+    const PACKAGE_JSON: &str = include_str!("../../templates/plugin/python/package.json.tmpl");
+    const PLUGIN_PY: &str = include_str!("../../templates/plugin/python/plugin.py.tmpl");
+    const SAMPLE_PY: &str = include_str!("../../templates/plugin/python/fixtures/sample.py");
+    const README_MD: &str = include_str!("../../templates/plugin/python/README.md.tmpl");
+
     std::fs::create_dir_all(dir.join("fixtures")).unwrap();
-
-    std::fs::write(
-        dir.join("package.json"),
-        serde_json::to_string_pretty(&serde_json::json!({
-            "name": name,
-            "version": "0.1.0",
-            "statico": {
-                "runtime": "python3",
-                "entry": "plugin.py"
-            }
-        }))
-        .unwrap(),
-    )
-    .unwrap();
-
-    std::fs::write(
-        dir.join("plugin.py"),
-        format!(
-            r#"#!/usr/bin/env python3
-\"\"\"Statico plugin: {name}\"\"\"
-
-import sys
-import json
-
-def send_response(result, req_id):
-    msg = json.dumps({{"jsonrpc": "2.0", "id": req_id, "result": result}})
-    sys.stdout.write(msg + "\n")
-    sys.stdout.flush()
-
-def send_error(code, message, req_id):
-    msg = json.dumps({{"jsonrpc": "2.0", "id": req_id, "error": {{"code": code, "message": message}}}})
-    sys.stdout.write(msg + "\n")
-    sys.stdout.flush()
-
-def analyze_file(params):
-    source = params.get("source", "")
-    path = params.get("path", "")
-    issues = []
-
-    # TODO: implement your detection logic
-    # Example: detect bare except clauses
-    # for i, line in enumerate(source.splitlines(), 1):
-    #     if line.strip() == "except:":
-    #         issues.append({{
-    #             "ruleId": "{name}",
-    #             "severity": "warning",
-    #             "message": "Bare except clause",
-    #             "file": path,
-    #             "line": i,
-    #             "confidence": 0.9,
-    #         }})
-
-    return {{"issues": issues}}
-
-def main():
-    for line in sys.stdin:
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            req = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-
-        method = req.get("method", "")
-        req_id = req.get("id")
-        params = req.get("params", {{}})
-
-        if method == "init":
-            send_response({{
-                "name": "{name}",
-                "version": "0.1.0",
-                "hooks": {{"analyze_file": "add"}},
-                "languages": ["python"],
-                "rules": [],
-            }}, req_id)
-        elif method == "analyze_file":
-            send_response(analyze_file(params), req_id)
-        else:
-            send_error(-32601, f"Method not found: {{method}}", req_id)
-
-if __name__ == "__main__":
-    main()
-"#
-        ),
-    )
-    .unwrap();
-
-    std::fs::write(
-        dir.join("fixtures").join("sample.py"),
-        "# Test fixture for plugin development\ndef hello():\n    pass\n",
-    )
-    .unwrap();
-
-    std::fs::write(
-        dir.join("README.md"),
-        format!(
-            "# {name}\n\nA statico Python plugin.\n\n## Development\n\n```bash\nstatico plugin run {name} --file fixtures/sample.py\n```\n\n## Protocol\n\nRun `statico plugin docs` for the full protocol reference.\n"
-        ),
-    ).unwrap();
+    std::fs::write(dir.join("package.json"), render(PACKAGE_JSON, name)).unwrap();
+    std::fs::write(dir.join("plugin.py"), render(PLUGIN_PY, name)).unwrap();
+    std::fs::write(dir.join("fixtures").join("sample.py"), SAMPLE_PY).unwrap();
+    std::fs::write(dir.join("README.md"), render(README_MD, name)).unwrap();
 
     println!("Created Python plugin: {}", dir.display());
     println!("\nNext steps:");
