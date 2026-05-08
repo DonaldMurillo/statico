@@ -1,3 +1,7 @@
+## [0.1.4] - 2026-05-08
+
+---
+
 <!--
 This file is the body of every release. Edit it before tagging to call out
 breaking changes or notable additions; the changelog is in CHANGELOG.md.

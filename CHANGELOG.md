@@ -8,6 +8,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [0.1.4] - 2026-05-08
 
+## [0.1.4] - 2026-05-08
+
 ### Fixed
 - Windows cross-compilation: added `BUN_URL_TEMPLATE` cfg for `target_os = "windows"`
   so the release build succeeds on all 5 targets.
