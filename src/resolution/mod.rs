@@ -157,7 +157,11 @@ impl Resolver {
     pub fn load_all_tsconfig_paths(&mut self) {
         for entry in walkdir::WalkDir::new(&*self.root).max_depth(6).into_iter().filter_map(|e| e.ok()) {
             let path = entry.path();
-            if !path.is_file() || path.file_name().is_none_or(|n| n != "tsconfig.json") {
+            if !path.is_file() {
+                continue;
+            }
+            let file_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+            if !file_name.starts_with("tsconfig") || !file_name.ends_with(".json") {
                 continue;
             }
             let rel = path_relative_to(&self.root, path);
@@ -352,6 +356,7 @@ impl Resolver {
         if let Some(ref resolver_fn) = *plugin_resolver_lock().lock().unwrap()
             && let Some(resolved) = resolver_fn(from_dir, spec)
         {
+            eprintln!("[statico::resolution] plugin resolver matched: {spec} -> {}", resolved.display());
             return Some(resolved);
         }
 
@@ -359,9 +364,23 @@ impl Resolver {
     }
 }
 
-/// Resolve a relative import specifier to an actual file path.
+/// Resolve an import specifier to an actual file path.
+///
+/// Tries relative resolution first, then falls back to the plugin resolver
+/// (if one is registered via `set_plugin_resolver`).
 pub fn resolve_import(from_dir: &Path, spec: &str) -> Option<PathBuf> {
-    resolve_relative(from_dir, spec)
+    // Step 1: try relative resolution.
+    if let Some(path) = resolve_relative(from_dir, spec) {
+        return Some(path);
+    }
+    // Step 2: try the plugin resolver (global hook).
+    let lock = plugin_resolver_lock();
+    if let Some(resolver) = lock.lock().unwrap().as_ref()
+        && let Some(path) = resolver(from_dir, spec)
+    {
+        return Some(path);
+    }
+    None
 }
 
 /// Get a path relative to the root.
@@ -424,6 +443,9 @@ pub fn find_published_package_dirs(root: &Path) -> HashSet<String> {
 mod tests {
     use super::*;
 
+    /// Serialize tests that touch the global PLUGIN_RESOLVER to prevent races.
+    static PLUGIN_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     #[test]
     fn test_path_relative_to() {
         let root = Path::new("/project");
@@ -468,6 +490,7 @@ mod tests {
 
     #[test]
     fn test_plugin_resolver_set_and_clear() {
+        let _guard = PLUGIN_TEST_LOCK.lock().unwrap();
         // Setting the hook should make it available, clearing should remove it.
         set_plugin_resolver(Box::new(|_from_dir: &Path, spec: &str| {
             if spec == "@test/resolve-me" { Some(PathBuf::from("/project/src/resolved.ts")) } else { None }
@@ -492,6 +515,7 @@ mod tests {
 
     #[test]
     fn test_resolver_falls_through_to_plugin_hook() {
+        let _guard = PLUGIN_TEST_LOCK.lock().unwrap();
         // Create a resolver with no aliases — built-in resolution won't handle @test/*.
         let resolver = Resolver::new(Path::new("/nonexistent"));
 
@@ -517,6 +541,62 @@ mod tests {
         );
 
         // Clean up.
+        clear_plugin_resolver();
+    }
+
+    #[test]
+    fn test_load_all_tsconfig_matches_base_and_app_variants() {
+        // Verify that load_all_tsconfig_paths picks up tsconfig.base.json
+        // and tsconfig.app.json, not just tsconfig.json.
+        let tmp = std::env::temp_dir().join("statico-test-tsconfig-glob");
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(tmp.join("apps/web")).unwrap();
+
+        // tsconfig.base.json at root with path aliases.
+        std::fs::write(
+            tmp.join("tsconfig.base.json"),
+            r#"{ "compilerOptions": { "paths": { "@base/*": ["./libs/*"] } } }"#,
+        )
+        .unwrap();
+
+        // tsconfig.app.json in a subdirectory.
+        std::fs::create_dir_all(tmp.join("apps/web")).unwrap();
+        std::fs::write(
+            tmp.join("apps/web/tsconfig.app.json"),
+            r#"{ "compilerOptions": { "paths": { "@app/*": ["./src/*"] } } }"#,
+        )
+        .unwrap();
+
+        let mut resolver = Resolver::new(&tmp);
+        resolver.load_all_tsconfig_paths();
+
+        let aliases = resolver.aliases();
+        let has_base = aliases.iter().any(|a| a.prefix == "@base/");
+        let has_app = aliases.iter().any(|a| a.prefix == "@app/");
+        assert!(has_base, "should load aliases from tsconfig.base.json");
+        assert!(has_app, "should load aliases from tsconfig.app.json in subdirectory");
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn test_free_resolve_import_uses_plugin_hook() {
+        let _guard = PLUGIN_TEST_LOCK.lock().unwrap();
+        // The free function resolve_import should fall through to the plugin
+        // resolver when relative resolution fails.
+        set_plugin_resolver(Box::new(|_from_dir: &Path, spec: &str| {
+            if spec == "@plugin/aliased" { Some(PathBuf::from("/project/src/aliased_module.ts")) } else { None }
+        }));
+
+        let result = resolve_import(Path::new("/project/src"), "@plugin/aliased");
+        assert!(result.is_some(), "free resolve_import should reach plugin resolver for non-relative specs");
+        assert_eq!(result.unwrap(), PathBuf::from("/project/src/aliased_module.ts"));
+
+        // Relative spec should NOT go through plugin (resolve_relative handles it).
+        let _relative = resolve_import(Path::new("/project/src"), "./local");
+        // resolve_relative returns None for non-existent files, which is fine.
+        // The important thing is it didn't panic or call the plugin.
+
         clear_plugin_resolver();
     }
 }

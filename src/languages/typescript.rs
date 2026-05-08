@@ -156,7 +156,7 @@ impl LanguagePlugin for TypeScriptPlugin {
 fn build_resolver(root: &Path) -> Resolver {
     let mut resolver = Resolver::new(root);
 
-    for tsconfig in &["tsconfig.json", "tsconfig.app.json"] {
+    for tsconfig in &["tsconfig.json", "tsconfig.base.json", "tsconfig.app.json"] {
         let path = root.join(tsconfig);
         if path.exists() {
             resolver.load_tsconfig_paths(&path);
