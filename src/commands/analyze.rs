@@ -162,10 +162,40 @@ fn run_analyze_inner(
         eprintln!("info: include patterns: {:?}", config.include);
     }
 
-    let mut plugin_pipeline = statico::plugin::PluginPipeline::new(root);
-    if !config.quiet && !plugin_pipeline.is_empty() {
-        eprintln!("info: {} plugin(s) active", plugin_pipeline.len());
+    let plugin_pipeline = std::sync::Arc::new(std::sync::Mutex::new(statico::plugin::PluginPipeline::new(root)));
+    {
+        let pipeline = plugin_pipeline.lock().unwrap();
+        if !config.quiet && !pipeline.is_empty() {
+            eprintln!("info: {} plugin(s) active", pipeline.len());
+        }
     }
+
+    // Wire plugin resolve_import hook so plugins can override import resolution
+    // during the analysis phase (e.g. tsconfig path mappings, custom aliases).
+    {
+        let pipeline_clone = std::sync::Arc::clone(&plugin_pipeline);
+        let root_owned = root.to_path_buf();
+        statico::resolution::set_plugin_resolver(Box::new(move |from_dir: &std::path::Path, spec: &str| {
+            let mut pipeline = pipeline_clone.lock().unwrap();
+            let from_file = from_dir.to_string_lossy();
+            pipeline.resolve_import(&from_file, spec, &root_owned.to_string_lossy()).and_then(|r| {
+                if r.external {
+                    return None;
+                }
+                let path = std::path::PathBuf::from(&r.resolved_path);
+                if path.is_absolute() && path.exists() {
+                    Some(path)
+                } else {
+                    let abs = root_owned.join(&r.resolved_path);
+                    if abs.exists() { Some(abs) } else { None }
+                }
+            })
+        }));
+    }
+
+    // Clear the plugin resolver hook — analysis is done, we don't want
+    // stale closures hanging around (especially in watch mode).
+    statico::resolution::clear_plugin_resolver();
 
     let mut output = match statico::analyzer::analyze_with_options(root, &config.exclude, no_cache) {
         Ok(o) => o,
@@ -175,42 +205,48 @@ fn run_analyze_inner(
         }
     };
 
-    if !plugin_pipeline.is_empty() {
-        let source_files = &output.structure.source_files;
-        for file_entry in source_files {
-            let rel_path = &file_entry.path;
-            let abs_path = root.join(rel_path);
-            let file_size = match std::fs::metadata(&abs_path) {
-                Ok(m) => m.len(),
-                Err(_) => continue,
-            };
-            if file_size > config.max_file_size {
-                continue;
-            }
-            let source = match std::fs::read_to_string(&abs_path) {
-                Ok(s) => s,
-                Err(_) => continue,
-            };
-            let language = &file_entry.language;
-            let results = plugin_pipeline.analyze_file(rel_path, &source, language);
-            for mut result in results {
-                if !result.issues.is_empty() {
-                    for issue in &mut result.issues {
-                        issue.file = issue.file.chars().filter(|c| !c.is_control()).collect::<String>();
-                        if issue.file.starts_with('/') || issue.file.starts_with("..") {
-                            issue.file = issue.file.trim_start_matches('/').trim_start_matches("../").to_string();
+    {
+        let mut pipeline = plugin_pipeline.lock().unwrap();
+        if !pipeline.is_empty() {
+            let source_files = &output.structure.source_files;
+            for file_entry in source_files {
+                let rel_path = &file_entry.path;
+                let abs_path = root.join(rel_path);
+                let file_size = match std::fs::metadata(&abs_path) {
+                    Ok(m) => m.len(),
+                    Err(_) => continue,
+                };
+                if file_size > config.max_file_size {
+                    continue;
+                }
+                let source = match std::fs::read_to_string(&abs_path) {
+                    Ok(s) => s,
+                    Err(_) => continue,
+                };
+                let language = &file_entry.language;
+                let results = pipeline.analyze_file(rel_path, &source, language);
+                for mut result in results {
+                    if !result.issues.is_empty() {
+                        for issue in &mut result.issues {
+                            issue.file = issue.file.chars().filter(|c| !c.is_control()).collect::<String>();
+                            if issue.file.starts_with('/') || issue.file.starts_with("..") {
+                                issue.file = issue.file.trim_start_matches('/').trim_start_matches("../").to_string();
+                            }
                         }
+                        output.issues.plugin_issues.extend(result.issues);
                     }
-                    output.issues.plugin_issues.extend(result.issues);
                 }
             }
         }
     }
 
-    if !plugin_pipeline.is_empty() {
-        let plugin_results = plugin_pipeline.post_analysis(&output);
-        if !config.quiet && !plugin_results.is_empty() {
-            eprintln!("info: plugins contributed {} post-analysis results", plugin_results.len());
+    {
+        let mut pipeline = plugin_pipeline.lock().unwrap();
+        if !pipeline.is_empty() {
+            let plugin_results = pipeline.post_analysis(&output);
+            if !config.quiet && !plugin_results.is_empty() {
+                eprintln!("info: plugins contributed {} post-analysis results", plugin_results.len());
+            }
         }
     }
 
@@ -252,7 +288,7 @@ fn run_analyze_inner(
         output
     };
 
-    if let Some(plugin_output) = plugin_pipeline.format_output(&filtered, &config.format) {
+    if let Some(plugin_output) = plugin_pipeline.lock().unwrap().format_output(&filtered, &config.format) {
         println!("{}", plugin_output);
     } else {
         use statico::output::OutputFormatter;

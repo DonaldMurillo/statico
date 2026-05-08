@@ -13,7 +13,7 @@ const BUN_MIN_VERSION: &str = "1.0.0";
 
 /// Bun download URL template. Supports macOS (arm64, x64) and Linux (arm64, x64).
 #[cfg(target_os = "macos")]
-const BUN_URL_TEMPLATE: &str = "https://github.com/oven-sh/bun/releases/latest/download/bun-{arch}.zip";
+const BUN_URL_TEMPLATE: &str = "https://github.com/oven-sh/bun/releases/latest/download/bun-darwin-{arch}.zip";
 
 #[cfg(target_os = "linux")]
 const BUN_URL_TEMPLATE: &str = "https://github.com/oven-sh/bun/releases/latest/download/bun-linux-{arch}.zip";
@@ -368,5 +368,29 @@ mod tests {
     fn sec_trusted_sha_env_constant_is_set() {
         // Document the env var name as a stable contract.
         assert_eq!(TRUSTED_SHA_ENV, "STATICO_TRUSTED_BUN_SHA256");
+    }
+
+    #[test]
+    fn test_bun_url_contains_platform() {
+        let arch = arch_suffix();
+        let url = BUN_URL_TEMPLATE.replace("{arch}", arch);
+        assert!(url.contains("darwin") || url.contains("linux"), "URL should contain platform: {}", url);
+        assert!(url.contains("bun-"), "URL should contain bun- prefix: {}", url);
+    }
+
+    #[test]
+    fn test_bun_url_macos_format() {
+        // On macOS, the URL MUST contain "darwin" between "bun-" and "{arch}".
+        // This is the exact bug that was reported: the URL was missing "darwin-".
+        // On Linux this test just checks the URL contains "linux".
+        let url = BUN_URL_TEMPLATE.replace("{arch}", arch_suffix());
+        #[cfg(target_os = "macos")]
+        {
+            assert!(url.contains("bun-darwin-"), "macOS Bun URL must contain 'bun-darwin-', got: {}", url);
+        }
+        #[cfg(target_os = "linux")]
+        {
+            assert!(url.contains("bun-linux-"), "Linux Bun URL must contain 'bun-linux-', got: {}", url);
+        }
     }
 }

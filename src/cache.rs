@@ -198,6 +198,9 @@ pub fn content_hash(content: &str) -> String {
 /// — *not* `.statico/` as a whole. `.statico/plugins/` is project content
 /// (user-authored plugins) and must stay trackable.
 ///
+/// Also checks `.git/info/exclude` — if the patterns are already covered
+/// there (or via a blanket `.statico` entry), we don't touch `.gitignore`.
+///
 /// V-8: Refuses to modify .gitignore if it is a symlink (prevents
 /// corruption of linked files).
 /// V7-4: Checks for the patterns as standalone gitignore entries on
@@ -212,41 +215,52 @@ pub fn ensure_gitignore(project_root: &Path) {
     let existing = fs::read_to_string(&gitignore_path).unwrap_or_default();
 
     // Helper: is this exact pattern present as a standalone, non-comment line?
-    let has_pattern = |needle: &str| -> bool {
-        existing.lines().any(|line| {
+    let has_pattern = |needle: &str, haystack: &str| -> bool {
+        haystack.lines().any(|line| {
             let trimmed = line.trim();
             if trimmed.is_empty() || trimmed.starts_with('#') {
                 return false;
             }
-            // Match with or without leading slash and trailing slash variants.
             let strip_slashes = |p: &str| -> String { p.trim_start_matches('/').trim_end_matches('/').to_string() };
             strip_slashes(trimmed) == strip_slashes(needle)
         })
     };
 
-    // If a too-broad legacy `.statico/` entry is already present we leave it
-    // alone — that's user-curated config and may be intentional. The
-    // `is_blanket_ignore` check below also short-circuits adding the
-    // granular entries in that case.
-    let is_blanket_ignore = has_pattern(".statico") || has_pattern(".statico/");
+    // Also check .git/info/exclude for existing patterns.
+    // If there's no .git directory (not a git repo), this just returns empty.
+    let git_exclude = project_root.join(".git").join("info").join("exclude");
+    let exclude_content = fs::read_to_string(&git_exclude).unwrap_or_default();
+
+    // Broad check across both .gitignore and .git/info/exclude.
+    let is_ignored =
+        |pattern: &str| -> bool { has_pattern(pattern, &existing) || has_pattern(pattern, &exclude_content) };
+
+    // If a too-broad legacy `.statico/` entry is already present in either
+    // file we leave it alone — that's user-curated config and may be
+    // intentional. Short-circuits adding the granular entries too.
+    let is_blanket_ignore = is_ignored(".statico") || is_ignored(".statico/");
     if is_blanket_ignore {
         return;
     }
 
-    let want_cache = !has_pattern(".statico/cache");
-    let want_runtimes = !has_pattern(".statico/runtimes");
+    let want_cache = !is_ignored(".statico/cache") && !is_ignored(".statico/cache/");
+    let want_runtimes = !is_ignored(".statico/runtimes") && !is_ignored(".statico/runtimes/");
     if !want_cache && !want_runtimes {
         return;
     }
 
     if let Ok(mut f) = fs::OpenOptions::new().create(true).append(true).open(&gitignore_path) {
         let _ = writeln!(f, "\n# statico — cache + downloaded runtimes (regenerated on demand)");
+        let mut added = Vec::new();
         if want_cache {
             let _ = writeln!(f, ".statico/cache/");
+            added.push(".statico/cache/");
         }
         if want_runtimes {
             let _ = writeln!(f, ".statico/runtimes/");
+            added.push(".statico/runtimes/");
         }
+        eprintln!("note: added {} to .gitignore (use --no-manage-gitignore to disable)", added.join(" and "));
     }
 }
 
@@ -479,5 +493,66 @@ mod tests {
             "blanket .statico ignore would hide plugins, got:\n{}",
             contents
         );
+    }
+
+    #[test]
+    fn sec_gitignore_respects_git_exclude() {
+        // If .statico/cache/ and .statico/runtimes/ are already in
+        // .git/info/exclude, ensure_gitignore should NOT touch .gitignore.
+        let dir = std::env::temp_dir().join("statico_sec_gitignore_exclude");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        // Set up .git/info/exclude with our patterns
+        let exclude_dir = dir.join(".git").join("info");
+        fs::create_dir_all(&exclude_dir).unwrap();
+        fs::write(exclude_dir.join("exclude"), ".statico/cache/\n.statico/runtimes/\n").unwrap();
+        // .gitignore exists but doesn't have our patterns
+        fs::write(dir.join(".gitignore"), "node_modules/\n").unwrap();
+        ensure_gitignore(&dir);
+        let contents = fs::read_to_string(dir.join(".gitignore")).unwrap();
+        assert!(
+            !contents.contains(".statico/cache"),
+            "should NOT add to .gitignore when already in .git/info/exclude, got:\n{}",
+            contents
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn sec_gitignore_respects_git_exclude_blanket() {
+        // A blanket `.statico/` in .git/info/exclude should also prevent writing.
+        let dir = std::env::temp_dir().join("statico_sec_gitignore_exclude_blanket");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let exclude_dir = dir.join(".git").join("info");
+        fs::create_dir_all(&exclude_dir).unwrap();
+        fs::write(exclude_dir.join("exclude"), ".statico/\n").unwrap();
+        fs::write(dir.join(".gitignore"), "node_modules/\n").unwrap();
+        ensure_gitignore(&dir);
+        let contents = fs::read_to_string(dir.join(".gitignore")).unwrap();
+        assert!(
+            !contents.contains(".statico"),
+            "blanket .statico/ in exclude should prevent .gitignore mutation, got:\n{}",
+            contents
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn sec_gitignore_handles_no_git_dir() {
+        // When there is no .git directory at all, ensure_gitignore should still
+        // work normally (just write to .gitignore as before).
+        let dir = std::env::temp_dir().join("statico_sec_gitignore_no_git");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        // No .git directory, no .gitignore
+        ensure_gitignore(&dir);
+        let contents = fs::read_to_string(dir.join(".gitignore")).unwrap_or_default();
+        assert!(
+            contents.contains(".statico/cache/"),
+            "should add to .gitignore when no .git dir exists, got:\n{}",
+            contents
+        );
+        let _ = fs::remove_dir_all(&dir);
     }
 }

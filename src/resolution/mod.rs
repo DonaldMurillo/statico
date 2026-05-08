@@ -13,8 +13,38 @@ mod oxc;
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use paths::resolve_relative;
+
+// ── Plugin resolver hook ──────────────────────────────────────────────
+// Allows the command handler to inject a plugin-based import resolver
+// that is consulted inside `Resolver::resolve()` when the built-in
+// resolver can't handle a specifier (e.g. tsconfig path mappings,
+// Webpack aliases, custom Node resolvers).
+
+type PluginResolveFn = dyn Fn(&Path, &str) -> Option<PathBuf> + Send + Sync;
+
+/// Thread-safe storage for the plugin resolver hook.
+/// Set before analysis, cleared after.
+static PLUGIN_RESOLVER: std::sync::OnceLock<Arc<std::sync::Mutex<Option<Box<PluginResolveFn>>>>> =
+    std::sync::OnceLock::new();
+
+fn plugin_resolver_lock() -> &'static Arc<std::sync::Mutex<Option<Box<PluginResolveFn>>>> {
+    PLUGIN_RESOLVER.get_or_init(|| Arc::new(std::sync::Mutex::new(None)))
+}
+
+/// Set the plugin resolver hook. Called by the command handler before analysis.
+pub fn set_plugin_resolver(resolver: Box<PluginResolveFn>) {
+    let lock = plugin_resolver_lock();
+    *lock.lock().unwrap() = Some(resolver);
+}
+
+/// Clear the plugin resolver hook. Called by the command handler after analysis.
+pub fn clear_plugin_resolver() {
+    let lock = plugin_resolver_lock();
+    *lock.lock().unwrap() = None;
+}
 
 /// Check that a resolved path is within the project root.
 /// Uses the same logic as `ensure_within_root` but returns bool.
@@ -316,6 +346,15 @@ impl Resolver {
             return Some(found);
         }
 
+        // 5. Try plugin resolver (override mode — fallback for custom resolvers).
+        //    Plugins handle tsconfig path mappings, Webpack aliases, and other
+        //    non-standard import patterns that built-in resolution doesn't cover.
+        if let Some(ref resolver_fn) = *plugin_resolver_lock().lock().unwrap()
+            && let Some(resolved) = resolver_fn(from_dir, spec)
+        {
+            return Some(resolved);
+        }
+
         None
     }
 }
@@ -425,5 +464,59 @@ mod tests {
         let at_alias = aliases.iter().find(|a| a.prefix == "@/");
         assert!(at_alias.is_some(), "should have @/ alias");
         assert_eq!(at_alias.unwrap().targets, vec!["./src/".to_string()]);
+    }
+
+    #[test]
+    fn test_plugin_resolver_set_and_clear() {
+        // Setting the hook should make it available, clearing should remove it.
+        set_plugin_resolver(Box::new(|_from_dir: &Path, spec: &str| {
+            if spec == "@test/resolve-me" { Some(PathBuf::from("/project/src/resolved.ts")) } else { None }
+        }));
+
+        // The resolver lock should be populated.
+        let lock = plugin_resolver_lock();
+        {
+            let guard = lock.lock().unwrap();
+            assert!(guard.is_some(), "plugin resolver should be set");
+            let result = guard.as_ref().unwrap()(Path::new("/project/src"), "@test/resolve-me");
+            assert_eq!(result, Some(PathBuf::from("/project/src/resolved.ts")));
+        }
+
+        // Clear it.
+        clear_plugin_resolver();
+        {
+            let guard = lock.lock().unwrap();
+            assert!(guard.is_none(), "plugin resolver should be cleared");
+        }
+    }
+
+    #[test]
+    fn test_resolver_falls_through_to_plugin_hook() {
+        // Create a resolver with no aliases — built-in resolution won't handle @test/*.
+        let resolver = Resolver::new(Path::new("/nonexistent"));
+
+        // Set plugin hook.
+        set_plugin_resolver(Box::new(|from_dir: &Path, spec: &str| {
+            if spec == "@custom-alias/foo" {
+                // Return a path that doesn't exist (Resolver::resolve doesn't
+                // check existence, just returns the path).
+                Some(from_dir.join("custom_resolved.ts"))
+            } else {
+                None
+            }
+        }));
+
+        // resolve should fall through to the plugin hook for non-relative specs.
+        let result = resolver.resolve(Path::new("/project/src"), "@custom-alias/foo");
+        assert!(result.is_some(), "Resolver::resolve should fall through to plugin hook for unknown spec");
+        let resolved = result.unwrap();
+        assert!(
+            resolved.to_string_lossy().contains("custom_resolved.ts"),
+            "Expected custom_resolved.ts in path, got: {:?}",
+            resolved
+        );
+
+        // Clean up.
+        clear_plugin_resolver();
     }
 }
