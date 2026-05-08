@@ -6,18 +6,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-## [0.1.4] - 2026-05-08
+### Fixed
+- Windows release build: `shasum` not available on Windows runner — use
+  `sha256sum` as fallback for per-asset checksum generation.
 
 ## [0.1.4] - 2026-05-08
 
 ### Fixed
 - Windows cross-compilation: added `BUN_URL_TEMPLATE` cfg for `target_os = "windows"`
   so the release build succeeds on all 5 targets.
+- Release notes now generated from CHANGELOG.md for GitHub releases.
 
 ### Added
-- Release notes are now generated from `CHANGELOG.md` — GitHub releases show actual
-  changes instead of just the static install boilerplate.
-- New `.github/release-notes-template.md` holds the install/verification boilerplate;
+- `.github/release-notes-template.md` holds static install/verification boilerplate;
   `scripts/release.sh` prepends the version's changelog section automatically.
 
 ## [0.1.3] - 2026-05-08
