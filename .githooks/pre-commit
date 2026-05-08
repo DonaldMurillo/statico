@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# pre-commit: format check (Rust) + typo check on staged files.
+# pre-commit: format check (Rust) + typo check + TS SDK typecheck on staged files.
 # Install: scripts/setup-hooks.sh (sets core.hooksPath = .githooks)
 set -euo pipefail
 
@@ -26,4 +26,19 @@ if command -v typos >/dev/null 2>&1; then
     fi
 else
     echo "(skipping typos check — install with 'cargo install typos-cli')"
+fi
+
+# 3) TS SDK typecheck — only when SDK source is staged. Skipped if bun is not
+# installed (CI gates this anyway, so local skip is fine).
+ts_sdk_files=$(git diff --cached --name-only --diff-filter=ACM -- 'sdks/typescript/**/*.ts' 'sdks/typescript/**/*.tsx' 'sdks/typescript/tsconfig*.json' 'sdks/typescript/package.json')
+if [ -n "$ts_sdk_files" ]; then
+    if command -v bun >/dev/null 2>&1; then
+        if ! (cd sdks/typescript && bun run check) >/dev/null 2>&1; then
+            echo ""
+            echo "TypeScript SDK typecheck failed. Run 'cd sdks/typescript && bun run check' for details."
+            exit 1
+        fi
+    else
+        echo "(skipping TS SDK typecheck — bun not installed)"
+    fi
 fi

@@ -6,7 +6,49 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-## [0.1.5] - 2026-05-08
+### Changed
+- Architecture cleanup: removed the `src/analyzer/parse_typescript.rs` gravestone,
+  moved the Rust parser into `src/languages/rust_parser.rs`, restructured
+  `src/issues/duplicate_code/` into a directory (drops the `#[path]`
+  indirection), renamed top-level `src/monorepo.rs` to `src/workspace.rs`,
+  and split `tests/integration.rs` (1071 lines) into per-command files
+  under `tests/integration_*.rs` sharing helpers via `tests/common/mod.rs`.
+- `src/main.rs` is now a 7-line dispatch shim; clap definitions live in
+  `src/commands/cli.rs`.
+- Plugin scaffolding templates (`statico plugin init`) moved out of
+  inline Rust string literals into `templates/plugin/{ts,rust,python}/`.
+  Side effect: fixes pre-existing scaffold bugs (Python triple-quote
+  escaping, Rust `Cargo.toml` line collapse).
+- `templates/CLAUDE.md` (shipped to user repos via `statico setup`) and
+  the in-repo `CLAUDE.md` rewritten to remove content derivable from
+  `ls` / `cat Cargo.toml` / `git log`.
+- `templates/skills/statico-plugin/SKILL.md` got `name` + `description`
+  frontmatter (so it auto-discovers in Claude Code) and was trimmed of
+  duplicated SDK boilerplate that already lives in `docs/plugins.md`.
+- `src/lib.rs`: every internal module is now `#[doc(hidden)]`. The public
+  API surface is intentionally undocumented until a stability commitment
+  for `1.0.0`.
+
+### Added
+- `.editorconfig`, `clippy.toml` (`msrv = "1.91"`), `.typos.toml`,
+  `deny.toml`.
+- New `hygiene` CI job runs `typos`, `cargo-deny check advisories
+  licenses sources bans`, and `cargo-machete` (advisory-only).
+- New `windows-build` CI job builds the binary and runs `cargo test
+  --lib` on `windows-latest` so build regressions caught at release
+  time get caught at PR time instead.
+- Pre-commit hook also runs `bun run check` against the TypeScript SDK
+  when SDK files are staged.
+- Pre-push hook now skips clippy + tests for docs-only / config-only
+  pushes (no `.rs` / `Cargo.{toml,lock}` changes).
+- New byte-identical snapshot test
+  (`cli_setup_output_matches_templates_byte_for_byte`) catches drift
+  between `templates/` and what `statico setup` writes.
+
+### Removed
+- Public `docs/audit-2026-05.md` and the matching link in
+  `docs/getting-started.md`. The internal copy under `docs/internal/`
+  (gitignored) is unaffected.
 
 ## [0.1.5] - 2026-05-08
 

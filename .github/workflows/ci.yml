@@ -80,6 +80,30 @@ jobs:
           bun install
           bun test
 
+  windows-build:
+    # Windows is a release target but the test matrix is unix-only because
+    # several plugin tests spawn bash mock scripts. This job builds the
+    # binary + runs the unit (`--lib`) tests on Windows so build regressions
+    # caught at release time get caught at PR time instead.
+    name: windows build + lib tests
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cargo cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: windows
+
+      - name: cargo build
+        run: cargo build --all-targets
+
+      - name: cargo test --lib
+        run: cargo test --lib --no-fail-fast
+
   msrv:
     name: MSRV check (1.91)
     runs-on: ubuntu-latest
