@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-05-08
+
 ### Fixed
 - Windows release build: `shasum` not available on Windows runner — use
   `sha256sum` as fallback for per-asset checksum generation.
