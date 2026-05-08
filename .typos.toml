@@ -24,3 +24,9 @@ ba = "ba"
 fo = "fo"
 ot = "ot"
 crate = "crate"
+# Short loop-variable names used across the issue formatters. Convention is
+# to call the iteration variable after the issue type's initials —
+# `for ue in &output.issues.unused_exports` etc. They're Rust identifiers,
+# not English; suppress here rather than rename across the codebase.
+ue = "ue"
+nd = "nd"

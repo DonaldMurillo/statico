@@ -224,7 +224,12 @@ impl Drop for PluginPipeline {
     }
 }
 
-#[cfg(test)]
+// The pipeline tests build bash mock plugins via `chmod +x`, which only
+// works on Unix. On Windows the integration suite is skipped at the CI
+// level (`windows-build` only runs `cargo test --lib`), but the lib tests
+// would otherwise fail to compile because `os::unix::fs::PermissionsExt`
+// doesn't exist there. Gate the whole module.
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
     use crate::plugin::discovery::{DiscoveredPlugin, PluginKind};
