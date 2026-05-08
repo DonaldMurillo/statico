@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.6] - 2026-05-08
+
 ### Added — Test coverage
 
 Closing 9 of the 10 audit-identified test gaps. Total tests went from
