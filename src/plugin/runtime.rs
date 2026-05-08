@@ -134,15 +134,13 @@ fn download_bun() -> Result<PathBuf, String> {
     let archive_sha = sha256_file(&tmp_zip)?;
     eprintln!("  archive SHA-256: {}", archive_sha);
     if let Ok(expected) = std::env::var(TRUSTED_SHA_ENV) {
-        let expected_norm = expected.trim().to_ascii_lowercase();
-        if expected_norm != archive_sha {
-            let _ = std::fs::remove_file(&tmp_zip);
-            return Err(format!(
-                "Bun archive SHA-256 mismatch — expected {}, got {} (set via {})",
-                expected_norm, archive_sha, TRUSTED_SHA_ENV
-            ));
+        match verify_archive_sha(&archive_sha, &expected) {
+            Ok(()) => eprintln!("  ✓ archive SHA-256 matched {}", TRUSTED_SHA_ENV),
+            Err(e) => {
+                let _ = std::fs::remove_file(&tmp_zip);
+                return Err(e);
+            }
         }
-        eprintln!("  ✓ archive SHA-256 matched {}", TRUSTED_SHA_ENV);
     }
 
     // Extract using the pure-Rust `zip` crate. Each entry path is checked for
@@ -183,6 +181,24 @@ fn download_bun() -> Result<PathBuf, String> {
     eprintln!("Bun {} installed successfully.", version);
 
     Ok(target)
+}
+
+/// Compare a computed archive SHA-256 (lowercase hex) against an expected
+/// value from `STATICO_TRUSTED_BUN_SHA256`. Trims the expected value and
+/// compares case-insensitively. Returns the canonical "mismatch" error
+/// string when they disagree so the test suite can pin the message.
+///
+/// Extracted from `download_bun` so the verification gate can be unit-tested
+/// without standing up a network mock.
+fn verify_archive_sha(archive_sha: &str, expected: &str) -> Result<(), String> {
+    let expected_norm = expected.trim().to_ascii_lowercase();
+    if expected_norm != archive_sha {
+        return Err(format!(
+            "Bun archive SHA-256 mismatch — expected {}, got {} (set via {})",
+            expected_norm, archive_sha, TRUSTED_SHA_ENV
+        ));
+    }
+    Ok(())
 }
 
 /// Compute the SHA-256 of a file, returned as a lowercase hex string.
@@ -371,6 +387,43 @@ mod tests {
     fn sec_trusted_sha_env_constant_is_set() {
         // Document the env var name as a stable contract.
         assert_eq!(TRUSTED_SHA_ENV, "STATICO_TRUSTED_BUN_SHA256");
+    }
+
+    #[test]
+    fn sec_verify_archive_sha_accepts_match() {
+        let archive = "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824";
+        assert!(verify_archive_sha(archive, archive).is_ok());
+    }
+
+    #[test]
+    fn sec_verify_archive_sha_accepts_uppercase_and_whitespace() {
+        // Users frequently paste hashes with extra whitespace or in upper
+        // case (e.g. from shasum output). Both should still match.
+        let archive = "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824";
+        let expected = "  2CF24DBA5FB0A30E26E83B2AC5B9E29E1B161E5C1FA7425E73043362938B9824\n";
+        assert!(verify_archive_sha(archive, expected).is_ok());
+    }
+
+    #[test]
+    fn sec_verify_archive_sha_rejects_mismatch() {
+        // The audit's S4.1 contract: a tampered archive must not extract.
+        // If this test ever passes a mismatched hash, statico has lost its
+        // Bun-runtime integrity gate.
+        let archive = "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824";
+        let attacker = "0000000000000000000000000000000000000000000000000000000000000000";
+        let err = verify_archive_sha(archive, attacker).unwrap_err();
+        assert!(err.to_lowercase().contains("mismatch"), "error must mention mismatch: {err}");
+        assert!(err.contains(attacker), "error must include the expected hash: {err}");
+        assert!(err.contains(archive), "error must include the actual hash: {err}");
+        assert!(err.contains(TRUSTED_SHA_ENV), "error should reference the env var name: {err}");
+    }
+
+    #[test]
+    fn sec_verify_archive_sha_empty_expected_rejected() {
+        // Empty / whitespace-only env value must not be treated as "no check".
+        let archive = "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824";
+        assert!(verify_archive_sha(archive, "").is_err());
+        assert!(verify_archive_sha(archive, "   ").is_err());
     }
 
     #[test]

@@ -440,4 +440,367 @@ fn cli_setup_generates_pi_skills() {
     assert!(gitignore.contains(".pi/"), ".gitignore should contain .pi/: {gitignore}");
 }
 
+// ---------------------------------------------------------------------------
+// `statico fix` — state-mutating subcommand. Previously zero integration
+// coverage despite being the only command that rewrites user files.
+// ---------------------------------------------------------------------------
+
+/// Build a tiny TS project with one used export and one unused export. Returns
+/// the temp dir path so the test can inspect / mutate it. Caller must keep
+/// the `TempDir` alive for the duration of the test (the `_tmp` binding is
+/// the standard pattern).
+fn make_unused_export_project() -> (tempfile::TempDir, std::path::PathBuf) {
+    let tmp = tempfile::tempdir().expect("temp dir");
+    let root = tmp.path().to_path_buf();
+
+    std::fs::write(root.join("package.json"), r#"{"name":"fix-test","version":"0.0.0","dependencies":{}}"#)
+        .expect("write package.json");
+
+    std::fs::create_dir_all(root.join("src")).expect("mkdir src");
+
+    // index.ts is the entry — it imports `used` from utils.
+    std::fs::write(root.join("src/index.ts"), "import { used } from './utils';\nconsole.log(used());\n")
+        .expect("write index.ts");
+
+    // utils.ts exports two symbols; only `used` is imported.
+    std::fs::write(
+        root.join("src/utils.ts"),
+        "export function used() { return 'used'; }\nexport function unused() { return 'unused'; }\n",
+    )
+    .expect("write utils.ts");
+
+    (tmp, root)
+}
+
+#[test]
+fn cli_fix_dry_run_does_not_modify_files() {
+    let (_tmp, root) = make_unused_export_project();
+    let original = std::fs::read_to_string(root.join("src/utils.ts")).expect("read utils");
+
+    let output = Command::new(statico_bin())
+        .args(["fix", "--unused-exports", "--no-unused-deps"])
+        .arg(&root)
+        .output()
+        .expect("run statico fix");
+
+    assert!(output.status.success(), "fix dry-run should exit 0, stderr: {}", String::from_utf8_lossy(&output.stderr));
+
+    // The file must be byte-identical to before — dry-run is the safety
+    // contract documented in `src/commands/fix.rs:17` and the CLI help.
+    let after = std::fs::read_to_string(root.join("src/utils.ts")).expect("read utils");
+    assert_eq!(original, after, "dry-run must not rewrite files");
+
+    // Output should mention what *would* change.
+    let combined = format!("{}{}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
+    assert!(combined.contains("unused"), "dry-run output should describe unused-export findings: {combined}");
+}
+
+#[test]
+fn cli_fix_apply_strips_unused_export_keyword() {
+    let (_tmp, root) = make_unused_export_project();
+
+    let output = Command::new(statico_bin())
+        .args(["fix", "--apply", "--unused-exports", "--no-unused-deps"])
+        .arg(&root)
+        .output()
+        .expect("run statico fix --apply");
+
+    assert!(output.status.success(), "fix --apply should exit 0, stderr: {}", String::from_utf8_lossy(&output.stderr));
+
+    let after = std::fs::read_to_string(root.join("src/utils.ts")).expect("read utils");
+    // The `unused` declaration's `export` keyword must be gone.
+    assert!(after.contains("function unused()"), "the unused declaration itself must remain: {after}");
+    assert!(!after.contains("export function unused()"), "the export keyword on `unused` must be stripped: {after}");
+    // The `used` export must NOT be touched.
+    assert!(after.contains("export function used()"), "the still-used export must remain exported: {after}");
+}
+
+#[test]
+fn cli_fix_rejects_no_categories_selected() {
+    let (_tmp, root) = make_unused_export_project();
+
+    let output = Command::new(statico_bin())
+        .args(["fix", "--no-unused-exports", "--no-unused-deps"])
+        .arg(&root)
+        .output()
+        .expect("run statico fix with both off");
+
+    assert!(!output.status.success(), "fix with everything disabled must exit non-zero");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("nothing to fix"), "should report nothing to fix: {stderr}");
+}
+
+// ---------------------------------------------------------------------------
+// `statico diff` — compares two analysis JSONs. Previously zero coverage.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn cli_diff_detects_new_and_fixed_issues() {
+    let tmp = tempfile::tempdir().expect("temp dir");
+    let before_path = tmp.path().join("before.json");
+    let after_path = tmp.path().join("after.json");
+
+    // BEFORE: dead-code project (has known dead files).
+    let before_out = Command::new(statico_bin())
+        .args(["analyze", "--format", "json"])
+        .arg(fixture("dead-code-project"))
+        .output()
+        .expect("analyze before");
+    assert!(before_out.status.success(), "first analyze failed");
+    std::fs::write(&before_path, &before_out.stdout).expect("write before");
+
+    // AFTER: empty project (no issues at all).
+    let after_out = Command::new(statico_bin())
+        .args(["analyze", "--format", "json"])
+        .arg(fixture("empty-project"))
+        .output()
+        .expect("analyze after");
+    assert!(after_out.status.success(), "second analyze failed");
+    std::fs::write(&after_path, &after_out.stdout).expect("write after");
+
+    // Now run diff. Exit code 0 because every issue from `before` was *fixed*
+    // (none is new). The command reports new issues only as the failure mode.
+    let diff_out =
+        Command::new(statico_bin()).args(["diff"]).arg(&before_path).arg(&after_path).output().expect("run diff");
+    assert!(
+        diff_out.status.success(),
+        "diff with no new issues should exit 0, stderr: {}",
+        String::from_utf8_lossy(&diff_out.stderr)
+    );
+
+    let stdout = String::from_utf8_lossy(&diff_out.stdout);
+    let json: serde_json::Value = serde_json::from_str(stdout.trim()).expect("diff output should be valid JSON");
+    assert!(json.get("new_issues").is_some(), "diff should expose new_issues");
+    assert!(json.get("fixed_issues").is_some(), "diff should expose fixed_issues");
+    let fixed = json["fixed_issues"].as_array().expect("fixed_issues array");
+    assert!(
+        !fixed.is_empty(),
+        "fixed_issues should be non-empty when going dead-code-project -> empty-project: {stdout}"
+    );
+}
+
+#[test]
+fn cli_diff_exits_nonzero_on_new_issues() {
+    let tmp = tempfile::tempdir().expect("temp dir");
+    let before_path = tmp.path().join("before.json");
+    let after_path = tmp.path().join("after.json");
+
+    // BEFORE = empty (no issues).
+    let before_out = Command::new(statico_bin())
+        .args(["analyze", "--format", "json"])
+        .arg(fixture("empty-project"))
+        .output()
+        .expect("analyze before");
+    std::fs::write(&before_path, &before_out.stdout).expect("write before");
+
+    // AFTER = dead-code project (regression — adds new issues).
+    let after_out = Command::new(statico_bin())
+        .args(["analyze", "--format", "json"])
+        .arg(fixture("dead-code-project"))
+        .output()
+        .expect("analyze after");
+    std::fs::write(&after_path, &after_out.stdout).expect("write after");
+
+    let diff_out =
+        Command::new(statico_bin()).args(["diff"]).arg(&before_path).arg(&after_path).output().expect("run diff");
+    // Exit 1 is the documented behaviour when new issues appear (see
+    // `src/commands/diff.rs:34`). This is the load-bearing CI semantics.
+    assert!(!diff_out.status.success(), "diff with new issues must exit non-zero");
+}
+
+// ---------------------------------------------------------------------------
+// `statico analyze --baseline` / `--update-baseline` — production CI gate.
+// Previously zero coverage despite being the recommended `--exit-code` companion.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn cli_baseline_update_writes_expected_schema() {
+    let tmp = tempfile::tempdir().expect("temp dir");
+    let baseline = tmp.path().join("statico-baseline.json");
+
+    let output = Command::new(statico_bin())
+        .args(["analyze", "--update-baseline"])
+        .arg(&baseline)
+        .arg(fixture("dead-code-project"))
+        .output()
+        .expect("run --update-baseline");
+
+    assert!(
+        output.status.success(),
+        "--update-baseline should exit 0, stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(baseline.exists(), "baseline file should be written at the requested path");
+
+    let body = std::fs::read_to_string(&baseline).expect("read baseline");
+    let json: serde_json::Value = serde_json::from_str(&body).expect("baseline must be valid JSON");
+    assert_eq!(json["version"], 1, "baseline schema version must be 1");
+    let fps = json["fingerprints"].as_array().expect("fingerprints array");
+    assert!(!fps.is_empty(), "dead-code-project should produce at least one baseline fingerprint");
+    // Fingerprints follow `<category>::<key>` per src/baseline.rs.
+    let first = fps[0].as_str().expect("fp string");
+    assert!(first.contains("::"), "fingerprint must follow category::key shape: {first}");
+}
+
+#[test]
+fn cli_baseline_filters_out_known_issues_with_exit_code() {
+    let tmp = tempfile::tempdir().expect("temp dir");
+    let baseline = tmp.path().join("statico-baseline.json");
+
+    // 1) Generate the baseline from the noisy fixture.
+    let gen_baseline = Command::new(statico_bin())
+        .args(["analyze", "--update-baseline"])
+        .arg(&baseline)
+        .arg(fixture("dead-code-project"))
+        .output()
+        .expect("update-baseline");
+    assert!(gen_baseline.status.success(), "update-baseline failed");
+
+    // 2) Without the baseline, --exit-code on the same fixture must fail.
+    let bare = Command::new(statico_bin())
+        .args(["analyze", "--exit-code"])
+        .arg(fixture("dead-code-project"))
+        .output()
+        .expect("analyze --exit-code");
+    assert!(
+        !bare.status.success(),
+        "--exit-code without baseline must fail when issues exist (sanity check the baseline test setup)"
+    );
+
+    // 3) With the baseline applied, every issue is suppressed → exit 0.
+    let gated = Command::new(statico_bin())
+        .args(["analyze", "--exit-code", "--baseline"])
+        .arg(&baseline)
+        .arg(fixture("dead-code-project"))
+        .output()
+        .expect("analyze --exit-code --baseline");
+    assert!(
+        gated.status.success(),
+        "--baseline should suppress every pre-existing issue, stderr: {}",
+        String::from_utf8_lossy(&gated.stderr)
+    );
+}
+
+#[test]
+fn cli_baseline_rejects_future_schema_version() {
+    let tmp = tempfile::tempdir().expect("temp dir");
+    let baseline = tmp.path().join("from-future.json");
+    // Hand-write a baseline with a version we don't recognise.
+    std::fs::write(&baseline, r#"{"version":99,"fingerprints":[]}"#).expect("write baseline");
+
+    let output = Command::new(statico_bin())
+        .args(["analyze", "--baseline"])
+        .arg(&baseline)
+        .arg(fixture("empty-project"))
+        .output()
+        .expect("analyze --baseline future");
+
+    // We don't pin the exit code — what matters is that statico complains in
+    // stderr instead of silently proceeding. Forward-compat is intentional
+    // (we ignore future fingerprints) but loud about the version.
+    let combined = format!("{}{}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
+    assert!(
+        combined.to_lowercase().contains("baseline") || combined.to_lowercase().contains("version"),
+        "future-schema baseline should produce a recognisable diagnostic: {combined}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// `statico analyze --watch` — re-runs on file change. Previously zero coverage.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn cli_watch_reanalyzes_on_file_change() {
+    use std::io::{BufRead, BufReader};
+    use std::process::Stdio;
+    use std::time::{Duration, Instant};
+
+    let tmp = tempfile::tempdir().expect("temp dir");
+    let root = tmp.path();
+
+    // Minimal TS project so analyze has something to do.
+    std::fs::write(root.join("package.json"), r#"{"name":"watch-test","version":"0.0.0"}"#).expect("pkg");
+    std::fs::create_dir_all(root.join("src")).expect("mkdir");
+    std::fs::write(root.join("src/index.ts"), "export const a = 1;\n").expect("index");
+
+    let mut child = Command::new(statico_bin())
+        .args(["analyze", "--watch", "--quiet", "--format", "json"])
+        .arg(root)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn watch");
+
+    // Helper: wait for `marker_count` lines on stdout that look like a JSON
+    // analysis (start with `{`). Returns Ok if reached before the deadline.
+    fn wait_for_json_runs(
+        child_stdout: std::process::ChildStdout,
+        want: usize,
+        deadline: Instant,
+    ) -> Result<usize, String> {
+        let mut reader = BufReader::new(child_stdout);
+        let mut got = 0usize;
+        let mut buf = String::new();
+        let mut depth = 0i32;
+        let mut in_json = false;
+        loop {
+            if Instant::now() >= deadline {
+                return Err(format!("timeout — only saw {got} of {want} JSON runs"));
+            }
+            buf.clear();
+            match reader.read_line(&mut buf) {
+                Ok(0) => return Err(format!("watch process exited early — saw {got} of {want} JSON runs")),
+                Ok(_) => {}
+                Err(e) => return Err(format!("read err: {e}")),
+            }
+            for ch in buf.chars() {
+                if ch == '{' {
+                    if depth == 0 {
+                        in_json = true;
+                    }
+                    depth += 1;
+                } else if ch == '}' {
+                    depth -= 1;
+                    if depth == 0 && in_json {
+                        in_json = false;
+                        got += 1;
+                        if got >= want {
+                            return Ok(got);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    let stdout = child.stdout.take().expect("child stdout");
+    let deadline = Instant::now() + Duration::from_secs(20);
+
+    // Wait briefly for the first run to start streaming.
+    std::thread::sleep(Duration::from_millis(800));
+
+    // Trigger a re-analyze by touching the source file.
+    let trigger_thread = std::thread::spawn({
+        let path = root.join("src/index.ts");
+        move || {
+            // Give the watcher time to register before the first edit.
+            std::thread::sleep(Duration::from_secs(2));
+            std::fs::write(&path, "export const a = 2;\n").expect("rewrite");
+            std::thread::sleep(Duration::from_secs(1));
+            // Second edit to be safe — debounce eats single fires sometimes.
+            std::fs::write(&path, "export const a = 3;\n").expect("rewrite 2");
+        }
+    });
+
+    let result = wait_for_json_runs(stdout, 2, deadline);
+
+    // Always clean up the child first.
+    let _ = child.kill();
+    let _ = child.wait();
+    let _ = trigger_thread.join();
+
+    let runs = result.expect("watch should produce at least 2 JSON runs after a file edit");
+    assert!(runs >= 2, "expected ≥2 analysis runs in watch mode, got {runs}");
+}
+
 // ─── Plugin integration tests ────────────────────────────────────

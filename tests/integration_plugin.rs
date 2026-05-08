@@ -278,6 +278,130 @@ fn test_python_plugin_clean_file_no_issues() {
     assert!(stdout.contains("Issues: 0"), "expected 0 issues in: {}", stdout);
 }
 
+// ---------------------------------------------------------------------------
+// Plugin path-traversal end-to-end. Covered at the unit level in
+// `src/plugin/discovery.rs::sec_plugin_path_traversal_rejected`; this version
+// exercises the full CLI path: a `.statico.toml` containing `path = "../..."`
+// must not load the plugin. A traversal that *did* load would expose anything
+// the user has read access to outside the project root.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn sec_plugin_list_rejects_path_traversal_via_config() {
+    let tmp = tempfile::tempdir().expect("temp dir");
+    let root = tmp.path();
+
+    // A `.statico.toml` that points a plugin path one level above the
+    // canonicalized root. `ensure_within_root()` should reject this.
+    std::fs::write(
+        root.join(".statico.toml"),
+        r#"
+[[plugin]]
+name = "evil"
+path = "../escape"
+"#,
+    )
+    .expect("write toml");
+
+    let output =
+        Command::new(statico_bin()).args(["plugin", "list"]).arg("--path").arg(root).output().expect("run plugin list");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    // The traversal plugin must not appear in the listed plugins.
+    assert!(
+        !stdout.contains("evil"),
+        "traversal plugin must not be listed (security hole if it is). stdout: {stdout}\nstderr: {stderr}"
+    );
+    // statico should at least warn about the rejection on stderr.
+    assert!(
+        stderr.to_lowercase().contains("evil") || stderr.to_lowercase().contains("outside"),
+        "should warn about the rejected plugin: stdout={stdout} stderr={stderr}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Plugin override conflict end-to-end. The unit-level coverage in
+// `src/plugin/discovery.rs::validate_overrides_conflict_detected` proves the
+// validator works in isolation; this one wires up two real bash plugins
+// that both declare `analyze_file` as `override` and asserts statico
+// surfaces the conflict at startup rather than running with last-writer-wins.
+// ---------------------------------------------------------------------------
+
+/// Write a single-file executable plugin that declares `analyze_file: override`.
+/// Mirrors `make_mock_plugin_script` but with override mode.
+fn write_override_executable(plugins_dir: &std::path::Path, name: &str) {
+    let entry = plugins_dir.join(name);
+    let body = format!(
+        r#"#!/bin/bash
+while IFS= read -r line; do
+    id=$(echo "$line" | grep -o '"id":[0-9]*' | head -1 | cut -d':' -f2)
+    if echo "$line" | grep -q '"method":"init"'; then
+        echo "{{\"jsonrpc\":\"2.0\",\"id\":${{id}},\"result\":{{\"name\":\"{name}\",\"version\":\"0.1.0\",\"hooks\":{{\"analyze_file\":\"override\"}},\"languages\":[],\"rules\":[]}}}}"
+    elif echo "$line" | grep -q '"method":"shutdown"'; then
+        exit 0
+    elif echo "$line" | grep -q '"method":"analyze_file"'; then
+        echo "{{\"jsonrpc\":\"2.0\",\"id\":${{id}},\"result\":{{\"issues\":[],\"exports\":[],\"dependencies\":[]}}}}"
+    fi
+done
+"#
+    );
+    std::fs::write(&entry, body).expect("write plugin");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&entry, std::fs::Permissions::from_mode(0o755)).expect("chmod");
+    }
+}
+
+// FIXME: `validate_overrides` (src/plugin/discovery.rs:213) exists and has
+// passing unit tests, but it is **never called** from any runtime path.
+// As a result, when two plugins both declare `override` on the same hook,
+// statico happily loads both and races them on stdin/stdout, eventually
+// panicking at `src/plugin/manager.rs:114` with
+// `stdout already taken (concurrent send_request?)`. This test reproduces
+// the gap end-to-end and should flip from `#[ignore]` to active once
+// `validate_overrides` is wired into plugin pipeline startup (and the
+// process exits with a clear "plugin override conflict" diagnostic
+// instead of the stdout-taken panic). Tracking issue: TODO file one.
+#[test]
+#[ignore]
+fn plugin_override_conflict_surfaces_at_analyze() {
+    let tmp = tempfile::tempdir().expect("temp dir");
+    let root = tmp.path();
+
+    // Minimal source so analyze has something to do.
+    std::fs::write(root.join("package.json"), r#"{"name":"override-conflict","version":"0.0.0"}"#).expect("pkg");
+    std::fs::create_dir_all(root.join("src")).expect("mkdir src");
+    std::fs::write(root.join("src/index.ts"), "export const a = 1;\n").expect("index");
+
+    // Two plugins, both auto-discovered, both declaring `analyze_file: override`.
+    let plugins_dir = root.join(".statico/plugins");
+    std::fs::create_dir_all(&plugins_dir).expect("mkdir plugins");
+    write_override_executable(&plugins_dir, "first");
+    write_override_executable(&plugins_dir, "second");
+
+    let output = Command::new(statico_bin())
+        .args(["analyze", "--quiet", "--format", "json"])
+        .arg(root)
+        .output()
+        .expect("run analyze");
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    // The validator (`validate_overrides`) emits a message containing
+    // "conflict" and both plugin names. Whether analyze fails or merely
+    // disables one of them, the conflict must be surfaced — silent
+    // last-writer-wins would be a real bug.
+    let combined = format!("{stdout}\n{stderr}");
+    assert!(
+        combined.to_lowercase().contains("conflict") || combined.to_lowercase().contains("override"),
+        "override conflict must be surfaced to the user: stdout={stdout} stderr={stderr}"
+    );
+}
+
 // ═══════════════════════════════════════════════════════════════
 // V-9 RED: canonicalize fallback must reject non-existent paths
 // ═══════════════════════════════════════════════════════════════

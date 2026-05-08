@@ -311,5 +311,45 @@ fn real_repo_metacollector_analyzes_cleanly() {
 }
 
 // ---------------------------------------------------------------------------
+// shadcn framework profile — declared in src/frameworks/shadcn.rs and listed
+// in the README as a covered framework, but previously had no fixture / test.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn shadcn_detects_components_json_and_registry_entries() {
+    let (success, stdout, stderr) = run_analyze(&fixture("shadcn-project"));
+    assert!(success, "expected exit 0, stderr: {stderr}");
+
+    let json = parse_json(&stdout);
+
+    // 1) Profile is detected.
+    let frameworks = json["detected_frameworks"].as_array().expect("detected_frameworks should be array");
+    let names: Vec<&str> = frameworks.iter().filter_map(|v| v.as_str()).collect();
+    assert!(names.contains(&"shadcn"), "shadcn profile should be detected, got: {:?}", names);
+
+    // 2) registry/ui/button.tsx is counted as an entry point — the profile
+    //    declares `registry/` paths as entries because the shadcn CLI consumes
+    //    them at user install time.
+    let eps = json["structure"]["entry_points"].as_array().expect("entry_points should be array");
+    let ep_paths: Vec<&str> = eps.iter().filter_map(|v| v.as_str()).collect();
+    assert!(
+        ep_paths.iter().any(|p| p.contains("registry/ui/button.tsx")),
+        "registry tsx file should be an entry point, got: {:?}",
+        ep_paths
+    );
+
+    // 3) Because the registry file is reachable, src/lib/utils.ts (its dep)
+    //    must NOT be reported as dead code. Catches the regression where
+    //    we'd lose the registry → src/ edge.
+    let dead = json["issues"]["dead_code"].as_array().expect("dead_code array");
+    let dead_paths: Vec<&str> = dead.iter().filter_map(|v| v["path"].as_str()).collect();
+    assert!(
+        !dead_paths.iter().any(|p| p.contains("src/lib/utils")),
+        "src/lib/utils.ts must remain reachable through the shadcn registry entry, got dead: {:?}",
+        dead_paths
+    );
+}
+
+// ---------------------------------------------------------------------------
 // CLI: update, init, doctor commands
 // ---------------------------------------------------------------------------

@@ -6,6 +6,59 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — Test coverage
+
+Closing 9 of the 10 audit-identified test gaps. Total tests went from
+606 → 626 + 1 ignored (a real bug surfaced — see Fixed/Known Issues).
+
+- `tests/integration_cli.rs`: `cli_fix_*` (3 tests) cover `statico fix`'s
+  dry-run and `--apply` paths — the only state-mutating subcommand had
+  zero coverage. Asserts the documented dry-run safety contract and
+  that `--apply` strips the right `export` keyword while leaving the
+  used one intact.
+- `tests/integration_cli.rs`: `cli_diff_*` (2 tests) cover `statico
+  diff` happy path + non-zero exit on new issues.
+- `tests/integration_cli.rs`: `cli_baseline_*` (3 tests) cover
+  `--update-baseline` schema, end-to-end `--baseline + --exit-code`
+  gating, and forward-incompatible-version diagnostics. This was the
+  recommended CI gate with no coverage.
+- `tests/integration_cli.rs`: `cli_watch_reanalyzes_on_file_change`
+  (1 test) spawns `analyze --watch`, edits a source file, and asserts
+  ≥2 JSON runs stream from stdout within 20s.
+- `tests/output_tests.rs`: `test_context_formatter_*`,
+  `test_mermaid_formatter_*`, `test_pr_comment_formatter_smoke` (5
+  tests) cover the three formatters that previously had no test file
+  referencing the format string.
+- `tests/integration_analyze.rs`:
+  `shadcn_detects_components_json_and_registry_entries` covers the
+  shadcn framework profile + the new `fixtures/shadcn-project/`.
+- `tests/integration_plugin.rs`:
+  `sec_plugin_list_rejects_path_traversal_via_config` exercises
+  `ensure_within_root` rejection at the CLI surface (not just the
+  unit test).
+- `src/plugin/runtime.rs`: `verify_archive_sha` extracted as a pure
+  function with 4 unit tests. The Bun-runtime SHA-256 integrity gate
+  (audit S4.1) is now provably enforced — accepts case-insensitive +
+  whitespace-tolerant matches, rejects mismatch with the canonical
+  error string, rejects empty/whitespace-only expected values.
+
+### Known issues
+
+- `tests/integration_plugin.rs::plugin_override_conflict_surfaces_at_analyze`
+  is `#[ignore]`. It documents a real bug found while writing the
+  test: `validate_overrides` in `src/plugin/discovery.rs` exists and
+  has passing unit tests but is **never called from any runtime
+  path**. With two plugins both declaring `analyze_file: override`,
+  statico loads both and races them on stdin/stdout, panicking at
+  `src/plugin/manager.rs:114` with `stdout already taken (concurrent
+  send_request?)`. The ignored test will flip back on once the
+  validator is wired into pipeline startup.
+- `clippy::unwrap_used` is **not enforced**. The codebase has ~250
+  `unwrap()` / `expect()` call sites in non-test code. Enabling the
+  lint at `warn` level would fail CI (`-D warnings`); enabling at
+  `deny` would force fixing every site in one commit. Tracked as a
+  future cleanup branch.
+
 ### Changed
 - Architecture cleanup: removed the `src/analyzer/parse_typescript.rs` gravestone,
   moved the Rust parser into `src/languages/rust_parser.rs`, restructured
