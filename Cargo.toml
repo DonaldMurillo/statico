@@ -64,7 +64,6 @@ tree-sitter = "0.25"
 tree-sitter-typescript = "0.23"
 indicatif = "0.17"
 colored = "3"
-atty = "0.2"
 oxc_resolver = { version = "11", optional = true }
 tree-sitter-rust = "0.24"
 ureq = { version = "3", features = ["json"] }

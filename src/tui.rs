@@ -8,7 +8,10 @@ use crate::types::AnalysisOutput;
 /// Run the TUI dashboard for a project at `root`.
 pub fn run_tui(root: &std::path::Path, min_confidence: f64) -> Result<(), String> {
     // Respect terminal vs pipe: only colourise when stdout is a tty.
-    colored::control::set_override(atty::is(atty::Stream::Stdout));
+    // Uses stdlib's `IsTerminal` (stable since 1.70) — replaces the
+    // unmaintained `atty` crate (RUSTSEC-2024-0375 / -2021-0145).
+    use std::io::IsTerminal;
+    colored::control::set_override(std::io::stdout().is_terminal());
 
     // 1. Progress spinner while analysing.
     let pb = ProgressBar::new_spinner();
