@@ -157,5 +157,3 @@ listed with a reason.
 - **[Output formats](output-formats.md)** — when to use each `--format`
 - **[CI integration](ci-integration.md)** — GitHub Actions, GitLab, SARIF
 - **[Plugins](plugins.md)** — write project-specific rules in any language
-- **[Audit (May 2026)](audit-2026-05.md)** — current state, known limitations,
-  what's stable, what's not

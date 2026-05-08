@@ -1,94 +1,78 @@
-# statico Plugin Development
+---
+name: statico-plugin
+description: Build, test, or debug a statico plugin. Use when the user wants to write a project-specific rule, scaffold a plugin, or investigate plugin behavior.
+---
 
-Use when the user wants to create, modify, or debug a statico plugin.
+# statico-plugin
 
-## Quick Start
+## When to Use
 
-```bash
-# Scaffold a new TypeScript plugin
-statico plugin init my-plugin --lang typescript
+- User asks to write a custom rule
+- User wants to scaffold a new plugin
+- User mentions debugging or testing an existing plugin under `.statico/plugins/`
 
-# Scaffold a new Rust plugin
-statico plugin init my-plugin --lang rust
+## Workflow
 
-# Run a plugin against a test file
-statico plugin run my-plugin --file fixtures/sample.ts
+1. **Get the current protocol — don't write it from memory.** The plugin
+   protocol can change between minor releases:
+   ```bash
+   statico plugin docs                       # full human-readable reference
+   statico plugin schema --format json       # JSON schema (paste into prompts)
+   ```
 
-# Check runtime readiness
-statico plugin doctor
-```
+2. **Scaffold a new plugin.** The CLI writes a working skeleton with the
+   right SDK wiring for the language:
+   ```bash
+   statico plugin init my-rule --lang typescript    # default
+   statico plugin init my-rule --lang rust
+   statico plugin init my-rule --lang python
+   ```
+   Output lands in `.statico/plugins/my-rule/`.
 
-## Plugin Protocol
+3. **Implement the detection logic** in the scaffolded entry file
+   (`index.ts` / `src/main.rs` / `plugin.py`). Look for the `TODO`
+   comments. Use the SDK's hook callbacks — never hand-roll JSON-RPC
+   unless you know what you're doing.
 
-Plugins communicate via JSON-RPC 2.0 over stdin/stdout (newline-delimited).
+4. **Iterate against a fixture:**
+   ```bash
+   statico plugin run my-rule --file fixtures/sample.ts
+   ```
+   The output is the JSON-RPC `result` so you can see exactly what
+   statico will receive.
 
-### Lifecycle
+5. **Verify the runtime is ready** before reporting failures:
+   ```bash
+   statico plugin doctor       # checks bun (TS) / cargo (Rust) / python3
+   ```
 
-1. statico spawns the plugin subprocess
-2. Sends `init` request → plugin responds with capabilities
-3. Sends hook requests (`analyze_file`, `discover_entries`, etc.)
-4. Sends `shutdown` → plugin exits
+6. **Build (Rust only):**
+   ```bash
+   statico plugin build --name my-rule
+   ```
+   TypeScript and Python don't need a build step.
 
-### Hooks
+## Choosing hook + mode
 
-| Hook | When | Mode |
-|------|------|------|
-| `analyze_file` | Per-file analysis | add |
-| `discover_entries` | Find entry points | add |
-| `resolve_import` | Resolve import specifiers | override |
-| `post_analysis` | After full analysis | add |
-| `format_output` | Before displaying results | override |
+- `analyze_file` (mode `add`) — most plugins. Per-file detection, contributes
+  alongside built-in checks.
+- `post_analysis` (mode `add`) — cross-file rules that need the whole project
+  state (e.g. "every exported function should have a test").
+- `discover_entries`, `resolve_import`, `format_output` — `override` only.
+  Replaces the built-in stage. Use sparingly.
 
-### Modes
+## Common pitfalls
 
-- **add**: Contribute alongside built-in analysis and other plugins
-- **override**: Replace the built-in stage entirely (only one plugin per hook)
+- Two plugins can't both `override` the same hook — fatal at startup.
+- Plugins emit JSON-RPC on stdout; **all debug logs must go to stderr** or
+  you'll corrupt the protocol.
+- `pluginSettings` (from `[plugin.settings]` in `.statico.toml`) is capped at
+  64 KB serialized JSON.
+- The plugin subprocess is kept alive for the whole `statico analyze` run, so
+  expensive setup goes in `init`, not `analyze_file`.
 
-## TypeScript SDK
+## Reference
 
-```typescript
-import { Plugin } from "@statico/plugin-sdk";
-
-const plugin = Plugin.create("my-rule", {
-  hooks: { analyze_file: "add" },
-  languages: ["typescript"],
-  rules: [{ id: "my-rule", severity: "warning", description: "..." }],
-});
-
-plugin.onAnalyzeFile((params) => {
-  const issues = [];
-  // params.path, params.source, params.language
-  // Detect patterns in params.source
-  return { issues };
-});
-
-plugin.start();
-```
-
-## Rust SDK
-
-```rust
-use statico_plugin_sdk::{Plugin, PluginManifest, HookName, HookMode};
-use std::collections::HashMap;
-
-fn main() {
-    let mut plugin = Plugin::create("my-rule", PluginManifest {
-        version: Some("0.1.0".to_string()),
-        hooks: HashMap::from([(HookName::AnalyzeFile, HookMode::Add)]),
-        languages: vec!["rust".to_string()],
-        rules: vec![],
-    });
-
-    plugin.on_analyze_file(|params| {
-        // params.path, params.source, params.language
-        statico_plugin_sdk::AnalyzeFileResult::default()
-    });
-
-    plugin.start();
-}
-```
-
-## Protocol Reference
-
-Run `statico plugin docs` for the full protocol reference.
-Run `statico plugin schema --format json` for the JSON schema.
+- `statico plugin docs` — protocol, hooks, message shapes
+- `statico plugin schema --format json` — wire-format JSON schema
+- `examples/plugins/coverage-gap` (in the statico repo) — multi-hook reference plugin
