@@ -18,6 +18,9 @@ const BUN_URL_TEMPLATE: &str = "https://github.com/oven-sh/bun/releases/latest/d
 #[cfg(target_os = "linux")]
 const BUN_URL_TEMPLATE: &str = "https://github.com/oven-sh/bun/releases/latest/download/bun-linux-{arch}.zip";
 
+#[cfg(target_os = "windows")]
+const BUN_URL_TEMPLATE: &str = "https://github.com/oven-sh/bun/releases/latest/download/bun-windows-{arch}.zip";
+
 /// Get the architecture suffix for download URLs.
 fn arch_suffix() -> &'static str {
     #[cfg(target_arch = "aarch64")]
