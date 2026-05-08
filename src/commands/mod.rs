@@ -1,6 +1,7 @@
 //! CLI command implementations.
 
 pub mod analyze;
+pub mod cli;
 pub mod diff;
 pub mod doctor;
 pub mod fix;

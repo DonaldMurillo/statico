@@ -1,11 +1,5 @@
 //! Main analysis orchestrator. Coordinates parsing, discovery, and issue detection.
 
-mod parse_rust;
-mod parse_typescript;
-
-pub use parse_rust::parse_rust_file_standalone;
-pub use parse_rust::resolve_rust_use_path_public;
-
 use std::path::Path;
 
 use crate::types::*;
@@ -129,7 +123,7 @@ pub fn analyze_with_options(root: &Path, exclude: &[String], no_cache: bool) -> 
         crate::duplication::build_duplication_section(&issues.duplicate_code, total_source_lines, repetitive_patterns);
 
     // Detect monorepo setup.
-    let monorepo = crate::monorepo::detect_monorepo(root)
+    let monorepo = crate::workspace::detect_monorepo(root)
         .map(|info| MonorepoInfoData { kind: info.kind.clone(), packages: info.packages.clone() });
 
     // Framework names derived from profiles detected earlier.

@@ -150,7 +150,7 @@ fn add_workspace_entries(
     entry_points: &mut BTreeSet<String>,
     public_api: &mut BTreeSet<String>,
 ) {
-    let mono = match crate::monorepo::detect_monorepo(root) {
+    let mono = match crate::workspace::detect_monorepo(root) {
         Some(m) => m,
         None => return, // Not a monorepo, nothing to do.
     };

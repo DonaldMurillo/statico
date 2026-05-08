@@ -5,6 +5,7 @@
 //! means implementing this trait and registering it in `all_plugins()`.
 
 pub mod rust;
+mod rust_parser;
 pub mod typescript;
 
 use std::collections::{BTreeMap, HashSet};

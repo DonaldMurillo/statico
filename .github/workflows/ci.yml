@@ -224,3 +224,35 @@ jobs:
 
       - name: ng build (with /statico/ base-href, same as Pages)
         run: npm run build -- --base-href "/statico/"
+
+  hygiene:
+    # Lightweight hygiene gate: typos, cargo-deny (advisories + licenses +
+    # source allow-list), cargo-machete (unused deps). Each step is fast
+    # (~seconds) and adds a real signal that the existing fmt/clippy/test
+    # gates don't catch.
+    name: hygiene (typos / deny / machete)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cargo cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: hygiene
+
+      - name: typos
+        uses: crate-ci/typos@master
+
+      - name: cargo-deny
+        uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check advisories licenses sources bans
+
+      - name: cargo-machete (unused dependencies — advisory)
+        # Advisory-only for now: prints unused deps but does not fail the
+        # build. Promote to a hard gate once the existing manifests are clean.
+        continue-on-error: true
+        uses: bnjbvr/cargo-machete@main

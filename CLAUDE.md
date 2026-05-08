@@ -1,104 +1,41 @@
 # CLAUDE.md — Project context for AI assistants working on statico
 
-## Project Overview
+Repository layout, build commands, dependencies, branch state, and test counts are intentionally **not** documented here — `ls`, `cat Cargo.toml`, `git log`, and `cargo test` are authoritative. This file is for things you can't derive from the tree.
 
-**statico** is a static code analyzer for TypeScript and Rust, written in Rust (Edition 2024).
-It detects dead code, unused exports/types, circular dependencies, code duplication, and framework-specific gotchas, computing an overall code health score (0–100).
+## What statico is
 
-## Architecture
+A static code analyzer for TypeScript and Rust projects. Detects dead code, unused exports/types, circular deps, duplication, framework gotchas; reports an overall health score (0–100) and machine-readable issues. Edition 2024 Rust.
 
-```
-src/
-├── main.rs            CLI entry point, argument parsing, command dispatch
-├── lib.rs             Public API re-exports
-├── analyzer/          High-level analysis orchestration
-├── cache.rs           Incremental analysis cache (content hashing)
-├── config.rs          .statico.toml configuration loading
-├── discovery/         Source file & entry point discovery
-├── duplication/       Code duplication detection (clone groups, mirrored dirs)
-├── frameworks/        Framework profiles (Next.js, Angular, Vue, etc.)
-├── issues/            Issue detectors (dead code, unused exports, gotchas, etc.)
-├── languages/         Language plugins (TypeScript, Rust) — LanguagePlugin trait
-├── output/            Output formatters (json, sarif, markdown, html, ai, mermaid, etc.)
-├── parse/             AST parsing (oxc for TS, syn for Rust)
-├── plugin/            Plugin system (discovery, manager, pipeline, protocol, runtime)
-├── resolution/        Import resolution (relative, tsconfig paths, workspace packages)
-├── types.rs           Shared types (AnalysisOutput, Summary, Issues, etc.)
-├── update.rs          Self-update mechanism
-├── progress.rs        Progress reporting
-└── tui.rs             Interactive terminal UI
+## Plugin system — design intent
 
-sdks/
-├── typescript/        TypeScript plugin SDK (JSON-RPC 2.0 over stdin/stdout)
-└── rust/              Rust plugin SDK (same protocol)
+Plugins are **subprocesses** that speak JSON-RPC 2.0 over stdin/stdout (newline-delimited). Any language that can read/write lines works — no SDK required. SDKs (`sdks/typescript`, `sdks/rust`) are convenience layers, not gates.
 
-tests/
-├── integration.rs     CLI integration tests (40 tests including plugin e2e)
-├── output_tests.rs    Snapshot tests for output formatters
-├── property_tests.rs  Property-based tests (fuzzer)
-├── fixtures/          Test fixture projects
-│   ├── plugin-demo/   TypeScript plugin (no-console-log)
-│   └── python-demo/   Python plugin (no-bare-except)
-```
+Detection rules (non-obvious):
+- TypeScript plugin → has `package.json`, run with Bun (auto-downloaded if missing).
+- Rust plugin → has `Cargo.toml`, runs the pre-compiled binary.
+- Python plugin → `statico.runtime: "python3"` in `package.json`, or `.py` entry file.
+- Executable plugin → any standalone binary.
 
-## Build & Run
+Protocol lifecycle: `init` (returns capabilities) → hook calls (`analyze_file`, `discover_entries`, …) → `shutdown`. Hook timeouts surface as warnings, not fatal errors. **Plugin errors degrade gracefully** — a misbehaving plugin must never abort analysis.
 
-```bash
-cargo build --release          # Build optimized binary
-cargo test                     # Run all 413 tests
-cargo clippy                   # Lint
-cargo run --bin statico -- analyze . --format markdown
-```
+### serde wire convention
+All protocol types use `#[serde(rename_all = "camelCase")]`. JSON is camelCase on the wire, Rust fields stay snake_case in code. Don't break this — third-party plugins depend on it.
 
-The binary installs to `~/.statico/bin/statico`.
+## Non-obvious code patterns
 
-## Plugin System
+- `LanguagePlugin` trait (`src/languages/mod.rs`) is the integration point for new languages — adding one requires no edits to existing code.
+- `OutputFormatter` trait (`src/output/mod.rs`) is the integration point for new output formats.
+- `send_request<T, R>` is generic in both directions — call sites need an explicit type annotation: `let result: Result<R, String> = manager.send_request(...);`.
+- Plugin issues are merged into `Issues.plugin_issues` rather than the typed buckets (dead_code, unused_exports, etc.) so plugin failures can never corrupt first-party detection.
 
-Subprocess-based: plugins communicate via JSON-RPC 2.0 over stdin/stdout (newline-delimited).
-Supports TypeScript (Bun runtime, auto-downloaded), Rust (system cargo), and Python (system python3).
-Any language that can read/write lines on stdin/stdout works — no SDK required.
+## Testing conventions
 
-Key files: `src/plugin/{protocol,discovery,manager,pipeline,runtime}.rs`
+- Integration tests spawn the binary via `std::process::Command` (no `assert_cmd`).
+- Plugin tests **auto-skip** when their runtime (bun, python3) isn't installed — they don't fail. CI installs the runtimes.
+- Property tests use `proptest`.
+- Snapshot tests live in `tests/output_tests.rs` and assert against committed expected output.
 
-### Plugin kinds
-- **TypeScript** — detected by `package.json`, run with Bun
-- **Rust** — detected by `Cargo.toml`, pre-compiled binary
-- **Python** — detected by `package.json` `statico.runtime: "python3"` or `.py` entry files
-- **Executable** — any standalone binary
+## Things that have bitten us before
 
-### Protocol
-1. `init` → plugin returns capabilities (name, hooks, languages, rules)
-2. Hook calls (`analyze_file`, `discover_entries`, etc.) → plugin returns results
-3. `shutdown` → clean exit
-
-### serde convention
-All protocol types use `#[serde(rename_all = "camelCase")]` — JSON fields are camelCase on the wire, Rust fields are snake_case in code.
-
-## Testing Conventions
-
-- Integration tests use `assert_cmd`-style via raw `std::process::Command`
-- Plugin tests auto-skip if runtime (bun/python3) not installed
-- Property tests use `quickcheck`
-- All tests must pass: `cargo test`
-
-## Key Dependencies
-
-- `tree-sitter` + `tree-sitter-typescript` + `tree-sitter-rust` — primary AST parsing for TS/Rust
-- `oxc_resolver` — optional, gated behind the `deep-resolution` cargo feature for tsconfig path resolution; the default build does not pull it in
-- `rayon` — parallel file analysis
-- `serde_json` — all I/O is JSON
-- `clap` — CLI argument parsing
-- `toml` — config file parsing
-
-## Important Patterns
-
-- `LanguagePlugin` trait in `src/languages/mod.rs` — pluggable language support
-- `OutputFormatter` trait in `src/output/mod.rs` — pluggable output formats
-- Plugin pipeline: `PluginPipeline` in `src/plugin/pipeline.rs` manages lifecycle during analysis
-- Plugin errors are warnings, not fatal — graceful degradation
-- `send_request<T, R>` generic needs type annotation: `let result: Result<R, String> = ...`
-
-## Branch State
-
-- `main` — stable release branch
-- `feature/plugin-system` — plugin system (current work, 17 commits ahead of main)
+- Circular-dep detection picks a non-deterministic representative cycle inside each SCC. CI's `self-analyze` step intentionally does **not** pass `--exit-code` for that reason — see `.github/workflows/ci.yml`.
+- `release.yml` builds Windows artifacts; CI matrix does not yet test Windows. Path-handling regressions slip through to release.

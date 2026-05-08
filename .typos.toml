@@ -1,0 +1,26 @@
+# typos: opt-in code spelling check.
+# https://github.com/crate-ci/typos
+
+[files]
+extend-exclude = [
+    "Cargo.lock",
+    "target/",
+    "node_modules/",
+    "website/dist/",
+    "website/.angular/",
+    "website/test-results/",
+    "fixtures/",
+    "benchmarks/",
+    "statico-baseline.json",
+    "*.snap",
+]
+
+[default.extend-words]
+# Project / proper nouns
+statico = "statico"
+oxc = "oxc"
+# False positives that show up in TS/Rust ASTs and dependency names
+ba = "ba"
+fo = "fo"
+ot = "ot"
+crate = "crate"

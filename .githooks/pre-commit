@@ -1,16 +1,29 @@
 #!/usr/bin/env bash
-# pre-commit hook: reject commits with unformatted Rust code.
-# Install: git config core.hooksPath .githooks
+# pre-commit: format check (Rust) + typo check on staged files.
+# Install: scripts/setup-hooks.sh (sets core.hooksPath = .githooks)
 set -euo pipefail
 
-# Only check formatting if Rust files are staged.
+# 1) cargo fmt — only when Rust files are staged.
 rust_files=$(git diff --cached --name-only --diff-filter=ACM -- '*.rs')
-if [ -z "$rust_files" ]; then
-    exit 0
+if [ -n "$rust_files" ]; then
+    if ! cargo fmt --all -- --check; then
+        echo ""
+        echo "Rust formatting check failed. Run 'cargo fmt' and re-stage."
+        exit 1
+    fi
 fi
 
-if ! cargo fmt --all -- --check; then
-    echo ""
-    echo "❌ Rust formatting check failed. Run 'cargo fmt' and re-stage."
-    exit 1
+# 2) typos — fast spell-check on staged files. Skipped if `typos` not installed.
+if command -v typos >/dev/null 2>&1; then
+    staged=$(git diff --cached --name-only --diff-filter=ACM)
+    if [ -n "$staged" ]; then
+        # shellcheck disable=SC2086
+        if ! typos $staged; then
+            echo ""
+            echo "Typos found. Run 'typos --write-changes' or fix manually, then re-stage."
+            exit 1
+        fi
+    fi
+else
+    echo "(skipping typos check — install with 'cargo install typos-cli')"
 fi
