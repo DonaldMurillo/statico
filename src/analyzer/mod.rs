@@ -1,5 +1,7 @@
 //! Main analysis orchestrator. Coordinates parsing, discovery, and issue detection.
 
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+
 use std::path::Path;
 
 use crate::types::*;

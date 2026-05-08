@@ -5,6 +5,8 @@
 //!   - tsconfig `paths` aliases (`@/components/foo` → `./src/components/foo`)
 //!   - Extension resolution (try `.ts`, `.tsx`, `.js`, `.jsx`, `index.ts`, etc.)
 
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+
 mod paths;
 mod tsconfig;
 

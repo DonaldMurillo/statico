@@ -3,6 +3,8 @@
 //! Builds per-tsconfig resolver scopes so `@/` in `apps/api/v2/`
 //! resolves differently than `@/` in `packages/atoms/`.
 
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+
 use std::path::{Path, PathBuf};
 
 use super::path_relative_to;

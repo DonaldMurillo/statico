@@ -2,6 +2,8 @@
 //!
 //! Handles JSONC stripping, tsconfig path alias extraction, and scoped alias resolution.
 
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+
 use std::path::{Path, PathBuf};
 
 use super::paths::try_extensions;

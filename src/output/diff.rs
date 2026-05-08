@@ -2,6 +2,8 @@
 //!
 //! Compares two analysis outputs to identify new, fixed, and persisting issues.
 
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+
 use crate::types::AnalysisOutput;
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};

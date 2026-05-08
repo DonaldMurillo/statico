@@ -3,6 +3,8 @@
 //! Uses declarative `FrameworkProfile` definitions to detect entry points
 //! and implicit entries, rather than hardcoded framework logic.
 
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+
 pub mod entry_points;
 pub mod rust;
 pub mod tooling;

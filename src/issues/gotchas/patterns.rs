@@ -3,6 +3,8 @@
 //! Detects common anti-patterns like `any` types, loose equality, eval, etc.
 //! Rules are filtered by language — TypeScript-only rules won't fire on Rust files.
 
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+
 use crate::types::GotchaIssue;
 
 use super::{is_comment_line, is_example_or_script, is_test_file, truncate_line};

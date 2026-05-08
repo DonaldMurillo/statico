@@ -3,6 +3,8 @@
 //! Detects: package.json with "workspaces" field (fallback when no other monorepo tool detected)
 //! Workspaces: parsed from package.json "workspaces" field
 
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+
 use std::collections::HashSet;
 use std::path::Path;
 

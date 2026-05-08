@@ -3,6 +3,8 @@
 //! Handles lazy download and verification of language runtimes
 //! (e.g. Bun for TypeScript plugins).
 
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+
 use std::path::PathBuf;
 
 /// Directory where statico stores downloaded runtimes.

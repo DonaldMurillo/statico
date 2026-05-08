@@ -3,6 +3,8 @@
 //! Caches per-file parse data keyed by content hash so unchanged files
 //! are skipped on re-runs. Cache lives in `{project_root}/.statico/cache/`.
 
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+
 use std::collections::BTreeMap;
 use std::fs;
 use std::io::Write;

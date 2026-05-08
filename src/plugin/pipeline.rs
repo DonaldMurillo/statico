@@ -6,7 +6,9 @@
 //! - `post_analysis`: whole-result enrichment
 //! - `format_output`: output formatting override
 
-use crate::plugin::discovery::{DiscoveredPlugin, discover_plugins};
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+
+use crate::plugin::discovery::{DiscoveredPlugin, discover_plugins, validate_overrides};
 use crate::plugin::manager::ActivePlugin;
 use crate::plugin::protocol::{
     AnalyzeFileParams, AnalyzeFileResult, HookName, PostAnalysisParams, ResolveImportParams, ResolveImportResult,
@@ -25,6 +27,11 @@ impl PluginPipeline {
     /// Discover and spawn all enabled plugins for the given project root.
     ///
     /// Plugins that fail to spawn are logged and skipped (not fatal).
+    ///
+    /// Override conflicts (two plugins declaring `override` mode on the same
+    /// hook) are detected after init. The conflicting plugins are disabled
+    /// with a warning rather than racing each other on stdin/stdout — see
+    /// `validate_overrides` in `discovery.rs`.
     pub fn new(root: &Path) -> Self {
         let discovered = discover_plugins(root);
         let mut active = Vec::new();
@@ -39,6 +46,22 @@ impl PluginPipeline {
                     eprintln!("warning: plugin '{}' failed to start: {}", plugin.name, e);
                 }
             }
+        }
+
+        // After init, walk the realised capabilities and find any hook that
+        // two plugins both declared as `override`. We can't pick a winner
+        // safely (the protocol contract says only one plugin owns an override
+        // hook), so we drop the entire conflicting set with a clear warning
+        // and continue with the rest.
+        let caps_for_validation: Vec<(String, crate::plugin::protocol::PluginCapabilities)> =
+            active.iter().map(|(disc, ap)| (disc.name.clone(), ap.capabilities.clone())).collect();
+
+        if let Err(msg) = validate_overrides(&caps_for_validation) {
+            eprintln!("warning: plugin override conflict: {}", msg);
+            eprintln!("warning: disabling all plugins that declared `override` to avoid stdin/stdout races");
+            active.retain(|(_disc, ap)| {
+                !ap.capabilities.hooks.values().any(|mode| matches!(mode, crate::plugin::protocol::HookMode::Override))
+            });
         }
 
         PluginPipeline { plugins: active }

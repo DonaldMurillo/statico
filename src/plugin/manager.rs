@@ -5,6 +5,8 @@
 //! - 30s read timeout prevents blocking on unresponsive plugins
 //! - Error messages truncate raw responses to 200 chars
 
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::Path;

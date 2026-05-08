@@ -26,6 +26,8 @@
 //! On exit, the process returns 0 in dry-run mode, 0 in apply mode when
 //! everything succeeds, and 1 if any file failed to write.
 
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+
 use std::collections::BTreeMap;
 use std::path::Path;
 use std::process;

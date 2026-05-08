@@ -1,5 +1,7 @@
 //! Plugin discovery from .statico/plugins/ and .statico.toml.
 
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 

@@ -1,5 +1,7 @@
 //! AST parser wrapper and shared traversal helpers.
 
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+
 use std::sync::Mutex;
 use tree_sitter::{Node, Parser, Tree};
 

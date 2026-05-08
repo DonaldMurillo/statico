@@ -355,18 +355,14 @@ done
     }
 }
 
-// FIXME: `validate_overrides` (src/plugin/discovery.rs:213) exists and has
-// passing unit tests, but it is **never called** from any runtime path.
-// As a result, when two plugins both declare `override` on the same hook,
-// statico happily loads both and races them on stdin/stdout, eventually
-// panicking at `src/plugin/manager.rs:114` with
-// `stdout already taken (concurrent send_request?)`. This test reproduces
-// the gap end-to-end and should flip from `#[ignore]` to active once
-// `validate_overrides` is wired into plugin pipeline startup (and the
-// process exits with a clear "plugin override conflict" diagnostic
-// instead of the stdout-taken panic). Tracking issue: TODO file one.
+/// `validate_overrides` (src/plugin/discovery.rs) is now wired into
+/// `PluginPipeline::new` (src/plugin/pipeline.rs). Two plugins both
+/// declaring `override` on the same hook used to race on stdin/stdout and
+/// panic at `manager.rs:114` with `stdout already taken (concurrent
+/// send_request?)`. The pipeline now disables the override-mode plugins
+/// with a clear warning and continues with the rest — analyze still
+/// completes successfully.
 #[test]
-#[ignore]
 fn plugin_override_conflict_surfaces_at_analyze() {
     let tmp = tempfile::tempdir().expect("temp dir");
     let root = tmp.path();
@@ -391,15 +387,32 @@ fn plugin_override_conflict_surfaces_at_analyze() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     let stdout = String::from_utf8_lossy(&output.stdout);
 
-    // The validator (`validate_overrides`) emits a message containing
-    // "conflict" and both plugin names. Whether analyze fails or merely
-    // disables one of them, the conflict must be surfaced — silent
-    // last-writer-wins would be a real bug.
-    let combined = format!("{stdout}\n{stderr}");
+    // 1) Analyze still completes — graceful degradation is the contract.
     assert!(
-        combined.to_lowercase().contains("conflict") || combined.to_lowercase().contains("override"),
-        "override conflict must be surfaced to the user: stdout={stdout} stderr={stderr}"
+        output.status.success(),
+        "analyze must keep running on plugin override conflict (graceful degradation), stderr: {stderr}"
     );
+
+    // 2) The conflict is surfaced on stderr by name. Silent last-writer-wins
+    //    would be a real bug.
+    assert!(
+        stderr.contains("override conflict") || stderr.contains("conflict"),
+        "stderr must mention the override conflict: {stderr}"
+    );
+    assert!(
+        stderr.contains("first") && stderr.contains("second"),
+        "stderr must name both conflicting plugins: {stderr}"
+    );
+
+    // 3) No stdin/stdout race panic — the race is exactly what wiring
+    //    `validate_overrides` prevents.
+    assert!(
+        !stderr.contains("stdout already taken"),
+        "the override-mode plugins must be disabled before they can race on stdout: {stderr}"
+    );
+    assert!(!stderr.contains("panicked at"), "no panic should escape: {stderr}");
+
+    let _ = stdout;
 }
 
 // ═══════════════════════════════════════════════════════════════

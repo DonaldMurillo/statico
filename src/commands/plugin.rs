@@ -1,5 +1,7 @@
 //! `statico plugin *` commands.
 
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+
 use std::process;
 
 pub fn run_plugin_list(path: &str) {

@@ -1,5 +1,7 @@
 //! Parse error collection from tree-sitter AST.
 
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+
 use tree_sitter::Node;
 
 /// Collect all ERROR nodes from the AST.

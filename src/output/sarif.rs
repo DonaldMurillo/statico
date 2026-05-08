@@ -2,6 +2,8 @@
 //!
 //! Maps each issue to a SARIF result with rule metadata, locations, and severity.
 
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+
 use crate::output::OutputFormatter;
 use crate::types::AnalysisOutput;
 use serde_json::{Value, json};

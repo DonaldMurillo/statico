@@ -4,6 +4,8 @@
 //! would be fixed. Each line is prefixed with `#` so the output is clearly
 //! a suggestion, not executable code.
 
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+
 use std::collections::BTreeMap;
 
 use super::OutputFormatter;

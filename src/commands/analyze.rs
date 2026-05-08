@@ -1,5 +1,7 @@
 //! `statico analyze` command.
 
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+
 use std::process;
 
 #[allow(clippy::too_many_arguments)]

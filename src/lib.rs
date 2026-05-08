@@ -8,6 +8,12 @@
 //! If you want to depend on statico programmatically, please open an issue
 //! describing your use case so we can carve out a stable surface for it.
 
+// Forbid `unwrap()` / `expect()` in *new* code. Files that currently use them
+// carry a per-file `#![allow(clippy::unwrap_used, clippy::expect_used)]` —
+// every such allow is a future cleanup target. New modules should leave
+// these out and propagate errors instead.
+#![warn(clippy::unwrap_used, clippy::expect_used)]
+
 #[doc(hidden)]
 pub mod analyzer;
 #[doc(hidden)]

@@ -42,22 +42,29 @@ Closing 9 of the 10 audit-identified test gaps. Total tests went from
   whitespace-tolerant matches, rejects mismatch with the canonical
   error string, rejects empty/whitespace-only expected values.
 
-### Known issues
+### Fixed
 
-- `tests/integration_plugin.rs::plugin_override_conflict_surfaces_at_analyze`
-  is `#[ignore]`. It documents a real bug found while writing the
-  test: `validate_overrides` in `src/plugin/discovery.rs` exists and
-  has passing unit tests but is **never called from any runtime
-  path**. With two plugins both declaring `analyze_file: override`,
-  statico loads both and races them on stdin/stdout, panicking at
+- **Plugin override conflicts no longer race on stdin/stdout.**
+  `validate_overrides` in `src/plugin/discovery.rs` had passing unit
+  tests but was never called from any runtime path. Two plugins both
+  declaring `override` on the same hook used to load successfully,
+  race each other for the request stream, and panic at
   `src/plugin/manager.rs:114` with `stdout already taken (concurrent
-  send_request?)`. The ignored test will flip back on once the
-  validator is wired into pipeline startup.
-- `clippy::unwrap_used` is **not enforced**. The codebase has ~250
-  `unwrap()` / `expect()` call sites in non-test code. Enabling the
-  lint at `warn` level would fail CI (`-D warnings`); enabling at
-  `deny` would force fixing every site in one commit. Tracked as a
-  future cleanup branch.
+  send_request?)`. `PluginPipeline::new` now invokes
+  `validate_overrides` immediately after init; on conflict, every
+  plugin that declared `override` is dropped with a clear warning
+  naming the culprits, and analysis continues with the remaining
+  plugins. The previously `#[ignore]`d
+  `plugin_override_conflict_surfaces_at_analyze` integration test is
+  now active and asserts both the conflict warning and the absence of
+  the panic.
+- `clippy::unwrap_used` and `clippy::expect_used` are now `#[warn]` at
+  the crate root (`src/lib.rs`). Every existing module that uses
+  `unwrap()` / `expect()` carries a per-file
+  `#![allow(clippy::unwrap_used, clippy::expect_used)]` — each one is
+  a future cleanup target, but the lint now blocks new uses in any
+  fresh module. CI's `cargo clippy --all-targets -- -D warnings`
+  remains green.
 
 ### Changed
 - Architecture cleanup: removed the `src/analyzer/parse_typescript.rs` gravestone,
