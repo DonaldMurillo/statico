@@ -6,15 +6,26 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-05-08
+
+### Fixed
+- tsconfig discovery: `load_all_tsconfig_paths` now matches `tsconfig*.json` (not just
+  `tsconfig.json`), so `tsconfig.base.json` used by Nx/Turborepo/Lerna monorepos is
+  picked up automatically.
+- Root tsconfig loading: `build_resolver` now also checks `tsconfig.base.json` at root.
+- Free `resolve_import()` function now falls through to the plugin resolver when
+  relative resolution fails — callers in `src/issues/` no longer silently bypass
+  the plugin hook for non-relative imports.
+
+### Added
+- Debug logging when plugin resolver is consulted in `Resolver::resolve()` step 5.
+- 2 new tests: tsconfig glob matching + free function plugin fallback.
+
 ## [0.1.4] - 2026-05-08
 
 ### Fixed
 - Windows release build: `shasum` not available on Windows runner — use
   `sha256sum` as fallback for per-asset checksum generation.
-
-## [0.1.4] - 2026-05-08
-
-### Fixed
 - Windows cross-compilation: added `BUN_URL_TEMPLATE` cfg for `target_os = "windows"`
   so the release build succeeds on all 5 targets.
 - Release notes now generated from CHANGELOG.md for GitHub releases.
