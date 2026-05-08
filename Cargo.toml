@@ -48,7 +48,7 @@ path = "src/main.rs"
 proptest = "1"
 criterion = { version = "0.5", features = ["html_reports"] }
 tempfile = "3"
-tiny_http = "0.2"
+tiny_http = "0.12"
 
 [dependencies]
 clap = { version = "4", features = ["derive", "color", "unstable-styles"] }

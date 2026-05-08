@@ -180,8 +180,13 @@ fn cli_update_downloads_and_extracts_from_mock_server() {
     );
 
     // 3. Start a tiny HTTP server in a background thread.
-    let server = tiny_http::ServerBuilder::new().with_random_port().build().expect("start mock server");
-    let port = server.server_addr().port();
+    // tiny_http 0.12 dropped `ServerBuilder` — use `Server::http("…:0")` for
+    // an ephemeral port and resolve the bound port via `server_addr()`.
+    let server = tiny_http::Server::http("127.0.0.1:0").expect("start mock server");
+    let port = match server.server_addr() {
+        tiny_http::ListenAddr::IP(addr) => addr.port(),
+        other => panic!("unexpected listen addr (no IP): {:?}", other),
+    };
     let base_url = format!("http://127.0.0.1:{}", port);
 
     let tarball_bytes_clone = tarball_bytes.clone();
@@ -200,12 +205,12 @@ fn cli_update_downloads_and_extracts_from_mock_server() {
                     let resp = tiny_http::Response::from_string(&release_json_clone).with_header(
                         tiny_http::Header::from_bytes(&b"Content-Type"[..], &b"application/json"[..]).expect("header"),
                     );
-                    req.respond(resp);
+                    let _ = req.respond(resp);
                 } else {
                     let resp = tiny_http::Response::from_data(tarball_bytes_clone.clone()).with_header(
                         tiny_http::Header::from_bytes(&b"Content-Type"[..], &b"application/gzip"[..]).expect("header"),
                     );
-                    req.respond(resp);
+                    let _ = req.respond(resp);
                 }
             }
         }
