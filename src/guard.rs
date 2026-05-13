@@ -87,6 +87,12 @@ impl CheckResult {
     }
 }
 
+impl Default for GuardManifest {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl GuardManifest {
     /// Create an empty manifest.
     pub fn new() -> Self {
@@ -134,7 +140,7 @@ impl GuardManifest {
         let tmp = path.with_extension("tmp");
         std::fs::write(&tmp, json.as_bytes()).map_err(|e| format!("failed to write {}: {}", tmp.display(), e))?;
         std::fs::rename(&tmp, path).map_err(|e| {
-            let _ = std::fs::remove_file(&path.with_extension("tmp"));
+            let _ = std::fs::remove_file(path.with_extension("tmp"));
             format!("failed to install guard manifest at {}: {}", path.display(), e)
         })?;
         Ok(())
@@ -333,12 +339,12 @@ mod tests {
         let path = touch(&root, "config.rs", b"v1");
 
         let mut m = GuardManifest::new();
-        m.add(&root, &["config.rs"], Some("initial".into())).unwrap();
+        m.add(&root, &["config.rs"], Some("initial")).unwrap();
         let first_hash = m.files["config.rs"].hash.clone();
 
         // Change file and re-add.
         std::fs::write(&path, b"v2").unwrap();
-        m.add(&root, &["config.rs"], Some("updated".into())).unwrap();
+        m.add(&root, &["config.rs"], Some("updated")).unwrap();
 
         assert_eq!(m.len(), 1, "should still be 1 file, not duplicated");
         assert_ne!(m.files["config.rs"].hash, first_hash, "hash should change after re-add");
@@ -362,7 +368,7 @@ mod tests {
         touch(&root, "a.rs", b"fn a() {}");
 
         let mut m = GuardManifest::new();
-        m.add(&root, &["a.rs"], Some("do not touch".into())).unwrap();
+        m.add(&root, &["a.rs"], Some("do not touch")).unwrap();
         assert_eq!(m.files["a.rs"].description.as_deref(), Some("do not touch"));
         let _ = std::fs::remove_dir_all(&root);
     }
@@ -505,7 +511,7 @@ mod tests {
         let path = touch(&root, "config.toml", b"original content");
 
         let mut m = GuardManifest::new();
-        m.add(&root, &["config.toml"], Some("critical config".into())).unwrap();
+        m.add(&root, &["config.toml"], Some("critical config")).unwrap();
 
         std::fs::write(&path, b"tampered content").unwrap();
 
@@ -706,7 +712,7 @@ mod tests {
         touch(&root, "b.rs", b"b");
 
         let mut m = GuardManifest::new();
-        m.add(&root, &["a.rs"], Some("file a".into())).unwrap();
+        m.add(&root, &["a.rs"], Some("file a")).unwrap();
         m.add(&root, &["b.rs"], None).unwrap();
 
         let json = serde_json::to_string_pretty(&m).unwrap();
@@ -747,7 +753,7 @@ mod tests {
         touch(&root, "x.rs", b"pub fn x() {}");
 
         let mut m = GuardManifest::new();
-        m.add(&root, &["x.rs"], Some("entry point".into())).unwrap();
+        m.add(&root, &["x.rs"], Some("entry point")).unwrap();
         m.write(&root).unwrap();
 
         let loaded = GuardManifest::load(&root).unwrap();
@@ -826,7 +832,7 @@ mod tests {
         touch(&root, "a.rs", b"a");
 
         let mut m = GuardManifest::new();
-        m.add(&root, &["a.rs"], Some("test".into())).unwrap();
+        m.add(&root, &["a.rs"], Some("test")).unwrap();
         m.write(&root).unwrap();
 
         let content = std::fs::read_to_string(root.join(".statico/guard.json")).unwrap();
@@ -848,7 +854,7 @@ mod tests {
 
         // Step 1: Add
         let mut m = GuardManifest::new();
-        m.add(&root, &["config.rs"], Some("core config".into())).unwrap();
+        m.add(&root, &["config.rs"], Some("core config")).unwrap();
         m.write(&root).unwrap();
 
         // Step 2: Check passes
@@ -899,7 +905,7 @@ mod tests {
         let file = touch(&root, "a.rs", b"v1");
 
         let mut m = GuardManifest::new();
-        m.add(&root, &["a.rs"], Some("important file".into())).unwrap();
+        m.add(&root, &["a.rs"], Some("important file")).unwrap();
 
         // Modify and update.
         std::fs::write(&file, b"v2").unwrap();

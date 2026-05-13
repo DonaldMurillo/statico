@@ -1,6 +1,6 @@
 {
   "name": "@statico/cli",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "Customizable, AI-forward static analyzer for TypeScript and Rust projects (early alpha).",
   "license": "(MIT OR Apache-2.0)",
   "homepage": "https://github.com/DonaldMurillo/statico",
