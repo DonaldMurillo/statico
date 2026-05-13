@@ -29,6 +29,8 @@ pub mod duplication;
 #[doc(hidden)]
 pub mod frameworks;
 #[doc(hidden)]
+pub mod guard;
+#[doc(hidden)]
 pub mod issues;
 #[doc(hidden)]
 pub mod languages;

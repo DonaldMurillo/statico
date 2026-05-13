@@ -231,6 +231,21 @@ pub enum Commands {
         force: bool,
     },
 
+    /// Protect critical files from unintended modification.
+    ///
+    /// Maintains a guard manifest (.statico/guard.json) with SHA-256 hashes
+    /// of registered files. Use `check` in CI or pre-commit hooks to verify
+    /// that guarded files haven't been tampered with.
+    ///
+    /// Quick start:
+    ///   statico guard add src/config.rs     # Register a file
+    ///   statico guard check --exit-code     # Verify (fails on mismatch)
+    ///   statico guard update                # Re-hash after intentional change
+    Guard {
+        #[command(subcommand)]
+        action: GuardAction,
+    },
+
     /// Manage statico plugins.
     ///
     /// Discover, inspect, and manage plugins that extend statico's
@@ -238,6 +253,69 @@ pub enum Commands {
     Plugin {
         #[command(subcommand)]
         action: PluginAction,
+    },
+}
+
+#[derive(clap::Subcommand)]
+pub enum GuardAction {
+    /// Register files for integrity protection.
+    ///
+    /// Computes SHA-256 hashes and adds them to the guard manifest.
+    /// The manifest is stored in .statico/guard.json and should be committed.
+    Add {
+        /// Files to guard (relative to project root).
+        files: Vec<String>,
+
+        /// Optional description for all added files.
+        #[arg(long, value_name = "MSG")]
+        description: Option<String>,
+
+        /// Project path (defaults to current directory).
+        #[arg(long, default_value = ".")]
+        path: String,
+    },
+
+    /// Remove files from the guard manifest.
+    Remove {
+        /// Files to remove from guarding.
+        files: Vec<String>,
+
+        /// Project path (defaults to current directory).
+        #[arg(long, default_value = ".")]
+        path: String,
+    },
+
+    /// List all guarded files and their hashes.
+    List {
+        /// Project path (defaults to current directory).
+        #[arg(long, default_value = ".")]
+        path: String,
+    },
+
+    /// Verify guarded files match their recorded hashes.
+    ///
+    /// Use --exit-code to fail (exit 1) if any file was modified.
+    /// Ideal for CI pipelines and pre-commit hooks.
+    Check {
+        /// Exit with code 1 if any guarded file was modified or is missing.
+        #[arg(long)]
+        exit_code: bool,
+
+        /// Project path (defaults to current directory).
+        #[arg(long, default_value = ".")]
+        path: String,
+    },
+
+    /// Re-hash files after intentional changes.
+    ///
+    /// Without explicit files, updates all guarded files.
+    Update {
+        /// Specific files to re-hash (defaults to all guarded files).
+        files: Vec<String>,
+
+        /// Project path (defaults to current directory).
+        #[arg(long, default_value = ".")]
+        path: String,
     },
 }
 
@@ -383,6 +461,23 @@ pub fn parse_and_dispatch() {
             };
             super::fix::run_fix(&path, apply, selection);
         }
+        Commands::Guard { action } => match action {
+            GuardAction::Add { files, description, path } => {
+                super::guard::run_guard_add(&files, description.as_deref(), &path);
+            }
+            GuardAction::Remove { files, path } => {
+                super::guard::run_guard_remove(&files, &path);
+            }
+            GuardAction::List { path } => {
+                super::guard::run_guard_list(&path);
+            }
+            GuardAction::Check { exit_code, path } => {
+                super::guard::run_guard_check(&path, exit_code);
+            }
+            GuardAction::Update { files, path } => {
+                super::guard::run_guard_update(&files, &path);
+            }
+        },
         Commands::Setup { target, path, force } => {
             super::init::run_setup(&target, &path, force);
         }
