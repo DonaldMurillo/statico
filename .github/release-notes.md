@@ -1,19 +1,5 @@
 ## [0.1.7] - 2026-05-13
 
-### Added — File guard
-
-- `statico guard` subcommand for protecting critical files from unintended
-  modification. Stores SHA-256 hashes in `.statico/guard.json` (committable to
-  git) and verifies integrity on demand.
-  - `guard add <files…>` — register files with optional `--description`
-  - `guard remove <files…>` — unregister files
-  - `guard list` — show all guarded files
-  - `guard check` — verify integrity; `--exit-code` exits 1 on mismatch
-  - `guard update [files…]` — re-hash after intentional changes
-- 41 unit tests + 18 integration tests covering hash determinism, edge cases
-  (empty/binary/large files), serde roundtrips, disk persistence, and full
-  CLI workflows.
-
 ---
 
 <!--

@@ -8,6 +8,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [0.1.7] - 2026-05-13
 
+## [0.1.7] - 2026-05-13
+
 ### Added — File guard
 
 - `statico guard` subcommand for protecting critical files from unintended
